@@ -21,11 +21,11 @@ struct HTMLVisitor: MarkupVisitor {
     
     // Обработка мягких и жестких переносов строк
     mutating func visitSoftBreak(_ softBreak: SoftBreak) -> String {
-        return "<br>" // Это не даст тексту слипаться в одну строку
+        return "<br>\n"
     }
     
     mutating func visitLineBreak(_ lineBreak: LineBreak) -> String {
-        return "<br>"
+        return "<br>\n"
     }
     
     mutating func visitText(_ text: Text) -> String {
@@ -33,7 +33,11 @@ struct HTMLVisitor: MarkupVisitor {
     }
     
     mutating func visitParagraph(_ paragraph: Paragraph) -> String {
-        return "<p>\(defaultVisit(paragraph))</p>"
+        let content = defaultVisit(paragraph)
+        if content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || content == "\u{00A0}" {
+            return "<p>&nbsp;</p>\n"
+        }
+        return "<p>\(content)</p>\n"
     }
     
     mutating func visitStrong(_ strong: Strong) -> String {
@@ -74,5 +78,11 @@ struct HTMLVisitor: MarkupVisitor {
     
     mutating func visitTableCell(_ cell: Table.Cell) -> String {
         return "<td style='border:1px solid #666; padding:8px;'>\(defaultVisit(cell) == "" ? "&nbsp;" : defaultVisit(cell))</td>"
+    }
+    
+    mutating func visitHeading(_ heading: Heading) -> String {
+        let level = heading.level
+        let content = defaultVisit(heading)
+        return "<h\(level)>\(content)</h\(level)>\n"
     }
 }

@@ -16,7 +16,7 @@ struct MarkdownRenderer: NSViewRepresentable {
     let isDark: Bool
     let codeTheme: String
     let showLineNumbers: Bool
-    
+    let scrollPosition: CGFloat
     
     // Словарь цветов для каждой темы
     private let themeBackgrounds: [String: String] = [
@@ -71,17 +71,25 @@ struct MarkdownRenderer: NSViewRepresentable {
     
     func updateNSView(_ webView: WKWebView, context: Context) {
         let compositeHash = markdown.hashValue ^ textColor.hashValue ^ codeTheme.hashValue ^ showLineNumbers.hashValue
-        if context.coordinator.lastHash == compositeHash { return }
-        context.coordinator.lastHash = compositeHash
-
-        let document = Document(parsing: markdown)
-        var visitor = HTMLVisitor()
-        let bodyHtml = visitor.visit(document)
-
-        let currentBg = themeBackgrounds[codeTheme] ?? (isDark ? "#1e1e1e" : "#ededed")
-        let currentBorder = themeBorders[codeTheme] ?? (isDark ? "#333" : "#ddd")
-
-        let html = """
+        
+        if context.coordinator.lastHash != compositeHash {
+            context.coordinator.lastHash = compositeHash
+            
+            let processedMarkdown = markdown.components(separatedBy: .newlines)
+                .map { $0.isEmpty ? "\u{00A0}" : $0 } // Добавляем неразрывный пробел в пустые строки
+                .joined(separator: "\n")
+            
+            
+            let document = Document(parsing: processedMarkdown)
+            var visitor = HTMLVisitor()
+            let bodyHtml = visitor.visit(document)
+            
+            let currentBg = themeBackgrounds[codeTheme] ?? (isDark ? "#1e1e1e" : "#ededed")
+            let currentBorder = themeBorders[codeTheme] ?? (isDark ? "#333" : "#ddd")
+            
+            let baseFontSize: CGFloat = 14
+            
+            let html = """
                 <html>
                 <head>
                     <meta charset="UTF-8">
@@ -94,11 +102,11 @@ struct MarkdownRenderer: NSViewRepresentable {
                             font-family: -apple-system, sans-serif; 
                             color: \(textColor); 
                             background-color: transparent;
-                            line-height: 1.6; 
+                            line-height: 1.5; 
                             padding: 20px; 
+                            white-space: pre-wrap !important;
                         }
-
-                        /* ФОН И РАМКА */
+                
                         pre { 
                             background: \(currentBg) !important;
                             border: 1px solid \(currentBorder);
@@ -106,163 +114,113 @@ struct MarkdownRenderer: NSViewRepresentable {
                             margin: 1em 0;
                             overflow-x: auto;
                         }
-
+                
                         code { 
                             display: block;
-                            padding: \(showLineNumbers ? "0" : "16px") !important;
+                            padding: 16px !important;
+                            padding-left: \(showLineNumbers ? "0px" : "10px") !important;
                             background: transparent !important;
                             border: none !important;
                             white-space: pre;
                         }
-
-                        /* ФИКСАЦИЯ ШРИФТА И ВЫСОТЫ СТРОК */
+                
                         code, code *, .hljs-ln td {
                             font-family: "SF Mono", "Menlo", monospace !important;
-                            font-size: 13px !important;
+                            font-size: 14px !important;
                             line-height: 1.5 !important;
                         }
-
-                        /* ГЛАВНОЕ ИСПРАВЛЕНИЕ ЦВЕТА */
-                        /* Заставляем текст внутри таблицы использовать цвета темы HLJS */
+                
                         .hljs-ln-code {
                             padding-left: 20px !important;
                             padding-right: 16px !important;
-                            padding-top: \(showLineNumbers ? "16px" : "0") !important;
-                            padding-bottom: \(showLineNumbers ? "16px" : "0") !important;
+                            padding-top: 0px !important;
+                            padding-bottom: 0px !important;
                             vertical-align: top;
+                            line-height: 1.5 !important;
+                            white-space: pre !important;
+                            word-wrap: normal !important;
                         }
-
-                        /* Если текст внутри ячейки не раскрашен, принудительно даем ему цвет темы */
+                
                         .hljs {
                             color: inherit; 
                         }
-
+                
                         /* НОМЕРА СТРОК */
                         .hljs-ln-numbers {
                             -webkit-touch-callout: none;
                             -webkit-user-select: none;
                             user-select: none;
                             text-align: right;
-                            color: #858585 !important; /* Цвет номеров оставляем нейтральным */
+                            color: #858585 !important;
                             vertical-align: top;
-                            padding-left: 12px !important;
+                            padding-left: \(showLineNumbers ? "10px" : "0px") !important;
                             padding-right: 12px !important;
-                            padding-top: \(showLineNumbers ? "16px" : "0") !important;
+                            padding-top: 0px !important;
+                            padding-bottom: 0px !important;
                             width: 30px !important;
                             background: \(isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)");
                             border-right: 1px solid \(currentBorder) !important;
                         }
-
+                
                         .hljs-ln { border-collapse: collapse; width: 100%; }
+                
+                        /* --- СТИЛИ ЗАГОЛОВКОВ --- */
+                        p, h1, h2, h3, h4, h5, h6, pre, ul, ol {
+                             margin-top: 0;
+                             display: block;
+                        }
+                
+                        p:empty::before, h1:empty::before, h2:empty::before, h3:empty::before {
+                            content: "\00a0";
+                        }
+                        
+                        h1, h2, h3, h4, h5, h6 {
+                            display: block !important;
+                            clear: both !important;
+                            width: 100% !important;
+                            font-weight: bold !important;
+                            margin-top: 12px !important;
+                            margin-bottom: 8px !important;
+                        }
+
+                        /* Применяем размеры через селекторы, которые сложно перебить */
+                        body #main-content h1 { font-size: \(baseFontSize + 12)px !important; }
+                        body #main-content h2 { font-size: \(baseFontSize + 8)px !important; }
+                        body #main-content h3 { font-size: \(baseFontSize + 4)px !important; }
+
+                        /* Если парсер ошибся и засунул всё в <p>, добавим поддержку переносов */
+                        p {
+                            white-space: pre-wrap !important;
+                            margin-top: 0 !important;
+                            margin-bottom: 0.5em !important;
+                        }
+
                     </style>
                 </head>
                 <body>
-                    \(bodyHtml)
+                    <div id="main-content">\(bodyHtml)</div>
                     <script>
-                        // Обязательный порядок:
-                        // 1. Сначала подсвечиваем весь код
                         hljs.highlightAll();
-
                         if (\(showLineNumbers)) {
                                 setTimeout(function() {
                                     document.querySelectorAll('code').forEach((block) => {
-                                        hljs.lineNumbersBlock(block); // Потом нумеруем
+                                        hljs.lineNumbersBlock(block);
                                     });
-                                }, 50); // Небольшая задержка для стабильности
+                                }, 0);
                         }
                     </script>
                 </body>
                 </html>
                 """
-        
-        DispatchQueue.main.async {
-            webView.loadHTMLString(html, baseURL: nil)
+            
+            DispatchQueue.main.async {
+                webView.loadHTMLString(html, baseURL: nil)
+            }
+        } else {
+            let js = "window.scrollTo(0, \(scrollPosition));"
+                        webView.evaluateJavaScript(js, completionHandler: nil)
         }
     }
-    
-    
-//    func updateNSView(_ webView: WKWebView, context: Context) {
-//        let compositeHash = markdown.hashValue ^ textColor.hashValue ^ codeTheme.hashValue ^ showLineNumbers.hashValue
-//        if context.coordinator.lastHash == compositeHash { return }
-//        context.coordinator.lastHash = compositeHash
-//        
-//        let document = Document(parsing: markdown)
-//        var visitor = HTMLVisitor()
-//        let bodyHtml = visitor.visit(document)
-//        
-//        let currentBg = themeBackgrounds[codeTheme] ?? (isDark ? "#1e1e1e" : "#ededed")
-//        let currentBorder = themeBorders[codeTheme] ?? (isDark ? "#333" : "#ddd")
-//        
-//        let html = """
-//                <html>
-//                <head>
-//                    <meta charset="UTF-8">
-//                    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/\(codeTheme).min.css">
-//                    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-//                    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlightjs-line-numbers.js/2.8.0/highlightjs-line-numbers.min.js"></script>
-//                    
-//                    <style>
-//                        body { 
-//                            font-family: -apple-system, sans-serif; 
-//                            color: \(textColor); 
-//                            background-color: transparent;
-//                            line-height: 1.6; 
-//                            padding: 20px; 
-//                        }
-//                        
-//                        pre { 
-//                            background: transparent !important; 
-//                            margin: 1em 0;
-//                            padding: 0;
-//                        }
-//                
-//                        code { 
-//                            font-family: "SF Mono", "Menlo", monospace; 
-//                            font-size: 0.9em; 
-//                            display: block;
-//                            padding: 16px !important;
-//                            border-radius: 8px;
-//                            white-space: \(showLineNumbers ? "normal" : "pre");
-//                            overflow-x: auto;
-//                            
-//                            /* Динамические цвета из Swift */
-//                            background-color: \(currentBg) !important; 
-//                            border: 1px solid \(currentBorder);
-//                        }
-//                
-//                        .hljs-ln-numbers {
-//                            width: 30px;
-//                            min-width: 30px;
-//                        }
-//                
-//                        table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-//                        th, td { border: 1px solid \(isDark ? "#444" : "#ccc"); padding: 8px; }
-//                    </style>
-//                </head>
-//                <body>
-//                    \(bodyHtml)
-//                    <script>
-//                        hljs.configure({ ignoreUnescapedHTML: true });
-//                        hljs.highlightAll();
-//                        function applyLineNumbers() {
-//                            if (\(showLineNumbers)) {
-//                                document.querySelectorAll('code.hljs').forEach((el) => {
-//                                    hljs.lineNumbersBlock(el);
-//                                });
-//                            }
-//                        }
-//                
-//                        // Запускаем сразу
-//                        applyLineNumbers();
-//                    </script>
-//                </body>
-//                </html>
-//                """
-//        DispatchQueue.main.async {
-//            webView.loadHTMLString(html, baseURL: nil)
-//        }
-//    }
-//    
     func makeCoordinator() -> Coordinator { Coordinator() }
     
     class Coordinator: NSObject {

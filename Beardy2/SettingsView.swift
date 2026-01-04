@@ -371,7 +371,6 @@ struct AppearanceSettingsView: View {
                         }
                         
                         Toggle("Sync scroll between editor and preview", isOn: $previewSyncScroll)
-                        Toggle("Live preview (update as you type)", isOn: .constant(true))
                     }
                     
                     Divider()

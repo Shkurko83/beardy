@@ -7,39 +7,47 @@ struct EditorView: View {
     @State private var outlineWidth: CGFloat = 200
     @State private var showStatisticsPanel = false
     @State private var showFindPanel = false
+    @Binding var scrollPosition: CGFloat
     
     var body: some View {
         GeometryReader { geometry in
-            HStack(spacing: 0) {
-                // Main Editor Area
-                ZStack {
-                    switch documentManager.viewMode {
-                    case .edit:
-                        MarkdownEditorArea()
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        
-                    case .preview:
-                        MarkdownPreviewArea()
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        
-                    case .split:
-                        HSplitView {
-                            MarkdownEditorArea()
-                                .frame(minWidth: 300)
+            VStack {
+                // Editor Toolbar
+                EditorToolbar()
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+                
+                HStack(spacing: 0) {
+                    // Main Editor Area
+                    ZStack {
+                        switch documentManager.viewMode {
+                        case .edit:
+                            MarkdownEditorArea(scrollPosition: $scrollPosition)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        case .preview:
+                            MarkdownPreviewArea(editorScrollPosition: $scrollPosition)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
                             
-                            MarkdownPreviewArea()
-                                .frame(minWidth: 300)
+                        case .split:
+                            HSplitView {
+                                MarkdownEditorArea(scrollPosition: $scrollPosition)
+                                    .frame(minWidth: 300)
+                                
+                                MarkdownPreviewArea(editorScrollPosition: $scrollPosition)
+                                    .frame(minWidth: 300)
+                            }
                         }
                     }
-                }
-                
-                // Outline Sidebar
-                if showOutline {
-                    Divider()
-
-                    OutlineView()
-                        .frame(width: outlineWidth)
-                        .frame(maxHeight: .infinity)
+                    
+                    // Outline Sidebar
+                    if showOutline {
+                        Divider()
+                        
+                        OutlineView()
+                            .frame(width: outlineWidth)
+                            .frame(maxHeight: .infinity)
+                    }
                 }
             }
         }
@@ -86,20 +94,17 @@ struct MarkdownEditorArea: View {
     @FocusState private var isEditorFocused: Bool
     @State private var showFindPanel = false
     
+    @AppStorage("previewSyncScroll") private var previewSyncScroll: Bool = true
+    @Binding var scrollPosition: CGFloat
+    
     var body: some View {
         VStack(spacing: 0) {
-            // Editor Toolbar
-            EditorToolbar()
-                .padding(.horizontal, 20)
-                .padding(.vertical, 8)
-                .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
-            
-            Divider()
             
             // Text Editor - БЕЗ внешнего ScrollView
             MarkdownTextEditor(
                 text: $textContent,
                 selectedRange: $selectedRange,
+                scrollPosition: $scrollPosition,
                 fontSize: fontSize,
                 lineHeight: lineHeight,
                 textViewReference: $textViewReference,
@@ -109,7 +114,7 @@ struct MarkdownEditorArea: View {
             .id(documentManager.currentDocument?.id)
             .focused($isEditorFocused)
         }
-        .background(themeService.currentTheme.colors.background.opacity(0.5))
+//        .background(themeService.currentTheme.colors.background)
         .onAppear {
             loadDocumentContent()
             isEditorFocused = true
@@ -150,88 +155,90 @@ struct EditorToolbar: View {
     
     var body: some View {
         HStack(spacing: 8) {
-            // Text formatting
-            ToolbarButton(icon: "bold", tooltip: "Bold (⌘B)") {
-                documentManager.toggleBold()
-            }
-            
-            ToolbarButton(icon: "italic", tooltip: "Italic (⌘I)") {
-                documentManager.toggleItalic()
-            }
-            
-            ToolbarButton(icon: "strikethrough", tooltip: "Strikethrough") {
-                documentManager.toggleStrikethrough()
-            }
-            
-            Divider()
-                .frame(height: 20)
-            
-            // Headings
-            Menu {
-                ForEach(1...6, id: \.self) { level in
-                    Button("Heading \(level)") {
-                        documentManager.insertHeading(level: level)
+            HStack(spacing: 16) {
+                // Text formatting
+                ToolbarButton(icon: "bold", tooltip: "Bold (⌘B)") {
+                    documentManager.toggleBold()
+                }
+                
+                ToolbarButton(icon: "italic", tooltip: "Italic (⌘I)") {
+                    documentManager.toggleItalic()
+                }
+                
+                ToolbarButton(icon: "strikethrough", tooltip: "Strikethrough") {
+                    documentManager.toggleStrikethrough()
+                }
+                
+                Divider()
+                    .frame(height: 20)
+                
+                // Headings
+                Menu {
+                    ForEach(1...6, id: \.self) { level in
+                        Button("Heading \(level)") {
+                            documentManager.insertHeading(level: level)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "textformat.size")
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 8))
                     }
                 }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "textformat.size")
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 8))
+                .menuStyle(.borderlessButton)
+                .frame(height: 24)
+                
+                Divider()
+                    .frame(height: 20)
+                
+                // Lists
+                ToolbarButton(icon: "list.bullet", tooltip: "Bullet List") {
+                    documentManager.insertBulletList()
                 }
+                
+                ToolbarButton(icon: "list.number", tooltip: "Numbered List") {
+                    documentManager.insertNumberedList()
+                }
+                
+                ToolbarButton(icon: "checklist", tooltip: "Task List") {
+                    documentManager.insertTaskList()
+                }
+                
+                Divider()
+                    .frame(height: 20)
+                
+                // Insert elements
+                ToolbarButton(icon: "link", tooltip: "Insert Link (⌘K)") {
+                    documentManager.insertLink()
+                }
+                
+                ToolbarButton(icon: "photo", tooltip: "Insert Image") {
+                    documentManager.insertImage()
+                }
+                
+                ToolbarButton(icon: "tablecells", tooltip: "Insert Table") {
+                    documentManager.insertTable()
+                }
+                
+                ToolbarButton(icon: "chevron.left.forwardslash.chevron.right", tooltip: "Code Block") {
+                    documentManager.insertCodeBlock()
+                }
+                
+                Divider()
+                    .frame(height: 20)
+                
+                // Special
+                ToolbarButton(icon: "quote.opening", tooltip: "Blockquote") {
+                    documentManager.insertBlockquote()
+                }
+                
+                ToolbarButton(icon: "minus.forwardslash.plus", tooltip: "Horizontal Rule") {
+                    documentManager.insertHorizontalRule()
+                }
+                
+                Spacer()
             }
-            .menuStyle(.borderlessButton)
-            .frame(height: 24)
-            
-            Divider()
-                .frame(height: 20)
-            
-            // Lists
-            ToolbarButton(icon: "list.bullet", tooltip: "Bullet List") {
-                documentManager.insertBulletList()
-            }
-            
-            ToolbarButton(icon: "list.number", tooltip: "Numbered List") {
-                documentManager.insertNumberedList()
-            }
-            
-            ToolbarButton(icon: "checklist", tooltip: "Task List") {
-                documentManager.insertTaskList()
-            }
-            
-            Divider()
-                .frame(height: 20)
-            
-            // Insert elements
-            ToolbarButton(icon: "link", tooltip: "Insert Link (⌘K)") {
-                documentManager.insertLink()
-            }
-            
-            ToolbarButton(icon: "photo", tooltip: "Insert Image") {
-                documentManager.insertImage()
-            }
-            
-            ToolbarButton(icon: "tablecells", tooltip: "Insert Table") {
-                documentManager.insertTable()
-            }
-            
-            ToolbarButton(icon: "chevron.left.forwardslash.chevron.right", tooltip: "Code Block") {
-                documentManager.insertCodeBlock()
-            }
-            
-            Divider()
-                .frame(height: 20)
-            
-            // Special
-            ToolbarButton(icon: "quote.opening", tooltip: "Blockquote") {
-                documentManager.insertBlockquote()
-            }
-            
-            ToolbarButton(icon: "minus.forwardslash.plus", tooltip: "Horizontal Rule") {
-                documentManager.insertHorizontalRule()
-            }
-            
-            Spacer()
             
             // Line/Word count
             if let doc = documentManager.currentDocument {
@@ -293,6 +300,9 @@ struct ToolbarButton: View {
 struct MarkdownTextEditor: NSViewRepresentable {
     @Binding var text: String
     @Binding var selectedRange: NSRange
+    @Binding var scrollPosition: CGFloat
+    @EnvironmentObject var themeService: ThemeService
+    
     let fontSize: CGFloat
     let lineHeight: CGFloat
     @Binding var textViewReference: NSTextView?
@@ -330,8 +340,8 @@ struct MarkdownTextEditor: NSViewRepresentable {
         
         // Configure appearance
         textView.font = .monospacedSystemFont(ofSize: fontSize, weight: .regular)
-        textView.textColor = NSColor.labelColor
-        textView.backgroundColor = NSColor.textBackgroundColor
+        textView.textColor = NSColor(themeService.currentTheme.colors.text)
+        textView.backgroundColor = NSColor(themeService.currentTheme.colors.background)
         textView.insertionPointColor = NSColor.controlAccentColor
         
         // Set text container properties
@@ -366,11 +376,33 @@ struct MarkdownTextEditor: NSViewRepresentable {
             self.textViewReference = textView
         }
         
+        NotificationCenter.default.addObserver(
+            context.coordinator,
+            selector: #selector(Coordinator.scrollViewDidScroll(_:)),
+            name: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView
+        )
+        
         return scrollView
     }
     
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
+        
+        let theme = themeService.currentTheme
+        let textColor = NSColor(theme.colors.text)
+        let backgroundColor = NSColor(theme.colors.background)
+        
+        // Обновляем фон и текст
+        if textView.backgroundColor != backgroundColor {
+            textView.backgroundColor = backgroundColor
+        }
+        if textView.textColor != textColor {
+            textView.textColor = textColor
+        }
+        
+        // Цвет курсора (каретки)
+        textView.insertionPointColor = .blue
         
         // Обновляем ссылку если изменилась
         if textViewReference !== textView {
@@ -378,7 +410,6 @@ struct MarkdownTextEditor: NSViewRepresentable {
                 self.textViewReference = textView
             }
         }
-        
         
         // Обновляем текст только если он действительно изменился
         if textView.string != text && !context.coordinator.isUpdating {
@@ -449,6 +480,14 @@ struct MarkdownTextEditor: NSViewRepresentable {
                 }
             }
         }
+        
+        @objc func scrollViewDidScroll(_ notification: Notification) {
+            guard let scrollView = notification.object as? NSClipView else { return }
+            let position = scrollView.bounds.origin.y
+            DispatchQueue.main.async {
+                self.parent.scrollPosition = position
+            }
+        }
     }
 }
 
@@ -458,17 +497,19 @@ struct MarkdownPreviewArea: View {
     @EnvironmentObject var themeService: ThemeService
     @AppStorage("codeBlockTheme") private var codeBlockTheme: String = "github-dark"
     @AppStorage("showCodeLineNumbers") private var showCodeLineNumbers: Bool = false
+    @AppStorage("previewSyncScroll") private var previewSyncScroll: Bool = true
+    @Binding var editorScrollPosition: CGFloat
     
     var body: some View {
         Group {
             if let doc = documentManager.currentDocument {
-                // Используем наш WebView-рендер вместо обычного Text
                 MarkdownRenderer(
                     markdown: doc.content,
                     textColor: themeService.currentTheme.colors.text.description,
                     isDark: themeService.currentTheme.id.contains("dark"),
                     codeTheme: codeBlockTheme,
-                    showLineNumbers: showCodeLineNumbers
+                    showLineNumbers: showCodeLineNumbers,
+                    scrollPosition: previewSyncScroll ? editorScrollPosition : 0
                 )
             } else {
                 Color.clear
@@ -483,6 +524,7 @@ struct OutlineView: View {
     @EnvironmentObject var documentManager: DocumentManager
     @EnvironmentObject var themeService: ThemeService
     @State private var headings: [HeadingItem] = []
+    @State private var updateTask: Task<Void, Never>? = nil
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -495,7 +537,7 @@ struct OutlineView: View {
                 Spacer()
                 
                 Button(action: {
-                    refreshOutline()
+                    refreshOutline(immediately: true)
                 }) {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 11))
@@ -533,15 +575,35 @@ struct OutlineView: View {
                 }
             }
         }
-        .background(themeService.currentTheme.colors.background.opacity(0.5))
+        .background(themeService.currentTheme.colors.background)
+        .foregroundStyle(themeService.currentTheme.colors.text)
+        .onChange(of: documentManager.currentDocument?.content) { _, _ in
+            refreshOutline(immediately: false)
+        }
         .onAppear {
-            refreshOutline()
+            refreshOutline(immediately: true)
         }
     }
     
-    private func refreshOutline() {
-        if let doc = documentManager.currentDocument {
-            headings = parseHeadings(from: doc.content)
+    private func refreshOutline(immediately: some Any) {
+        // Отменяем старую задачу, если начали печатать снова
+        updateTask?.cancel()
+        
+        updateTask = Task {
+            // Если не нажата кнопка "Обновить", ждем 300мс перед парсингом
+            if !(immediately as? Bool ?? false) {
+                try? await Task.sleep(nanoseconds: 300_000_000)
+            }
+            
+            if Task.isCancelled { return }
+            
+            if let content = documentManager.currentDocument?.content {
+                let newHeadings = parseHeadings(from: content)
+                
+                await MainActor.run {
+                    self.headings = newHeadings
+                }
+            }
         }
     }
     
@@ -550,11 +612,22 @@ struct OutlineView: View {
         let lines = markdown.components(separatedBy: .newlines)
         
         for (index, line) in lines.enumerated() {
-            if line.hasPrefix("#") {
-                let level = line.prefix(while: { $0 == "#" }).count
-                let title = line.dropFirst(level).trimmingCharacters(in: .whitespaces)
-                if !title.isEmpty {
-                    result.append(HeadingItem(level: level, title: title, lineNumber: index))
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            
+            // Заголовок должен начинаться с # и иметь пробел после них
+            if trimmed.hasPrefix("#") {
+                let hashes = trimmed.prefix(while: { $0 == "#" })
+                let level = hashes.count
+                
+                // Проверяем, что уровень от 1 до 6 и после них идет пробел
+                if level <= 6 {
+                    let suffix = trimmed.dropFirst(level)
+                    if suffix.hasPrefix(" ") || suffix.isEmpty {
+                        let title = suffix.trimmingCharacters(in: .whitespaces)
+                        if !title.isEmpty {
+                            result.append(HeadingItem(level: level, title: title, lineNumber: index))
+                        }
+                    }
                 }
             }
         }
@@ -608,12 +681,4 @@ struct HeadingItem: Identifiable {
     let level: Int
     let title: String
     let lineNumber: Int
-}
-
-struct EditorView_Previews: PreviewProvider {
-    static var previews: some View {
-        EditorView()
-            .environmentObject(DocumentManager())
-            .frame(width: 1200, height: 800)
-    }
 }

@@ -34,10 +34,11 @@ struct WelcomeView: View {
                     
                     Text("Markdown Editor")
                         .font(.system(size: 36, weight: .bold))
+                        .foregroundStyle(themeService.currentTheme.colors.text)
                     
                     Text("A minimal markdown editor")
                         .font(.system(size: 16))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(themeService.currentTheme.colors.text.opacity(0.8))
                 }
                 .padding(.top, 60)
                 
@@ -154,6 +155,8 @@ struct WelcomeView: View {
 }
 
 struct WelcomeActionButton: View {
+    @EnvironmentObject var themeService: ThemeService
+    
     let icon: String
     let title: String
     let subtitle: String
@@ -175,16 +178,17 @@ struct WelcomeActionButton: View {
                 VStack(spacing: 4) {
                     Text(title)
                         .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(themeService.currentTheme.colors.text)
                     
                     Text(subtitle)
                         .font(.system(size: 11))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(themeService.currentTheme.colors.text.opacity(0.8))
                 }
             }
             .frame(width: 140, height: 140)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(NSColor.controlBackgroundColor))
+                    .fill(themeService.currentTheme.colors.text.opacity(0.2))
                     .shadow(
                         color: isHovered ? color.opacity(0.3) : Color.black.opacity(0.1),
                         radius: isHovered ? 12 : 6,

@@ -361,20 +361,6 @@ struct ThemePickerView: View {
                     themeService.applyTheme(theme)
                 }
             }
-            
-//            Divider()
-//            
-//            Text("Code Highlighting")
-//                .font(.headline)
-//            
-//            Picker("Code Theme", selection: $themeService.currentCodeTheme) {
-//                ForEach(ThemeService.CodeTheme.allCases) { codeTheme in
-//                    Text(codeTheme.displayName).tag(codeTheme)
-//                }
-//            }
-//            .onChange(of: themeService.currentCodeTheme) { newTheme, _ in
-//                themeService.applyCodeTheme(newTheme)
-//            }
         }
         .padding()
     }

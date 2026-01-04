@@ -7,13 +7,12 @@ internal import UniformTypeIdentifiers
 class DocumentManager: ObservableObject {
     // MARK: - Published Properties
     @Published var currentDocument: MarkdownDocument?
-    @Published var viewMode: ViewMode = .edit
     @Published var isDarkMode: Bool = true
     @Published var focusMode: Bool = false
     @Published var typewriterMode: Bool = false
     @Published var sidebarToggleSignal: Bool = false
     @Published var sourceMode: Bool = false
-
+    @AppStorage("selectedViewMode") var viewMode: ViewMode = .edit
     
     // MARK: - Private Properties
     private var recentDocuments: [RecentDocument] = []

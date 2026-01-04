@@ -14,6 +14,7 @@ struct ContentView: View {
     @State private var showSidebar = true
     @State private var sidebarWidth: CGFloat = 250
     @State private var selectedSidebarItem: SidebarItem? = .recentFiles
+    @State private var editorScrollPosition: CGFloat = 0
     
     var body: some View {
         NavigationView {
@@ -29,7 +30,7 @@ struct ContentView: View {
                 if documentManager.currentDocument == nil {
                     WelcomeView()
                 } else {
-                    EditorView()
+                    EditorView(scrollPosition: $editorScrollPosition)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -129,12 +130,4 @@ enum ViewMode: String, CaseIterable {
     case edit = "Edit"
     case preview = "Preview"
     case split = "Split"
-}
-
-struct ContentView_Previews: PreviewProvider {
-    static var previews: some View {
-        ContentView()
-            .environmentObject(DocumentManager())
-            .frame(width: 1200, height: 800)
-    }
 }
