@@ -1,0 +1,308 @@
+/* Базовые стили */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#editor-container {
+    display: flex;
+    width: 100vw;
+    height: 100vh;
+    background: #fff;
+}
+
+body.dark #editor-container { background: #1e1e1e; }
+
+.editor-pane {
+    flex: 1;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* CodeMirror редактор */
+.cm-editor {
+    height: 100% !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+.cm-scroller {
+    overflow: auto !important;
+    padding: 40px 10% !important;
+    font-family: inherit !important;
+}
+
+.cm-content {
+    font-family: inherit !important;
+}
+
+/* Левое окно - моноширинный шрифт */
+#left-editor .cm-scroller {
+    font-family: 'SF Mono', Monaco, Consolas, monospace !important;
+}
+
+/* Правое окно - обычный шрифт */
+#right-editor .cm-scroller {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    font-size: 16px;
+    line-height: 1.6;
+}
+
+/* ========== СКРЫТИЕ РАЗМЕТКИ ========== */
+
+/* Скрываем символы разметки (кроме активной строки) */
+#right-editor .cm-line:not(.cm-activeLine) span.ͼ5 {
+    font-size: 0 !important;
+    width: 0 !important;
+    display: inline !important;
+    overflow: hidden !important;
+    line-height: 0 !important;
+    visibility: hidden !important;
+}
+
+/* ========== ЗАГОЛОВКИ ========== */
+
+#right-editor .cm-line span.ͼ7 {
+    font-weight: 700;
+    color: #000;
+    line-height: 1.3;
+}
+
+body.dark #right-editor .cm-line span.ͼ7 {
+    color: #efefef;
+}
+
+#right-editor .cm-line[data-level="1"] span.ͼ7 { font-size: 2em; }
+#right-editor .cm-line[data-level="2"] span.ͼ7 { font-size: 1.6em; }
+#right-editor .cm-line[data-level="3"] span.ͼ7 { font-size: 1.3em; }
+#right-editor .cm-line[data-level="4"] span.ͼ7 { font-size: 1.1em; }
+#right-editor .cm-line[data-level="5"] span.ͼ7 { font-size: 1em; }
+#right-editor .cm-line[data-level="6"] span.ͼ7 { font-size: 0.9em; color: #666; }
+
+body.dark #right-editor .cm-line[data-level="6"] span.ͼ7 { color: #aaa; }
+
+/* ========== БЛОКИ КОДА ========== */
+
+/* Скрываем открывающую строку ``` */
+#right-editor .cm-line[data-code-fence="open"]:not(.cm-activeLine) {
+    height: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: 0 !important;
+}
+
+/* Язык программирования - показываем как метку */
+#right-editor .cm-line[data-code-lang]:not(.cm-activeLine)::before {
+    content: attr(data-code-lang);
+    display: inline-block;
+    background: #e1e4e8;
+    color: #24292e;
+    padding: 4px 12px;
+    border-radius: 6px 6px 0 0;
+    font-size: 12px;
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+    font-weight: 600;
+    margin-bottom: -1px;
+    position: relative;
+    top: -8px;
+}
+
+body.dark #right-editor .cm-line[data-code-lang]:not(.cm-activeLine)::before {
+    background: #444;
+    color: #d4d4d4;
+}
+
+/* Скрываем закрывающую строку ``` */
+#right-editor .cm-line[data-code-fence="close"]:not(.cm-activeLine) {
+    height: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: 0 !important;
+}
+
+/* Стилизуем строки кода внутри блока */
+#right-editor .cm-line[data-code-block] {
+    background: #f6f8fa !important;
+    font-family: 'SF Mono', Monaco, Consolas, monospace !important;
+    font-size: 14px !important;
+    padding: 2px 16px !important;
+    line-height: 1.5 !important;
+    border-left: 3px solid #0366d6;
+    margin: 0 !important;
+}
+
+body.dark #right-editor .cm-line[data-code-block] {
+    background: #2d2d2d !important;
+    border-left-color: #58a6ff;
+    color: #d4d4d4;
+}
+
+/* Первая строка блока кода */
+#right-editor .cm-line[data-code-block="first"] {
+    margin-top: 1em !important;
+    border-radius: 6px 6px 0 0;
+    padding-top: 12px !important;
+}
+
+/* Последняя строка блока кода */
+#right-editor .cm-line[data-code-block="last"] {
+    margin-bottom: 1em !important;
+    border-radius: 0 0 6px 6px;
+    padding-bottom: 12px !important;
+}
+
+/* Единственная строка блока кода */
+#right-editor .cm-line[data-code-block="single"] {
+    margin: 1em 0 !important;
+    border-radius: 6px;
+    padding: 12px 16px !important;
+}
+
+/* ========== INLINE КОД ========== */
+
+#right-editor .cm-line span[data-inline-code="true"] {
+    background: #f5f5f5;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+    font-size: 0.9em;
+    color: #e01e5a;
+}
+
+body.dark #right-editor .cm-line span[data-inline-code="true"] {
+    background: #3a3a3a;
+    color: #ff6b9d;
+}
+
+/* ========== ТАБЛИЦЫ ========== */
+
+/* Скрываем строку разделителя |-----| */
+#right-editor .cm-line[data-table-separator="true"]:not(.cm-activeLine) {
+    height: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: 0 !important;
+}
+
+/* Стилизуем строки таблицы */
+#right-editor .cm-line[data-table-row] {
+    border-top: 1px solid #d0d7de;
+    border-bottom: 1px solid #d0d7de;
+    padding: 8px 12px !important;
+    margin: 0 !important;
+    background: #fff;
+}
+
+#right-editor .cm-line[data-table-row="header"] {
+    background: #f6f8fa;
+    font-weight: 600;
+    border-top: 2px solid #d0d7de;
+}
+
+#right-editor .cm-line[data-table-row="first"] {
+    margin-top: 1em !important;
+}
+
+#right-editor .cm-line[data-table-row="last"] {
+    border-bottom: 2px solid #d0d7de;
+    margin-bottom: 1em !important;
+}
+
+body.dark #right-editor .cm-line[data-table-row] {
+    border-color: #444;
+    background: #1e1e1e;
+}
+
+body.dark #right-editor .cm-line[data-table-row="header"] {
+    background: #2d2d2d;
+}
+
+/* ========== ЖИРНЫЙ И КУРСИВ ========== */
+
+#right-editor .cm-line span[data-strong="true"] {
+    font-weight: 700;
+}
+
+#right-editor .cm-line span[data-em="true"] {
+    font-style: italic;
+}
+
+/* ========== ДРУГИЕ ЭЛЕМЕНТЫ ========== */
+
+/* Цитаты */
+#right-editor .cm-line[data-quote="true"] {
+    border-left: 4px solid #dfe2e5;
+    padding-left: 1em !important;
+    color: #666;
+    font-style: italic;
+    margin: 0.5em 0;
+}
+
+body.dark #right-editor .cm-line[data-quote="true"] {
+    border-left-color: #444;
+    color: #999;
+}
+
+/* Горизонтальная линия */
+#right-editor .cm-line[data-hr="true"]:not(.cm-activeLine) {
+    height: 2px !important;
+    background: #e1e4e8;
+    margin: 2em 0 !important;
+    overflow: hidden !important;
+    color: transparent !important;
+}
+
+body.dark #right-editor .cm-line[data-hr="true"]:not(.cm-activeLine) {
+    background: #333;
+}
+
+/* ========== РАЗДЕЛИТЕЛЬ И РЕЖИМЫ ========== */
+
+#markdown-pane {
+    border-right: 1px solid #e0e0e0;
+}
+
+body.dark #markdown-pane {
+    border-right-color: #333;
+}
+
+body.mode-edit #preview-pane {
+    display: none;
+}
+
+body.mode-edit #markdown-pane {
+    border-right: none;
+}
+
+body.mode-preview #markdown-pane {
+    display: none;
+}
+
+/* ========== ТЕМНАЯ ТЕМА ========== */
+
+body.dark .cm-editor {
+    background: #1e1e1e;
+}
+
+body.dark .cm-content {
+    color: #d4d4d4;
+}
+
+body.dark .cm-cursor {
+    border-left-color: #fff;
+}
+
+body.dark .cm-activeLine {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+body.dark .cm-selectionBackground {
+    background: rgba(128, 203, 196, 0.2) !important;
+}

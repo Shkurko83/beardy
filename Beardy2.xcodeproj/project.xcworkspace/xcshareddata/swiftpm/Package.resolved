@@ -1,6 +1,15 @@
 {
-  "originHash" : "b692ce3cf0289d1a2c481db32ae5f8eb2b6cfdce37428f0c214235ebc125395f",
+  "originHash" : "f62f3d06ebd4ab98e90e26e3176765442a724d463bd496918aec38228afb9e7f",
   "pins" : [
+    {
+      "identity" : "down",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/johnxnguyen/Down",
+      "state" : {
+        "branch" : "master",
+        "revision" : "e754ab1c80920dd51a8e08290c912ac1c2ac8b58"
+      }
+    },
     {
       "identity" : "swift-cmark",
       "kind" : "remoteSourceControl",

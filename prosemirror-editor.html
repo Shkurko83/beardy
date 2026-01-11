@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, sans-serif; height: 100vh; display: flex; background: #fff; }
+        body.dark { background: #1e1e1e; color: #d4d4d4; }
+        #editor-container { display: flex; width: 100%; height: 100%; }
+        .editor-pane { flex: 1; height: 100%; overflow-y: auto; padding: 40px; border-right: 1px solid #e0e0e0; }
+        body.dark .editor-pane { border-right-color: #333; }
+        .ProseMirror { outline: none; min-height: 100%; line-height: 1.6; white-space: pre-wrap !important; }
+        #markdown-editor .ProseMirror { font-family: "SF Mono", monospace; font-size: 13px; }
+        
+        /* Стили контента */
+        .ProseMirror h1 { font-size: 2em; border-bottom: 1px solid #eee; }
+        .ProseMirror pre { background: #f4f4f4; padding: 10px; border-radius: 5px; font-family: monospace; }
+        body.dark .ProseMirror pre { background: #2d2d2d; }
+        .ProseMirror table { border-collapse: collapse; width: 100%; margin: 1em 0; border: 1px solid #ccc; }
+        .ProseMirror td, .ProseMirror th { border: 1px solid #ccc; padding: 8px; }
+    </style>
+</head>
+<body>
+    <div id="editor-container">
+        <div class="editor-pane" id="markdown-editor"></div>
+        <div class="editor-pane" id="wysiwyg-editor"></div>
+    </div>
+
+    <script src="https://unpkg.com/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
+    
+    <script>
+        // Глобальный обработчик ошибок, чтобы сразу увидеть, если CDN сдох
+        window.onerror = function(msg, url, line) {
+            document.body.innerHTML = `<div style="color:red;padding:20px;">ОШИБКА ЗАГРУЗКИ: ${msg} <br> Линия: ${line}</div>`;
+        };
+
+        // Заглушка
+        window.initializeEditor = function(text, isDark) {
+            window.pendingInit = { text, isDark };
+            console.log("🌐 JS: Данные получены, ждем загрузки логики...");
+        };
+    </script>
+
+    <script type="module">
+        async function start() {
+            try {
+                const [PMModel, PMState, PMView, PMSchema, PMList, PMTables, PMMD] = await Promise.all([
+                    import('https://esm.sh/prosemirror-model@1.19.3'),
+                    import('https://esm.sh/prosemirror-state@1.4.3'),
+                    import('https://esm.sh/prosemirror-view@1.32.3'),
+                    import('https://esm.sh/prosemirror-schema-basic@1.2.2'),
+                    import('https://esm.sh/prosemirror-schema-list@1.2.2'),
+                    import('https://esm.sh/prosemirror-tables@1.3.5'),
+                    import('https://esm.sh/prosemirror-markdown@1.11.2')
+                ]);
+
+                console.log("🌐 JS: Все модули загружены");
+
+                const nodes = PMList.addListNodes(PMSchema.schema.spec.nodes.append(PMTables.tableNodes({
+                    tableGroup: "block",
+                    cellContent: "block"
+                })), "paragraph block*", "block");
+                
+                const mySchema = new PMModel.Schema({ nodes, marks: PMSchema.schema.spec.marks });
+                const md = window.markdownit({ breaks: true }).enable('table');
+                
+                const myParser = new PMMD.MarkdownParser(mySchema, md, {
+                    ...PMMD.defaultMarkdownParser.tokens,
+                    table: { block: "table" },
+                    tr: { block: "table_row" },
+                    th: { block: "table_header" },
+                    td: { block: "table_cell" }
+                });
+
+                const mySerializer = PMMD.defaultMarkdownSerializer;
+
+                let mView, wView, isSyncing = false;
+
+                window.initializeEditor = (text, isDark) => {
+                    if (isDark) document.body.classList.add('dark');
+                    const doc = myParser.parse(text || '');
+
+                    const setup = (el) => new PMView.EditorView(document.getElementById(el), {
+                        state: PMState.EditorState.create({ doc, schema: mySchema, plugins: [PMTables.tableEditing()] }),
+                        dispatchTransaction(tr) {
+                            this.updateState(this.state.apply(tr));
+                            if (tr.docChanged && !isSyncing) {
+                                isSyncing = true;
+                                const out = mySerializer.serialize(this.state.doc);
+                                const nextDoc = myParser.parse(out);
+                                const target = (el === 'markdown-editor' ? wView : mView);
+                                target.dispatch(target.state.tr.replaceWith(0, target.state.doc.content.size, nextDoc.content).setMeta("addToHistory", false));
+                                window.webkit?.messageHandlers?.contentChanged?.postMessage(out);
+                                setTimeout(() => { isSyncing = false; }, 20);
+                            }
+                        }
+                    });
+
+                    mView = setup('markdown-editor');
+                    wView = setup('wysiwyg-editor');
+                    console.log("🌐 JS: Редакторы запущены");
+                };
+
+                if (window.pendingInit) {
+                    window.initializeEditor(window.pendingInit.text, window.pendingInit.isDark);
+                }
+
+            } catch (err) {
+                document.body.innerHTML = `<div style="color:red;padding:20px;">Критический сбой: ${err.message}</div>`;
+            }
+        }
+        start();
+    </script>
+</body>
+</html>
+

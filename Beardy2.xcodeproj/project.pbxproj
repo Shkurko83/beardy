@@ -7,11 +7,21 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		EBC489D32F044E6600C2E579 /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = EBC489D22F044E6600C2E579 /* Markdown */; };
+		EB63349E2F13E62D0040C1BB /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = EB63349D2F13E62D0040C1BB /* Markdown */; };
+		EB763A662F0D8F5900B17ECA /* editor.bundle.js in Resources */ = {isa = PBXBuildFile; fileRef = EB763A652F0D8F5900B17ECA /* editor.bundle.js */; };
+		EB763A6B2F0E725C00B17ECA /* prosemirror-editor.html in Resources */ = {isa = PBXBuildFile; fileRef = EB763A6A2F0E725700B17ECA /* prosemirror-editor.html */; };
+		EB763A732F0EDF3000B17ECA /* codemirror-styles.css in Resources */ = {isa = PBXBuildFile; fileRef = EB763A722F0EDF2B00B17ECA /* codemirror-styles.css */; };
+		EB763A752F0EE01300B17ECA /* codemirror-script.js in Resources */ = {isa = PBXBuildFile; fileRef = EB763A742F0EE00E00B17ECA /* codemirror-script.js */; };
+		EB763A7A2F11736F00B17ECA /* codemirror-editor.html in Resources */ = {isa = PBXBuildFile; fileRef = EB763A792F11735D00B17ECA /* codemirror-editor.html */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		EB3DF5682EFFF1CE0052CF77 /* Beardy2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Beardy2.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		EB763A652F0D8F5900B17ECA /* editor.bundle.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = editor.bundle.js; sourceTree = "<group>"; };
+		EB763A6A2F0E725700B17ECA /* prosemirror-editor.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = "prosemirror-editor.html"; sourceTree = "<group>"; };
+		EB763A722F0EDF2B00B17ECA /* codemirror-styles.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = "codemirror-styles.css"; sourceTree = "<group>"; };
+		EB763A742F0EE00E00B17ECA /* codemirror-script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "codemirror-script.js"; sourceTree = "<group>"; };
+		EB763A792F11735D00B17ECA /* codemirror-editor.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = "codemirror-editor.html"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -27,18 +37,31 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				EBC489D32F044E6600C2E579 /* Markdown in Frameworks */,
+				EB63349E2F13E62D0040C1BB /* Markdown in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		EB2B77F82F13E31700F8976B /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		EB3DF55F2EFFF1CE0052CF77 = {
 			isa = PBXGroup;
 			children = (
 				EB3DF56A2EFFF1CE0052CF77 /* Beardy2 */,
 				EB3DF5692EFFF1CE0052CF77 /* Products */,
+				EB763A652F0D8F5900B17ECA /* editor.bundle.js */,
+				EB763A792F11735D00B17ECA /* codemirror-editor.html */,
+				EB763A6A2F0E725700B17ECA /* prosemirror-editor.html */,
+				EB763A742F0EE00E00B17ECA /* codemirror-script.js */,
+				EB763A722F0EDF2B00B17ECA /* codemirror-styles.css */,
+				EB2B77F82F13E31700F8976B /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -70,7 +93,7 @@
 			);
 			name = Beardy2;
 			packageProductDependencies = (
-				EBC489D22F044E6600C2E579 /* Markdown */,
+				EB63349D2F13E62D0040C1BB /* Markdown */,
 			);
 			productName = Beardy2;
 			productReference = EB3DF5682EFFF1CE0052CF77 /* Beardy2.app */;
@@ -101,7 +124,8 @@
 			mainGroup = EB3DF55F2EFFF1CE0052CF77;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				EBC489D12F044E6600C2E579 /* XCRemoteSwiftPackageReference "swift-markdown" */,
+				EB37F4DD2F13D5D300B80191 /* XCRemoteSwiftPackageReference "Down" */,
+				EB63349C2F13E62D0040C1BB /* XCRemoteSwiftPackageReference "swift-markdown" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = EB3DF5692EFFF1CE0052CF77 /* Products */;
@@ -118,6 +142,11 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EB763A752F0EE01300B17ECA /* codemirror-script.js in Resources */,
+				EB763A7A2F11736F00B17ECA /* codemirror-editor.html in Resources */,
+				EB763A6B2F0E725C00B17ECA /* prosemirror-editor.html in Resources */,
+				EB763A732F0EDF3000B17ECA /* codemirror-styles.css in Resources */,
+				EB763A662F0D8F5900B17ECA /* editor.bundle.js in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -297,8 +326,8 @@
 				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
 				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
 				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
-				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
-				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = YES;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = YES;
 				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -352,8 +381,8 @@
 				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
 				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
 				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
-				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
-				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = YES;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = YES;
 				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -388,9 +417,17 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		EBC489D12F044E6600C2E579 /* XCRemoteSwiftPackageReference "swift-markdown" */ = {
+		EB37F4DD2F13D5D300B80191 /* XCRemoteSwiftPackageReference "Down" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/apple/swift-markdown.git";
+			repositoryURL = "https://github.com/johnxnguyen/Down";
+			requirement = {
+				branch = master;
+				kind = branch;
+			};
+		};
+		EB63349C2F13E62D0040C1BB /* XCRemoteSwiftPackageReference "swift-markdown" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-markdown";
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 0.7.3;
@@ -399,9 +436,9 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		EBC489D22F044E6600C2E579 /* Markdown */ = {
+		EB63349D2F13E62D0040C1BB /* Markdown */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = EBC489D12F044E6600C2E579 /* XCRemoteSwiftPackageReference "swift-markdown" */;
+			package = EB63349C2F13E62D0040C1BB /* XCRemoteSwiftPackageReference "swift-markdown" */;
 			productName = Markdown;
 		};
 /* End XCSwiftPackageProductDependency section */
