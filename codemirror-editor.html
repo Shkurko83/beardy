@@ -1,381 +1,418 @@
 <!DOCTYPE html>
 <html>
-<head>
-    <meta charset="UTF-8">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            height: 100vh;
-            overflow: hidden;
-            background: #fff;
-            color: #24292e;
-        }
-        body.dark {
-            background: #0d1117;
-            color: #c9d1d9;
-        }
+    <head>
+        <meta charset="UTF-8">
+            <link id="highlight-theme" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+                <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+                <style>
+                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                    body {
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                        height: 100vh;
+                        overflow: hidden;
+                        background: #fff;
+                        color: #24292e;
+                    }
+                    body.dark {
+                        background: #0d1117;
+                        color: #c9d1d9;
+                    }
+                    
+                    #swap-button {
+                        position: absolute;
+                        top: 2px;
+                        left: 50%;
+                        transform: translateX(-50%);
+                        z-index: 1000;
+                        background: #fff;
+                        border: 1px solid #d0d7de;
+                        border-radius: 6px;
+                        padding: 6px 10px;
+                        cursor: pointer;
+                        font-size: 14px;
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+                        transition: all 0.2s;
+                        pointer-events: auto;
+                    }
+                    body.dark #swap-button {
+                        background: #21262d;
+                        border-color: #30363d;
+                        color: #c9d1d9;
+                    }
+                    #swap-button:hover {
+                        background: #f6f8fa;
+                        border-color: #b0b7be;
+                        box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+                    }
+                    body.dark #swap-button:hover {
+                        background: #30363d;
+                        border-color: #484f58;
+                    }
+                    
+                    #editor-container {
+                        display: flex;
+                        width: 100vw;
+                        height: 100vh;
+                        position: relative;
+                        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+                        
+                    }
+                    
+                    #editor-container.swapped {
+                        flex-direction: row-reverse;
+                    }
+                    
+                    .editor-pane {
+                        flex: 1 1 0;
+                        min-width: 0;
+                        height: 100%;
+                        overflow: auto;
+                        position: relative;
+                        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+                    }
+                    
+                    /* Border для markdown-панели когда она слева */
+                    #markdown-pane {
+                        width: 50% !important;
+                        padding: 0;
+                        border: 1px solid gray;
+                    }
+                    
+                    body.dark #markdown-pane {
+                        border-right-color: #30363d;
+                    }
+                    
+                    #preview-pane {
+                        width: 50% !important;
+                        box-sizing: border-box;
+                        border: 1px solid gray;
+                    }
+                    
+                    /* Режимы отображения */
+                    body.mode-edit #live-editor { display: none; }
+                    body.mode-edit #editor-container { display: flex; }
+                    body.mode-edit #markdown-pane {
+                        display: block;
+                        width: 100% !important;
+                        border-right: none;
+                        border-left: none;
+                    }
+                    body.mode-edit #preview-pane { display: none; }
+                    body.mode-edit #swap-button { display: none; }
 
-        #swap-button {
-            position: absolute;
-            top: 2px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 1000;
-            background: #fff;
-            border: 1px solid #d0d7de;
-            border-radius: 6px;
-            padding: 6px 10px;
-            cursor: pointer;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-            transition: all 0.2s;
-            pointer-events: auto;
-        }
-        body.dark #swap-button {
-            background: #21262d;
-            border-color: #30363d;
-            color: #c9d1d9;
-        }
-        #swap-button:hover {
-            background: #f6f8fa;
-            border-color: #b0b7be;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.2);
-        }
-        body.dark #swap-button:hover {
-            background: #30363d;
-            border-color: #484f58;
-        }
+                    body.mode-preview #live-editor { display: none; }
+                    body.mode-preview #editor-container { display: flex; }
+                    body.mode-preview #markdown-pane { display: none; }
+                    body.mode-preview #preview-pane {
+                        display: block;
+                        width: 100% !important;
+                        border-left: none;
+                        border-right: none;
+                    }
+                    body.mode-preview #swap-button { display: none; }
 
-        #editor-container {
-            display: flex;
-            width: 100vw;
-            height: 100vh;
-            position: relative;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            
-        }
+                    body.mode-split #live-editor { display: none; }
+                    body.mode-split #editor-container { display: flex; }
+                    body.mode-split #markdown-pane {
+                        display: block;
+                        width: 50% !important;
+                    }
+                    body.mode-split #preview-pane {
+                        display: block;
+                        width: 50% !important;
+                    }
+
+                    body.mode-live #live-editor { display: block; }
+                    body.mode-live #editor-container { display: none; }
+                    body.mode-live #markdown-pane { display: none; }
+                    body.mode-live #preview-pane { display: none; }
+                    body.mode-live #swap-button { display: none; }
+
+                    
+                    /* Стили превью */
+                    #preview-content {
+                        line-height: 1.6;
+                        font-size: 16px;
+                        padding: 40px 20px;
+                    }
+                    #preview-content h1 { font-size: 2em; margin: 0.67em 0; }
+                    #preview-content h2 { font-size: 1.6em; margin: 0.75em 0; }
+                    #preview-content h3 { font-size: 1.3em; margin: 0.83em 0; }
+                    #preview-content code {
+                        font-family: 'SF Mono', Monaco, Consolas, monospace;
+                        background: #f6f8fa;
+                        padding: 2px 6px;
+                        border-radius: 3px;
+                        color: #cf222e;
+                    }
+                    body.dark #preview-content code {
+                        background: #161b22;
+                        color: #ff7b72;
+                    }
+                    /* Инлайн код (не в блоках) */
+                    #preview-content :not(pre) > code {
+                        font-family: 'SF Mono', Monaco, Consolas, monospace;
+                        background: #f6f8fa;
+                        padding: 2px 6px;
+                        border-radius: 3px;
+                        color: #cf222e;
+                    }
+                    body.dark #preview-content :not(pre) > code {
+                        background: #161b22;
+                        color: #ff7b72;
+                    }
+                    
+                    /* Блоки кода - используем стили highlight.js */
+                    #preview-content pre {
+                        border-radius: 6px;
+                        overflow: auto;
+                        margin: 1em 0;
+                        padding: 16px;
+                    }
+                    #preview-content pre code {
+                        font-family: 'SF Mono', Monaco, Consolas, monospace;
+                        background: transparent !important;
+                        padding: 0;
+                    }
+                    #preview-content table {
+                        border-collapse: collapse;
+                        margin: 1em 0;
+                        width: 100%;
+                    }
+                    #preview-content th,
+                    #preview-content td {
+                        padding: 6px 13px;
+                        border: 1px solid #d0d7de;
+                    }
+                    body.dark #preview-content th,
+                    body.dark #preview-content td {
+                        border-color: #30363d;
+                    }
+                    #preview-content thead {
+                        background: #f6f8fa;
+                    }
+                    body.dark #preview-content thead {
+                        background: #161b22;
+                    }
+                    #preview-content blockquote {
+                        margin: 0;
+                        padding-left: 1em;
+                        border-left: 4px solid #d0d7de;
+                        color: #57606a;
+                    }
+                    #preview-content ul,
+                    #preview-content ol {
+                        padding-left: 2em;
+                        margin: 0.5em 0;
+                    }
+                    #preview-content li {
+                        margin: 0.25em 0;
+                    }
+                    #preview-content hr {
+                        border: none;
+                        border-top: 1px solid #d0d7de;
+                        margin: 2em 0;
+                    }
+                    body.dark #preview-content hr {
+                        border-top-color: #30363d;
+                    }
+                    body.dark #preview-content blockquote {
+                        border-left-color: #30363d;
+                        color: #8b949e;
+                    }
+                    
+                    /* === LIVE MODE === */
+                    #live-editor {
+                        display: none;
+                        width: 100%;
+                        height: 100%;
+                        overflow-y: auto;
+                        padding: 40px 80px;
+                        box-sizing: border-box;
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                        font-size: 16px;
+                        line-height: 1.7;
+                        outline: none;
+                    }
+                    
+                    body.mode-live #live-editor { display: block; }
+                    body.mode-live #markdown-pane { display: none; }
+                    body.mode-live #preview-pane { display: none; }
+                    body.mode-live #swap-button { display: none; }
+                    
+                    /* Блоки в live-режиме */
+                    .live-block {
+                        min-height: 1.7em;
+                        padding: 2px 0;
+                        outline: none;
+                        border-radius: 3px;
+                        transition: background 0.1s;
+                        white-space: pre-wrap;
+                        word-break: break-word;
+                        cursor: text;
+                    }
+                    .live-block:focus { outline: none; }
+                    
+                    /* Активный блок — показываем исходник */
+                    .live-block.is-source {
+                        font-family: 'SF Mono', Monaco, Consolas, monospace;
+                        font-size: 14px;
+                        color: inherit;
+                        background: rgba(0,0,0,0.03);
+                        border-radius: 4px;
+                        padding: 2px 6px;
+                    }
+                    body.dark .live-block.is-source {
+                        background: rgba(255,255,255,0.05);
+                    }
+                    
+                    /* Рендеренные блоки */
+                    .live-block.is-rendered { font-family: inherit; }
+                    
+                    /* Заголовки */
+                    .live-block[data-type="h1"] { font-size: 2em; font-weight: 700; margin: 0.4em 0 0.2em; }
+                    .live-block[data-type="h2"] { font-size: 1.6em; font-weight: 700; margin: 0.4em 0 0.2em; }
+                    .live-block[data-type="h3"] { font-size: 1.3em; font-weight: 600; margin: 0.3em 0 0.2em; }
+                    .live-block[data-type="h4"] { font-size: 1.1em; font-weight: 600; margin: 0.3em 0 0.1em; }
+                    .live-block[data-type="h5"] { font-size: 1em; font-weight: 600; margin: 0.2em 0 0.1em; }
+                    .live-block[data-type="h6"] { font-size: 0.9em; font-weight: 600; margin: 0.2em 0 0.1em; color: #57606a; }
+                    body.dark .live-block[data-type="h6"] { color: #8b949e; }
+                    
+                    /* Цитата */
+                    .live-block[data-type="blockquote"] {
+                        border-left: 4px solid #d0d7de;
+                        padding-left: 1em;
+                        color: #57606a;
+                        margin: 0.3em 0;
+                    }
+                    body.dark .live-block[data-type="blockquote"] {
+                        border-left-color: #30363d;
+                        color: #8b949e;
+                    }
+                    
+                    /* Горизонтальная линия */
+                    .live-block[data-type="hr"] {
+                        border: none;
+                        border-top: 2px solid #d0d7de;
+                        margin: 1em 0;
+                        height: 2px;
+                    }
+                    body.dark .live-block[data-type="hr"] { border-top-color: #30363d; }
+                    
+                    /* Код блок */
+                    .live-block[data-type="code-fence"] {
+                        font-family: 'SF Mono', Monaco, Consolas, monospace;
+                        font-size: 13px;
+                        background: #f6f8fa;
+                        border-radius: 6px;
+                        padding: 12px 16px;
+                        margin: 0.5em 0;
+                        color: #24292e;
+                        white-space: pre;
+                    }
+                    body.dark .live-block[data-type="code-fence"] {
+                        background: #161b22;
+                        color: #c9d1d9;
+                    }
+                    
+                    /* Параграф */
+                    .live-block[data-type="p"] { margin: 0.1em 0; }
+                    
+                    /* Inline стили внутри rendered блоков */
+                    .live-block.is-rendered strong { font-weight: 700; }
+                    .live-block.is-rendered em { font-style: italic; }
+                    .live-block.is-rendered code {
+                        font-family: 'SF Mono', Monaco, monospace;
+                        background: #f6f8fa;
+                        padding: 2px 5px;
+                        border-radius: 3px;
+                        font-size: 0.88em;
+                        color: #cf222e;
+                    }
+                    body.dark .live-block.is-rendered code {
+                        background: #161b22;
+                        color: #ff7b72;
+                    }
+                    .live-block.is-rendered a { color: #0969da; text-decoration: underline; }
+                    body.dark .live-block.is-rendered a { color: #58a6ff; }
+                    .live-block.is-rendered del { text-decoration: line-through; color: #57606a; }
+                    
+                    /* Курсор в live-mode */
+                    #live-editor:focus-within .live-block.is-source { caret-color: currentColor; }
+                    
+                    
+                </style>
+    </head>
+    <body class="mode-split">
+        <div style="position:fixed; top:8px; left:8px; z-index:99999; background:red; color:white; padding:4px 8px; font-size:12px;">
+            TEST HTML LOADED
+        </div>
+        <div id="mode-debug" style="position:fixed; top:40px; left:8px; z-index:99999; background:blue; color:white; padding:4px 8px; font-size:12px;">
+            MODE: unknown
+        </div>
+
+        <!-- Live mode editor -->
+        <div id="live-editor" tabindex="0"></div>
         
-        #editor-container.swapped {
-            flex-direction: row-reverse;
-        }
-
-        .editor-pane {
-            flex: 1 1 0;
-            min-width: 0;
-            height: 100%;
-            overflow: auto;
-            position: relative;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            border: 1px solid red;
-        }
-        
-        /* Border для markdown-панели когда она слева */
-        #markdown-pane {
-            width: 50%; !important
-            padding: 0;
-            border: 5px solid green;
-        }
-        body.dark #markdown-pane {
-            border-right-color: #30363d;
-        }
-        
-        #preview-pane {
-            width: 50%; !important
-            box-sizing: border-box;
-            border: 5px solid blue;
-        }
-
-        /* Режимы отображения */
-        body.mode-edit #preview-pane { display: none; }
-        body.mode-edit #markdown-pane { border-right: none; }
-        body.mode-edit #swap-button { display: none; }
-        body.mode-preview #markdown-pane { display: none; }
-        body.mode-preview #swap-button { display: none; }
-
-        /* Стили превью */
-        #preview-content {
-            line-height: 1.6;
-            font-size: 16px;
-            padding: 40px 20px;
-        }
-        #preview-content h1 { font-size: 2em; margin: 0.67em 0; }
-        #preview-content h2 { font-size: 1.6em; margin: 0.75em 0; }
-        #preview-content h3 { font-size: 1.3em; margin: 0.83em 0; }
-        #preview-content code {
-            font-family: 'SF Mono', Monaco, Consolas, monospace;
-            background: #f6f8fa;
-            padding: 2px 6px;
-            border-radius: 3px;
-            color: #cf222e;
-        }
-        body.dark #preview-content code {
-            background: #161b22;
-            color: #ff7b72;
-        }
-        #preview-content pre {
-            background: #f6f8fa;
-            padding: 16px;
-            border-radius: 6px;
-            overflow: auto;
-            margin: 1em 0;
-        }
-        body.dark #preview-content pre {
-            background: #161b22;
-        }
-        #preview-content pre code {
-            background: transparent;
-            padding: 0;
-            color: inherit;
-        }
-        #preview-content table {
-            border-collapse: collapse;
-            margin: 1em 0;
-            width: 100%;
-        }
-        #preview-content th,
-        #preview-content td {
-            padding: 6px 13px;
-            border: 1px solid #d0d7de;
-        }
-        body.dark #preview-content th,
-        body.dark #preview-content td {
-            border-color: #30363d;
-        }
-        #preview-content thead {
-            background: #f6f8fa;
-        }
-        body.dark #preview-content thead {
-            background: #161b22;
-        }
-        #preview-content blockquote {
-            margin: 0;
-            padding-left: 1em;
-            border-left: 4px solid #d0d7de;
-            color: #57606a;
-        }
-        #preview-content ul,
-        #preview-content ol {
-            padding-left: 2em;
-            margin: 0.5em 0;
-        }
-        #preview-content li {
-            margin: 0.25em 0;
-        }
-        #preview-content hr {
-            border: none;
-            border-top: 1px solid #d0d7de;
-            margin: 2em 0;
-        }
-        body.dark #preview-content hr {
-            border-top-color: #30363d;
-        }
-        body.dark #preview-content blockquote {
-            border-left-color: #30363d;
-            color: #8b949e;
-        }
-        
-    </style>
-</head>
-<body class="mode-split">
-    <div id="editor-container">
-        <button id="swap-button" title="Поменять панели местами">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M2 4h12M2 12h12M4 2L2 4l2 2M12 10l2 2-2 2"/>
-            </svg>
-        </button>
-        <div class="editor-pane" id="markdown-pane">
-            <textarea id="markdown-textarea" style="
+        <div id="editor-container">
+            <button id="swap-button" title="Поменять панели местами">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M2 4h12M2 12h12M4 2L2 4l2 2M12 10l2 2-2 2"/>
+                </svg>
+            </button>
+            <div class="editor-pane" id="markdown-pane">
+                <textarea id="markdown-textarea" style="
                 width: 100%; height: 100%; border: none; outline: none;
                 font-family: 'SF Mono', Monaco, monospace; font-size: 14px;
                 padding: 40px 60px; background: transparent;
                 resize: none; color: inherit; line-height: 1.6;
             "></textarea>
+            </div>
+            <div class="editor-pane" id="preview-pane">
+                <div id="preview-content"></div>
+            </div>
         </div>
-        <div class="editor-pane" id="preview-pane">
-            <div id="preview-content"></div>
-        </div>
-    </div>
-
-    <!-- marked.js -->
-    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/lib/marked.umd.min.js"></script>
-
-    <script>
-        console.log('🎉 Загрузка скрипта');
-
-        let isSyncing = false;
-        let currentContent = '';
-        let isInitialized = false;
-        let syncScroll = true;
-        let isSwapped = false;
-        let lastScrollTime = { markdown: 0, preview: 0 };
-        let scrollDebounce = null;
-
-
-        const textarea = document.getElementById('markdown-textarea');
-        const preview = document.getElementById('preview-content');
-        const markdownPane = document.getElementById('markdown-pane');
-        const previewPane = document.getElementById('preview-pane');
-        const editorContainer = document.getElementById('editor-container');
-        const swapButton = document.getElementById('swap-button');
         
-        // Проверка наличия элементов
-        console.log('🔍 Проверка элементов:');
-        console.log('markdownPane:', markdownPane);
-        console.log('previewPane:', previewPane);
-        console.log('syncScroll:', syncScroll);
-
-        // Тестовый обработчик
-        setTimeout(() => {
-            console.log('📏 Размеры панелей:');
-            console.log('markdown scrollHeight:', markdownPane.scrollHeight, 'clientHeight:', markdownPane.clientHeight);
-            console.log('preview scrollHeight:', previewPane.scrollHeight, 'clientHeight:', previewPane.clientHeight);
-            console.log('🔍 Диагностика скролла:');
-            console.log('markdownPane.scrollHeight:', markdownPane.scrollHeight);
-            console.log('textarea.scrollHeight:', textarea.scrollHeight);
-            console.log('Кто скроллится - pane или textarea?');
-
-            // Проверяем, у кого реально есть скролл
-            if (markdownPane.scrollHeight > markdownPane.clientHeight) {
-                console.log('✅ markdownPane имеет скролл');
-            } else {
-                console.log('❌ markdownPane НЕ имеет скролл');
-            }
-
-            if (textarea.scrollHeight > textarea.clientHeight) {
-                console.log('✅ textarea имеет скролл');
-            } else {
-                console.log('❌ textarea НЕ имеет скролл');
-            }
-        }, 1000);
-
-        marked.setOptions({
-            breaks: true,
-            gfm: true,
-            langPrefix: 'language-'
-        });
-
-        function initializeEditor(initialText = '', isDark = false) {
-            console.log('🚀 Инициализация редактора...');
-
-            if (isDark) {
-                document.body.classList.add('dark');
-                textarea.style.backgroundColor = '#0d1117';
-                textarea.style.color = '#c9d1d9';
-            } else {
-                document.body.classList.remove('dark');
-                textarea.style.backgroundColor = 'transparent';
-                textarea.style.color = 'inherit';
-            }
-
-            currentContent = initialText;
-            textarea.value = initialText;
-            renderPreview(initialText);
-
-            // Input обработчик
-            textarea.addEventListener('input', () => {
-                if (isSyncing) return;
-                const text = textarea.value;
-                currentContent = text;
-                renderPreview(text);
-                if (window.webkit?.messageHandlers?.contentChanged) {
-                    window.webkit.messageHandlers.contentChanged.postMessage(text);
-                }
+        <!-- marked.js -->
+        <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/lib/marked.umd.min.js"></script>
+        
+        <script>
+            console.log('🎉 Загрузка скрипта');
+            
+            let isSyncing = false;
+            let currentContent = '';
+            let isInitialized = false;
+            let syncScroll = true;
+            let isSwapped = false;
+            let lastScrollTime = { markdown: 0, preview: 0 };
+            let scrollDebounce = null;
+            
+            
+            const textarea = document.getElementById('markdown-textarea');
+            const preview = document.getElementById('preview-content');
+            const markdownPane = document.getElementById('markdown-pane');
+            const previewPane = document.getElementById('preview-pane');
+            const editorContainer = document.getElementById('editor-container');
+            const swapButton = document.getElementById('swap-button');
+            
+            // Проверка наличия элементов
+            console.log('🔍 Проверка элементов:');
+            console.log('markdownPane:', markdownPane);
+            console.log('previewPane:', previewPane);
+            console.log('syncScroll:', syncScroll);
+            
+            marked.setOptions({
+                breaks: true,
+                gfm: true,
+                langPrefix: 'language-'
             });
-
-            // Флаги для синхронизации - СНАРУЖИ setTimeout!
-            let isMarkdownScrolling = false;
-            let isPreviewScrolling = false;
-
-            // Ждем рендеринга контента
-            setTimeout(() => {
-                console.log('📏 Размеры после рендера:');
-                console.log('markdown:', markdownPane.scrollHeight, '/', markdownPane.clientHeight);
-                console.log('preview:', previewPane.scrollHeight, '/', previewPane.clientHeight);
+            
+            function initializeEditor(initialText = '', isDark = false) {
+                console.log('🚀 Инициализация редактора...');
                 
-                // Синхронизация скролла для markdown (TEXTAREA!)
-                textarea.addEventListener('scroll', () => {
-                    console.log('📜 TEXTAREA SCROLL EVENT');
-                    if (!syncScroll) return;
-                    
-                    const now = Date.now();
-                    if (now - lastScrollTime.preview < 100) {
-                        console.log('Игнорируем: недавно был скролл preview');
-                        return;
-                    }
-                    
-                    lastScrollTime.markdown = now;
-                    clearTimeout(scrollDebounce);
-                    
-                    scrollDebounce = setTimeout(() => {
-                        const percent = textarea.scrollTop / (textarea.scrollHeight - textarea.clientHeight);
-                        previewPane.scrollTop = percent * (previewPane.scrollHeight - previewPane.clientHeight);
-                        console.log('→ Синхронизация TEXTAREA→PR:', percent);
-                    }, 10);
-                });
-
-                // Синхронизация скролла для preview
-                previewPane.addEventListener('scroll', () => {
-                    console.log('📜 PREVIEW SCROLL EVENT');
-                    if (!syncScroll) return;
-                    
-                    const now = Date.now();
-                    if (now - lastScrollTime.markdown < 100) {
-                        console.log('Игнорируем: недавно был скролл markdown');
-                        return;
-                    }
-                    
-                    lastScrollTime.preview = now;
-                    clearTimeout(scrollDebounce);
-                    
-                    scrollDebounce = setTimeout(() => {
-                        const percent = previewPane.scrollTop / (previewPane.scrollHeight - previewPane.clientHeight);
-                        textarea.scrollTop = percent * (textarea.scrollHeight - textarea.clientHeight);
-                        console.log('← Синхронизация PR→TEXTAREA:', percent);
-                    }, 10);
-                });
-                
-                console.log('✅ Обработчики скролла установлены');
-            }, 500);
-
-            // Обработчик кнопки смены панелей
-            swapButton.addEventListener('click', () => {
-                isSwapped = !isSwapped;
-                if (isSwapped) {
-                    editorContainer.classList.add('swapped');
-                } else {
-                    editorContainer.classList.remove('swapped');
-                }
-                if (window.webkit?.messageHandlers?.swapPanes) {
-                    window.webkit.messageHandlers.swapPanes.postMessage(isSwapped);
-                }
-            });
-
-            isInitialized = true;
-            console.log('✅ Редактор инициализирован');
-        }
-
-        function renderPreview(text) {
-            try {
-                const html = marked.parse(text || '');
-                preview.innerHTML = html;
-            } catch (e) {
-                console.error('❌ Ошибка парсинга Markdown:', e);
-                preview.textContent = text;
-            }
-        }
-
-        window.cmEditor = {
-            updateContent: (text) => {
-                if (isSyncing) return;
-                currentContent = text;
-                textarea.value = text;
-                renderPreview(text);
-            },
-            setTheme: (isDark) => {
                 if (isDark) {
                     document.body.classList.add('dark');
                     textarea.style.backgroundColor = '#0d1117';
@@ -385,30 +422,266 @@
                     textarea.style.backgroundColor = 'transparent';
                     textarea.style.color = 'inherit';
                 }
-            },
-            setViewMode: (mode) => {
-                document.body.className = document.body.className.replace(/mode-\w+/g, '');
-                document.body.classList.add(`mode-${mode}`);
-                if (document.body.classList.contains('dark')) {
-                    document.body.classList.add('dark');
+                
+                currentContent = initialText;
+                textarea.value = initialText;
+                renderPreview(initialText);
+                
+                // Input обработчик
+                textarea.addEventListener('input', () => {
+                    if (isSyncing) return;
+                    const text = textarea.value;
+                    currentContent = text;
+                    renderPreview(text);
+                    if (window.webkit?.messageHandlers?.contentChanged) {
+                        window.webkit.messageHandlers.contentChanged.postMessage(text);
+                    }
+                });
+                
+                let isMarkdownScrolling = false;
+                let isPreviewScrolling = false;
+                
+                // Ждем рендеринга контента
+                setTimeout(() => {
+                    console.log('📏 Размеры после рендера:');
+                    console.log('markdown:', markdownPane.scrollHeight, '/', markdownPane.clientHeight);
+                    console.log('preview:', previewPane.scrollHeight, '/', previewPane.clientHeight);
+                    
+                    // Синхронизация скролла для markdown (TEXTAREA!)
+                    textarea.addEventListener('scroll', () => {
+                        console.log('📜 TEXTAREA SCROLL EVENT');
+                        if (!syncScroll) return;
+                        
+                        const now = Date.now();
+                        if (now - lastScrollTime.preview < 100) {
+                            console.log('Игнорируем: недавно был скролл preview');
+                            return;
+                        }
+                        
+                        lastScrollTime.markdown = now;
+                        clearTimeout(scrollDebounce);
+                        
+                        scrollDebounce = setTimeout(() => {
+                            const percent = textarea.scrollTop / (textarea.scrollHeight - textarea.clientHeight);
+                            previewPane.scrollTop = percent * (previewPane.scrollHeight - previewPane.clientHeight);
+                            console.log('→ Синхронизация TEXTAREA→PR:', percent);
+                        }, 10);
+                    });
+                    
+                    // Синхронизация скролла для preview
+                    previewPane.addEventListener('scroll', () => {
+                        console.log('📜 PREVIEW SCROLL EVENT');
+                        if (!syncScroll) return;
+                        
+                        const now = Date.now();
+                        if (now - lastScrollTime.markdown < 100) {
+                            console.log('Игнорируем: недавно был скролл markdown');
+                            return;
+                        }
+                        
+                        lastScrollTime.preview = now;
+                        clearTimeout(scrollDebounce);
+                        
+                        scrollDebounce = setTimeout(() => {
+                            const percent = previewPane.scrollTop / (previewPane.scrollHeight - previewPane.clientHeight);
+                            textarea.scrollTop = percent * (textarea.scrollHeight - textarea.clientHeight);
+                            console.log('← Синхронизация PR→TEXTAREA:', percent);
+                        }, 10);
+                    });
+                    
+                    console.log('✅ Обработчики скролла установлены');
+                }, 50);
+                
+                // Обработчик кнопки смены панелей
+                swapButton.addEventListener('click', () => {
+                    isSwapped = !isSwapped;
+                    if (isSwapped) {
+                        editorContainer.classList.add('swapped');
+                    } else {
+                        editorContainer.classList.remove('swapped');
+                    }
+                    if (window.webkit?.messageHandlers?.swapPanes) {
+                        window.webkit.messageHandlers.swapPanes.postMessage(isSwapped);
+                    }
+                });
+                
+                isInitialized = true;
+                console.log('✅ Редактор инициализирован');
+            }
+            
+            function renderPreview(text) {
+                try {
+                    const html = marked.parse(text || '');
+                    preview.innerHTML = html;
+                    
+                    // Применяем highlight.js к блокам кода
+                    if (window.hljs) {
+                        preview.querySelectorAll('pre code').forEach((block) => {
+                            // Сохраняем язык для переприменения темы
+                            const classes = block.className.match(/language-(\w+)/);
+                            if (classes && classes[1]) {
+                                block.setAttribute('data-language', classes[1]);
+                            }
+                            
+                            // Добавляем класс hljs для индикации что highlight применён
+                            block.parentElement.classList.add('hljs');
+                            hljs.highlightElement(block);
+                        });
+                    }
+                } catch (e) {
+                    console.error('❌ Ошибка парсинга Markdown:', e);
+                    preview.textContent = text;
                 }
-            },
-            setSyncScroll: (enabled) => {
-                syncScroll = enabled;
-            },
-            setSwapped: (swapped) => {
-                isSwapped = swapped;
-                if (swapped) {
-                    editorContainer.classList.add('swapped');
-                } else {
-                    editorContainer.classList.remove('swapped');
-                }
-            },
-            getContent: () => currentContent
-        };
+            }
+            
+            window.cmEditor = {
+                updateContent(text) {
+                    if (isSyncing) return;
+                    currentContent = text;
+                    textarea.value = text;
+                    renderPreview(text);
+                    if (isLiveMode) {
+                        initLiveEditor(text);
+                    }
+                },
 
-        window.initializeEditor = initializeEditor;
-        console.log('✅ API готов');
-    </script>
-</body>
+                setTheme(isDark) {
+                    if (isDark) {
+                        document.body.classList.add('dark');
+                        textarea.style.backgroundColor = '#0d1117';
+                        textarea.style.color = '#c9d1d9';
+                    } else {
+                        document.body.classList.remove('dark');
+                        textarea.style.backgroundColor = 'transparent';
+                        textarea.style.color = 'inherit';
+                    }
+                },
+
+                setViewMode(mode) {
+                    const modeDebug = document.getElementById("mode-debug");
+                    if (modeDebug) {
+                        modeDebug.textContent = `MODE: ${mode}`;
+                    }
+
+                    isLiveMode = (mode === 'live');
+
+                    document.body.className = document.body.className
+                        .replace(/mode-\w+/g, '')
+                        .trim();
+
+                    document.body.classList.add(`mode-${mode}`);
+
+                    if (mode === 'live') {
+                        initLiveEditor(currentContent);
+                    }
+                },
+
+                setSyncScroll(enabled) {
+                    syncScroll = enabled;
+                },
+
+                setSwapped(swapped) {
+                    isSwapped = swapped;
+                    if (swapped) {
+                        editorContainer.classList.add('swapped');
+                    } else {
+                        editorContainer.classList.remove('swapped');
+                    }
+                },
+
+                setPreviewTheme(themeName, themeCSS) {
+                    let oldStyle = document.getElementById('custom-theme-style');
+                    if (oldStyle) oldStyle.remove();
+
+                    const style = document.createElement('style');
+                    style.id = 'custom-theme-style';
+                    style.textContent = themeCSS;
+                    document.head.appendChild(style);
+
+                    renderPreview(currentContent);
+                },
+
+                setCodeBlockTheme(themeName, cdnURL) {
+                    let oldLink = document.getElementById('highlight-theme');
+                    if (oldLink) oldLink.remove();
+
+                    const link = document.createElement('link');
+                    link.id = 'highlight-theme';
+                    link.rel = 'stylesheet';
+                    link.href = cdnURL;
+                    link.onload = () => renderPreview(currentContent);
+                    document.head.appendChild(link);
+                },
+
+                getContent() {
+                    return currentContent;
+                }
+            };
+            
+            window.initializeEditor = function(initialText = '', isDark = false) {
+                console.log('🚀 Инициализация редактора...');
+
+                window.cmEditor.setTheme(isDark);
+                currentContent = initialText;
+                textarea.value = initialText;
+                renderPreview(initialText);
+
+                if (!isInitialized) {
+                    textarea.addEventListener('input', () => {
+                        if (isSyncing) return;
+                        const text = textarea.value;
+                        currentContent = text;
+                        renderPreview(text);
+
+                        if (window.webkit?.messageHandlers?.contentChanged) {
+                            window.webkit.messageHandlers.contentChanged.postMessage(text);
+                        }
+
+                        if (isLiveMode) {
+                            initLiveEditor(text);
+                        }
+                    });
+
+                    swapButton.addEventListener('click', () => {
+                        isSwapped = !isSwapped;
+                        window.cmEditor.setSwapped(isSwapped);
+
+                        if (window.webkit?.messageHandlers?.swapPanes) {
+                            window.webkit.messageHandlers.swapPanes.postMessage(isSwapped);
+                        }
+                    });
+
+                    isInitialized = true;
+                }
+
+                console.log('✅ Редактор инициализирован');
+            };
+
+
+            
+            // ============================================================
+            // LIVE MODE — Typora-like inline rendering
+            // ============================================================
+            
+            const liveEditor = document.getElementById('live-editor');
+            let liveBlocks = [];       // массив { source, el }
+            let activeBlockIndex = -1;
+            let liveContent = '';
+            let isLiveMode = false;
+            
+            // Инициализация live mode
+            function initLiveEditor(text) {
+                liveEditor.innerHTML = `
+                    <div style="padding:40px; font-size:24px; color:red;">LIVE MODE WORKS</div>
+                    <pre style="padding:0 40px 40px 40px; white-space:pre-wrap;">${(text || '')
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')}</pre>
+                `;
+            }
+            
+
+            console.log('✅ API готов');
+        </script>
+    </body>
 </html>

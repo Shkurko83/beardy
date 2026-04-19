@@ -7,6 +7,8 @@ struct CodeMirrorWebView: NSViewRepresentable {
     @Binding var selectedRange: NSRange
     let isDark: Bool
     let viewMode: ViewMode
+    let previewTheme: ThemeService.EditorTheme
+    let codeBlockTheme: ThemeService.CodeTheme
     
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -70,6 +72,22 @@ struct CodeMirrorWebView: NSViewRepresentable {
         }
         
         updateThemeAndMode(webView, context: context)
+            
+        if context.coordinator.lastPreviewTheme != previewTheme {
+            context.coordinator.lastPreviewTheme = previewTheme
+            
+            // Генерируем CSS для темы
+            let themeCSS = ThemeService.shared.generateCSS(for: previewTheme)
+            let script = """
+            window.cmEditor?.setPreviewTheme('\(previewTheme.rawValue)', `\(themeCSS)`);
+            """
+            webView.evaluateJavaScript(script)
+        }
+
+        if context.coordinator.lastCodeBlockTheme != codeBlockTheme {
+            context.coordinator.lastCodeBlockTheme = codeBlockTheme
+            webView.evaluateJavaScript("window.cmEditor?.setCodeBlockTheme('\(codeBlockTheme.rawValue)', '\(codeBlockTheme.cdnURL)');")
+        }
     }
     
     private func updateThemeAndMode(_ webView: WKWebView, context: Context) {
@@ -82,7 +100,18 @@ struct CodeMirrorWebView: NSViewRepresentable {
         
         if context.coordinator.lastViewMode != viewMode {
             context.coordinator.lastViewMode = viewMode
-            let mode = viewMode == .edit ? "edit" : (viewMode == .preview ? "preview" : "split")
+            let mode: String
+            switch viewMode {
+            case .edit:
+                mode = "edit"
+            case .live:
+                mode = "live"
+            case .preview:
+                mode = "preview"
+            case .split:
+                mode = "split"
+            }
+            print("🔥 Initial WebView mode =", mode)
             webView.evaluateJavaScript("window.cmEditor?.setViewMode('\(mode)');")
         }
     }
@@ -100,14 +129,17 @@ struct CodeMirrorWebView: NSViewRepresentable {
         var lastTheme: Bool?
         var lastViewMode: ViewMode?
         var pageLoaded = false
+        var lastPreviewTheme: ThemeService.EditorTheme
+        var lastCodeBlockTheme: ThemeService.CodeTheme 
         
         init(_ parent: CodeMirrorWebView) {
             self.parent = parent
             self.lastKnownText = parent.text
+            self.lastPreviewTheme = parent.previewTheme
+            self.lastCodeBlockTheme = parent.codeBlockTheme
         }
         
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            // Логирование для отладки
             webView.evaluateJavaScript("console.log('✅ WebView загружен');") { _, _ in }
 
             let initialText = parent.text
@@ -134,19 +166,98 @@ struct CodeMirrorWebView: NSViewRepresentable {
             }
             
             // Установка режима
-            let mode = parent.viewMode == .edit ? "edit" : (parent.viewMode == .preview ? "preview" : "split")
-            webView.evaluateJavaScript("window.cmEditor?.setViewMode('\(mode)');")
+            let mode: String
+            switch parent.viewMode {
+            case .edit:
+                mode = "edit"
+            case .live:
+                mode = "live"
+            case .preview:
+                mode = "preview"
+            case .split:
+                mode = "split"
+            }
+            print("🔥 Updating WebView mode =", mode)
+            webView.evaluateJavaScript(script) { result, error in
+                if let error = error {
+                    print("❌ Ошибка инициализации:", error)
+                } else {
+                    print("✅ Редактор инициализирован")
+
+                    let mode: String
+                    switch self.parent.viewMode {
+                    case .edit: mode = "edit"
+                    case .live: mode = "live"
+                    case .preview: mode = "preview"
+                    case .split: mode = "split"
+                    }
+
+                    webView.evaluateJavaScript("window.cmEditor?.setViewMode('\(mode)');")
+                }
+            }
             
-            // Восстановление состояния swap из UserDefaults
+            // Восстановление swap из UserDefaults
             let isSwapped = UserDefaults.standard.bool(forKey: "editorPanesSwapped")
             webView.evaluateJavaScript("window.cmEditor?.setSwapped(\(isSwapped));")
+            
+            // Применение тем при загрузке
+            let themeCSS = ThemeService.shared.generateCSS(for: parent.previewTheme)
+            let themeScript = """
+            window.cmEditor?.setPreviewTheme('\(parent.previewTheme.rawValue)', `\(themeCSS)`);
+            window.cmEditor?.setCodeBlockTheme('\(parent.codeBlockTheme.rawValue)', '\(parent.codeBlockTheme.cdnURL)');
+            """
+            webView.evaluateJavaScript(themeScript)
             
             // Сохраняем состояние
             lastKnownText = initialText
             lastTheme = parent.isDark
             lastViewMode = parent.viewMode
+            lastPreviewTheme = parent.previewTheme
+            lastCodeBlockTheme = parent.codeBlockTheme
             pageLoaded = true
         }
+        
+//        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+//            // Логирование для отладки
+//            webView.evaluateJavaScript("console.log('✅ WebView загружен');") { _, _ in }
+//
+//            let initialText = parent.text
+//            let escapedText = initialText
+//                .replacingOccurrences(of: "\\", with: "\\\\")
+//                .replacingOccurrences(of: "`", with: "\\`")
+//                .replacingOccurrences(of: "$", with: "\\$")
+//                .replacingOccurrences(of: "\n", with: "\\n")
+//                .replacingOccurrences(of: "\r", with: "\\r")
+//                .replacingOccurrences(of: "\"", with: "\\\"")
+//            
+//            // Инициализация редактора
+//            let script = """
+//            console.log('🔧 Инициализация из Swift');
+//            window.initializeEditor(`\(escapedText)`, \(parent.isDark));
+//            """
+//            
+//            webView.evaluateJavaScript(script) { result, error in
+//                if let error = error {
+//                    print("❌ Ошибка инициализации:", error)
+//                } else {
+//                    print("✅ Редактор инициализирован")
+//                }
+//            }
+//            
+//            // Установка режима
+//            let mode = parent.viewMode == .edit ? "edit" : (parent.viewMode == .preview ? "preview" : "split")
+//            webView.evaluateJavaScript("window.cmEditor?.setViewMode('\(mode)');")
+//            
+//            // Восстановление состояния swap из UserDefaults
+//            let isSwapped = UserDefaults.standard.bool(forKey: "editorPanesSwapped")
+//            webView.evaluateJavaScript("window.cmEditor?.setSwapped(\(isSwapped));")
+//            
+//            // Сохраняем состояние
+//            lastKnownText = initialText
+//            lastTheme = parent.isDark
+//            lastViewMode = parent.viewMode
+//            pageLoaded = true
+//        }
         
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             

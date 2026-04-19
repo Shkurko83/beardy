@@ -287,13 +287,28 @@ class ThemeService: ObservableObject {
             color: \(colors.link.toHex());
         }
         
-        code {
+        /* Инлайн код (не в блоках) */
+        :not(pre) > code {
             background-color: \(colors.code.toHex());
             color: \(colors.codeText.toHex());
         }
         
+        /* Блоки кода - НЕ переопределяем background, чтобы работала тема highlight.js */
         pre {
+            border-radius: 6px;
+            overflow: auto;
+            margin: 1em 0;
+        }
+        
+        /* Но если highlight.js не загружен, используем базовый стиль */
+        pre:not(.hljs) {
             background-color: \(colors.code.toHex());
+            padding: 16px;
+        }
+        
+        pre:not(.hljs) code {
+            background-color: transparent;
+            color: \(colors.text.toHex());
         }
         
         blockquote {
@@ -304,23 +319,53 @@ class ThemeService: ObservableObject {
         ::selection {
             background-color: \(colors.selection.toHex());
         }
+        
+        table {
+            border-color: \(colors.border.toHex());
+        }
+        
+        th, td {
+            border-color: \(colors.border.toHex());
+        }
         """
     }
+//    func generateCSS(for theme: EditorTheme) -> String {
+//        let colors = theme.colors
+//        
+//        return """
+//        body {
+//            background-color: \(colors.background.toHex());
+//            color: \(colors.text.toHex());
+//        }
+//        
+//        h1, h2, h3, h4, h5, h6 {
+//            color: \(colors.heading.toHex());
+//        }
+//        
+//        a {
+//            color: \(colors.link.toHex());
+//        }
+//        
+//        code {
+//            background-color: \(colors.code.toHex());
+//            color: \(colors.codeText.toHex());
+//        }
+//        
+//        pre {
+//            background-color: \(colors.code.toHex());
+//        }
+//        
+//        blockquote {
+//            color: \(colors.secondaryText.toHex());
+//            border-left-color: \(colors.border.toHex());
+//        }
+//        
+//        ::selection {
+//            background-color: \(colors.selection.toHex());
+//        }
+//        """
+//    }
     
-    // MARK: - Export Theme
-    func exportTheme(_ theme: EditorTheme, to url: URL) throws {
-        let css = generateCSS(for: theme)
-        try css.write(to: url, atomically: true, encoding: .utf8)
-    }
-    
-    // MARK: - Import Custom Theme
-    func importCustomTheme(from url: URL) throws {
-        // Load CSS and create custom theme
-        let css = try String(contentsOf: url, encoding: .utf8)
-        // Parse CSS and create theme colors
-        // This would require a CSS parser - simplified for now
-        print("Imported theme from: \(url)")
-    }
 }
 
 // MARK: - Notification Names

@@ -144,6 +144,11 @@ struct MarkdownEditorApp: App {
                 }
                 .keyboardShortcut("/", modifiers: .command)
                 
+                Button("Live Preview Mode") {
+                    documentManager.viewMode = .live
+                }
+                .keyboardShortcut("l", modifiers: [.command, .shift])
+                
                 Divider()
                 
                 Button("Focus Mode") {

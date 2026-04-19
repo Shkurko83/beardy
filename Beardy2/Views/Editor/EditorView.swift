@@ -27,6 +27,11 @@ struct EditorView: View {
                             MarkdownEditorArea(scrollPosition: $scrollPosition)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                             
+                        case .live:
+                            // Typora-like режим: один экран, визуальное редактирование
+                            MarkdownEditorArea(scrollPosition: $scrollPosition)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            
                         case .preview:
                             // Только превью (визуальный режим)
                             MarkdownPreviewArea(editorScrollPosition: $scrollPosition)
@@ -185,7 +190,9 @@ struct MarkdownEditorArea: View {
                 text: $textContent,
                 selectedRange: $selectedRange,
                 isDark: themeService.currentTheme.id.contains("dark"),
-                viewMode: documentManager.viewMode
+                viewMode: documentManager.viewMode,
+                previewTheme: themeService.currentTheme,
+                codeBlockTheme: themeService.currentCodeTheme
             )
 //             ProseMirror Editor
 //            ProseMirrorWebView(

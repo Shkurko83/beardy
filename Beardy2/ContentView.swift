@@ -73,6 +73,8 @@ struct ContentView: View {
                 Picker("", selection: $documentManager.viewMode) {
                     Label("Edit", systemImage: "pencil")
                         .tag(ViewMode.edit)
+                    Label("Live", systemImage: "doc.richtext")
+                        .tag(ViewMode.live)
                     Label("Preview", systemImage: "eye")
                         .tag(ViewMode.preview)
                     Label("Split", systemImage: "rectangle.split.2x1")
@@ -80,6 +82,7 @@ struct ContentView: View {
                 }
                 .pickerStyle(.segmented)
                 .help("View Mode")
+
 
                 // Theme toggle
                 Button(action: {
@@ -130,4 +133,5 @@ enum ViewMode: String, CaseIterable {
     case edit = "Edit"
     case preview = "Preview"
     case split = "Split"
+    case live = "Live"
 }
