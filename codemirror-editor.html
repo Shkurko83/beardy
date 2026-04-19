@@ -347,13 +347,7 @@
                 </style>
     </head>
     <body class="mode-split">
-        <div style="position:fixed; top:8px; left:8px; z-index:99999; background:red; color:white; padding:4px 8px; font-size:12px;">
-            TEST HTML LOADED
-        </div>
-        <div id="mode-debug" style="position:fixed; top:40px; left:8px; z-index:99999; background:blue; color:white; padding:4px 8px; font-size:12px;">
-            MODE: unknown
-        </div>
-
+        
         <!-- Live mode editor -->
         <div id="live-editor" tabindex="0"></div>
         
@@ -662,26 +656,280 @@
             // ============================================================
             // LIVE MODE — Typora-like inline rendering
             // ============================================================
-            
+
             const liveEditor = document.getElementById('live-editor');
-            let liveBlocks = [];       // массив { source, el }
+            let liveBlocks = [];
             let activeBlockIndex = -1;
             let liveContent = '';
             let isLiveMode = false;
-            
-            // Инициализация live mode
-            function initLiveEditor(text) {
-                liveEditor.innerHTML = `
-                    <div style="padding:40px; font-size:24px; color:red;">LIVE MODE WORKS</div>
-                    <pre style="padding:0 40px 40px 40px; white-space:pre-wrap;">${(text || '')
-                        .replace(/&/g, '&amp;')
-                        .replace(/</g, '&lt;')
-                        .replace(/>/g, '&gt;')}</pre>
-                `;
+
+            // Парсим Markdown на логические блоки
+            function parseMarkdownBlocks(text) {
+                const rawLines = (text || '').split('\n');
+                const blocks = [];
+                let i = 0;
+
+                while (i < rawLines.length) {
+                    const line = rawLines[i];
+
+                    // Пустая строка
+                    if (line.trim() === '') {
+                        blocks.push({ type: 'empty', source: '' });
+                        i++;
+                        continue;
+                    }
+
+                    // Code fence
+                    if (line.trim().startsWith('```')) {
+                        let fenceLines = [line];
+                        i++;
+                        while (i < rawLines.length && !rawLines[i].trim().startsWith('```')) {
+                            fenceLines.push(rawLines[i]);
+                            i++;
+                        }
+                        if (i < rawLines.length) {
+                            fenceLines.push(rawLines[i]);
+                            i++;
+                        }
+                        blocks.push({ type: 'code-fence', source: fenceLines.join('\n') });
+                        continue;
+                    }
+
+                    // Заголовки
+                    const hMatch = line.match(/^(#{1,6})\s+(.+)/);
+                    if (hMatch) {
+                        blocks.push({ type: `h${hMatch[1].length}`, source: line });
+                        i++;
+                        continue;
+                    }
+
+                    // Горизонтальная линия
+                    if (/^(\*{3,}|-{3,}|_{3,})\s*$/.test(line.trim())) {
+                        blocks.push({ type: 'hr', source: line });
+                        i++;
+                        continue;
+                    }
+
+                    // Цитата
+                    if (line.startsWith('>')) {
+                        blocks.push({ type: 'blockquote', source: line });
+                        i++;
+                        continue;
+                    }
+
+                    // Параграф
+                    blocks.push({ type: 'p', source: line });
+                    i++;
+                }
+
+                return blocks;
             }
             
+            function detectBlockFromSource(source) {
+                const text = source || '';
 
-            console.log('✅ API готов');
+                if (text.trim() === '') {
+                    return { type: 'empty', source: '' };
+                }
+
+                if (text.trim().startsWith('```')) {
+                    return { type: 'code-fence', source: text };
+                }
+
+                const hMatch = text.match(/^(#{1,6})\s+(.+)/);
+                if (hMatch) {
+                    return { type: `h${hMatch[1].length}`, source: text };
+                }
+
+                if (/^(\*{3,}|-{3,}|_{3,})\s*$/.test(text.trim())) {
+                    return { type: 'hr', source: text };
+                }
+
+                if (text.startsWith('>')) {
+                    return { type: 'blockquote', source: text };
+                }
+
+                return { type: 'p', source: text };
+            }
+
+
+            // Рендерим inline: **bold**, *em*, `code`, ~~del~~, [link](url)
+            function renderInline(text) {
+                let s = (text || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+
+                s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+                s = s.replace(/__(.+?)__/g, '<strong>$1</strong>');
+                s = s.replace(/\*(?!\*)(.+?)\*(?!\*)/g, '<em>$1</em>');
+                s = s.replace(/_(?!_)(.+?)_(?!_)/g, '<em>$1</em>');
+                s = s.replace(/~~(.+?)~~/g, '<del>$1</del>');
+                s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+                s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+
+                return s;
+            }
+
+            // Рендеренный HTML для блока
+            function renderBlock(block) {
+                if (block.type === 'empty') return '<br>';
+                if (block.type === 'hr') return '';
+
+                if (block.type === 'code-fence') {
+                    const lines = block.source.split('\n');
+                    const inner = lines.slice(1, lines.length - 1).join('\n');
+                    return inner
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;');
+                }
+
+                if (block.type.startsWith('h')) {
+                    const textMatch = block.source.match(/^#{1,6}\s+(.+)/);
+                    return textMatch ? renderInline(textMatch[1]) : renderInline(block.source);
+                }
+
+                if (block.type === 'blockquote') {
+                    const inner = block.source.replace(/^>\s?/, '');
+                    return renderInline(inner);
+                }
+
+                return renderInline(block.source);
+            }
+
+            function createBlockEl(block, index) {
+                const el = document.createElement('div');
+                el.className = 'live-block is-rendered';
+                el.setAttribute('data-type', block.type);
+                el.setAttribute('data-index', index);
+
+                if (block.type === 'empty') {
+                    el.innerHTML = '<br>';
+                    el.style.minHeight = '1.2em';
+                } else if (block.type === 'hr') {
+                    el.innerHTML = '';
+                } else {
+                    el.innerHTML = renderBlock(block);
+                }
+
+                el.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    activateBlock(index);
+                });
+
+                return el;
+            }
+
+
+
+            // Инициализация live mode
+            function initLiveEditor(text) {
+                liveEditor.innerHTML = '';
+                liveBlocks = [];
+                activeBlockIndex = -1;
+                liveContent = text || '';
+
+                const blocks = parseMarkdownBlocks(liveContent);
+
+                blocks.forEach((block, index) => {
+                    const el = createBlockEl(block, index);
+                    const item = {
+                        type: block.type,
+                        source: block.source,
+                        el
+                    };
+                    liveBlocks.push(item);
+                    liveEditor.appendChild(el);
+                });
+            }
+        
+        
+        function placeCaretAtEnd(el) {
+            const range = document.createRange();
+            const sel = window.getSelection();
+            range.selectNodeContents(el);
+            range.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
+
+
+        function activateBlock(index) {
+            if (activeBlockIndex === index) return;
+
+            if (activeBlockIndex !== -1) {
+                deactivateCurrentBlock();
+            }
+
+            activeBlockIndex = index;
+            const block = liveBlocks[index];
+
+            block.el.className = 'live-block is-source';
+            block.el.setAttribute('contenteditable', 'true');
+            block.el.textContent = block.source;
+            block.el.focus();
+
+            placeCaretAtEnd(block.el);
+
+            block.el.onblur = () => {
+                if (activeBlockIndex === index) {
+                    deactivateCurrentBlock();
+                }
+            };
+        }
+
+        
+        function deactivateCurrentBlock() {
+            if (activeBlockIndex < 0 || activeBlockIndex >= liveBlocks.length) return;
+
+            const block = liveBlocks[activeBlockIndex];
+            const updatedSource = block.el.textContent || '';
+            const updatedBlock = detectBlockFromSource(updatedSource);
+
+            block.source = updatedBlock.source;
+            block.type = updatedBlock.type;
+            block.el.setAttribute('data-type', block.type);
+
+
+            block.el.className = 'live-block is-rendered';
+            block.el.removeAttribute('contenteditable');
+
+            if (block.type === 'empty') {
+                block.el.innerHTML = '<br>';
+                block.el.style.minHeight = '1.2em';
+            } else if (block.type === 'hr') {
+                block.el.innerHTML = '';
+            } else {
+                block.el.innerHTML = renderBlock(block);
+            }
+
+            activeBlockIndex = -1;
+            syncLiveContentToModel();
+        }
+
+        
+        function syncLiveContentToModel() {
+            currentContent = liveBlocks.map(block => block.source).join('\n');
+
+            console.log('🟢 syncLiveContentToModel called');
+            console.log('🟢 currentContent length:', currentContent.length);
+            console.log('🟢 currentContent preview:', currentContent.slice(0, 120));
+
+            textarea.value = currentContent;
+            renderPreview(currentContent);
+
+            if (window.webkit?.messageHandlers?.contentChanged) {
+                console.log('🟢 sending contentChanged to Swift');
+                window.webkit.messageHandlers.contentChanged.postMessage(currentContent);
+            } else {
+                console.log('🔴 contentChanged handler missing');
+            }
+        }
+
+
+
+
         </script>
     </body>
 </html>

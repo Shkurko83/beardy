@@ -104,72 +104,7 @@ struct EditorView: View {
     }
 }
 
-// MARK: - Markdown Editor Area Левый экран с видимой маркдаун разметкой
-//struct MarkdownEditorArea: View {
-//    @EnvironmentObject var documentManager: DocumentManager
-//    @EnvironmentObject var themeService: ThemeService
-//    @State private var textContent: String = ""
-//    @State private var selectedRange: NSRange = NSRange(location: 0, length: 0)
-//    @State private var fontSize: CGFloat = 16
-//    @State private var lineHeight: CGFloat = 1.6
-//    @State private var textViewReference: NSTextView?
-//    @FocusState private var isEditorFocused: Bool
-//    @State private var showFindPanel = false
-//    
-//    @AppStorage("previewSyncScroll") private var previewSyncScroll: Bool = true
-//    @Binding var scrollPosition: CGFloat
-//    
-//    var body: some View {
-//        VStack(spacing: 0) {
-//            
-//            // Text Editor - БЕЗ внешнего ScrollView
-//            MarkdownTextEditor(
-//                text: $textContent,
-//                selectedRange: $selectedRange,
-//                scrollPosition: $scrollPosition,
-//                fontSize: fontSize,
-//                lineHeight: lineHeight,
-//                textViewReference: $textViewReference,
-//                focusMode: documentManager.focusMode,
-//                typewriterMode: documentManager.typewriterMode
-//            )
-//            .id(documentManager.currentDocument?.id)
-//            .focused($isEditorFocused)
-//        }
-////        .background(themeService.currentTheme.colors.background)
-//        .onAppear {
-//            loadDocumentContent()
-//            isEditorFocused = true
-//        }
-//        .onChange(of: documentManager.currentDocument?.id) { _, _ in
-//            loadDocumentContent()
-//        }
-//        .onChange(of: textContent) { _, newValue in
-//            if documentManager.currentDocument?.content != newValue {
-//                documentManager.updateContent(newValue)
-//            }
-//        }
-//        .findReplacePanel(
-//            isPresented: $showFindPanel,
-//            textContent: $textContent,
-//            selectedRange: $selectedRange
-//        )
-//        .onReceive(NotificationCenter.default.publisher(for: .showFindPanel)) { _ in
-//            showFindPanel = true
-//        }
-//        .onReceive(NotificationCenter.default.publisher(for: .showReplacePanel)) { _ in
-//            showFindPanel = true
-//        }
-//    }
-//    
-//    private func loadDocumentContent() {
-//        if let doc = documentManager.currentDocument {
-//            textContent = doc.content
-//        } else {
-//            textContent = ""
-//        }
-//    }
-//}
+
 
 // MARK: - Markdown Editor Area с CodeMirror
 struct MarkdownEditorArea: View {
@@ -194,13 +129,6 @@ struct MarkdownEditorArea: View {
                 previewTheme: themeService.currentTheme,
                 codeBlockTheme: themeService.currentCodeTheme
             )
-//             ProseMirror Editor
-//            ProseMirrorWebView(
-//                text: $textContent,
-//                selectedRange: $selectedRange,
-//                isDark: themeService.currentTheme.id.contains("dark"),
-//                viewMode: documentManager.viewMode
-//            )
             
             .id(documentManager.currentDocument?.id)
             .focused($isEditorFocused)
@@ -213,9 +141,7 @@ struct MarkdownEditorArea: View {
             loadDocumentContent()
         }
         .onChange(of: textContent) { _, newValue in
-            if documentManager.currentDocument?.content != newValue {
-                documentManager.updateContent(newValue)
-            }
+            documentManager.updateContent(newValue)
         }
         .findReplacePanel(
             isPresented: $showFindPanel,
