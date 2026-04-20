@@ -61,27 +61,7 @@ class DocumentManager: ObservableObject {
             self?.openDocument(at: url)
         }
     }
-    
-//    func openDocument() {
-//        let panel = NSOpenPanel()
-//        panel.allowsMultipleSelection = false
-//        panel.canChooseDirectories = false
-//        panel.canChooseFiles = true
-//        
-//        // Define custom content types for markdown
-//        if let markdownType = UTType(filenameExtension: "md"),
-//           let textType = UTType.plainText {
-//            panel.allowedContentTypes = [markdownType, textType]
-//        } else {
-//            panel.allowedContentTypes = [.plainText]
-//        }
-//        
-//        panel.begin { [weak self] response in
-//            if response == .OK, let url = panel.url {
-//                self?.openDocument(at: url)
-//            }
-//        }
-//    }
+
     
     func openDocument(at url: URL) {
         do {
@@ -465,23 +445,22 @@ class DocumentManager: ObservableObject {
     }
     
     private func insertFormatting(prefix: String, suffix: String) {
-        guard var doc = currentDocument else { return }
-        // This is simplified - in real implementation would work with NSTextView selection
-        doc.content += prefix + "text" + suffix
-        currentDocument = doc
+        let js = "window.cmEditor?.insertFormatting(`\(prefix)`, `\(suffix)`);"
+        NotificationCenter.default.post(name: .editorExecJS, object: js)
     }
     
     private func insertAtCurrentLine(prefix: String) {
-        guard var doc = currentDocument else { return }
-        // Simplified implementation
-        doc.content += "\n" + prefix
-        currentDocument = doc
+        let js = "window.cmEditor?.insertAtLineStart(`\(prefix)`);"
+        NotificationCenter.default.post(name: .editorExecJS, object: js)
     }
     
     private func insertText(_ text: String) {
-        guard var doc = currentDocument else { return }
-        doc.content += text
-        currentDocument = doc
+        let escaped = text
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "`", with: "\\`")
+            .replacingOccurrences(of: "\n", with: "\\n")
+        let js = "window.cmEditor?.insertText(`\(escaped)`);"
+        NotificationCenter.default.post(name: .editorExecJS, object: js)
     }
     
     // MARK: - View Operations
@@ -624,4 +603,5 @@ struct FolderItemData: Codable {
 extension Notification.Name {
     static let showFindPanel = Notification.Name("showFindPanel")
     static let showReplacePanel = Notification.Name("showReplacePanel")
+    static let editorExecJS = Notification.Name("editorExecJS")
 }

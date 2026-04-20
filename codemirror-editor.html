@@ -342,8 +342,6 @@
                     
                     /* Курсор в live-mode */
                     #live-editor:focus-within .live-block.is-source { caret-color: currentColor; }
-                    
-                    
                 </style>
     </head>
     <body class="mode-split">
@@ -381,6 +379,7 @@
             let isInitialized = false;
             let syncScroll = true;
             let isSwapped = false;
+            let isLiveMode = false;
             let lastScrollTime = { markdown: 0, preview: 0 };
             let scrollDebounce = null;
             
@@ -404,120 +403,45 @@
                 langPrefix: 'language-'
             });
             
-            function initializeEditor(initialText = '', isDark = false) {
-                console.log('🚀 Инициализация редактора...');
-                
-                if (isDark) {
-                    document.body.classList.add('dark');
-                    textarea.style.backgroundColor = '#0d1117';
-                    textarea.style.color = '#c9d1d9';
-                } else {
-                    document.body.classList.remove('dark');
-                    textarea.style.backgroundColor = 'transparent';
-                    textarea.style.color = 'inherit';
-                }
-                
-                currentContent = initialText;
-                textarea.value = initialText;
-                renderPreview(initialText);
-                
-                // Input обработчик
-                textarea.addEventListener('input', () => {
-                    if (isSyncing) return;
-                    const text = textarea.value;
-                    currentContent = text;
-                    renderPreview(text);
-                    if (window.webkit?.messageHandlers?.contentChanged) {
-                        window.webkit.messageHandlers.contentChanged.postMessage(text);
-                    }
-                });
-                
-                let isMarkdownScrolling = false;
-                let isPreviewScrolling = false;
-                
-                // Ждем рендеринга контента
-                setTimeout(() => {
-                    console.log('📏 Размеры после рендера:');
-                    console.log('markdown:', markdownPane.scrollHeight, '/', markdownPane.clientHeight);
-                    console.log('preview:', previewPane.scrollHeight, '/', previewPane.clientHeight);
-                    
-                    // Синхронизация скролла для markdown (TEXTAREA!)
-                    textarea.addEventListener('scroll', () => {
-                        console.log('📜 TEXTAREA SCROLL EVENT');
-                        if (!syncScroll) return;
-                        
-                        const now = Date.now();
-                        if (now - lastScrollTime.preview < 100) {
-                            console.log('Игнорируем: недавно был скролл preview');
-                            return;
-                        }
-                        
-                        lastScrollTime.markdown = now;
-                        clearTimeout(scrollDebounce);
-                        
-                        scrollDebounce = setTimeout(() => {
-                            const percent = textarea.scrollTop / (textarea.scrollHeight - textarea.clientHeight);
-                            previewPane.scrollTop = percent * (previewPane.scrollHeight - previewPane.clientHeight);
-                            console.log('→ Синхронизация TEXTAREA→PR:', percent);
-                        }, 10);
-                    });
-                    
-                    // Синхронизация скролла для preview
-                    previewPane.addEventListener('scroll', () => {
-                        console.log('📜 PREVIEW SCROLL EVENT');
-                        if (!syncScroll) return;
-                        
-                        const now = Date.now();
-                        if (now - lastScrollTime.markdown < 100) {
-                            console.log('Игнорируем: недавно был скролл markdown');
-                            return;
-                        }
-                        
-                        lastScrollTime.preview = now;
-                        clearTimeout(scrollDebounce);
-                        
-                        scrollDebounce = setTimeout(() => {
-                            const percent = previewPane.scrollTop / (previewPane.scrollHeight - previewPane.clientHeight);
-                            textarea.scrollTop = percent * (textarea.scrollHeight - textarea.clientHeight);
-                            console.log('← Синхронизация PR→TEXTAREA:', percent);
-                        }, 10);
-                    });
-                    
-                    console.log('✅ Обработчики скролла установлены');
-                }, 50);
-                
-                // Обработчик кнопки смены панелей
-                swapButton.addEventListener('click', () => {
-                    isSwapped = !isSwapped;
-                    if (isSwapped) {
-                        editorContainer.classList.add('swapped');
-                    } else {
-                        editorContainer.classList.remove('swapped');
-                    }
-                    if (window.webkit?.messageHandlers?.swapPanes) {
-                        window.webkit.messageHandlers.swapPanes.postMessage(isSwapped);
-                    }
-                });
-                
-                isInitialized = true;
-                console.log('✅ Редактор инициализирован');
-            }
+            
             
             function renderPreview(text) {
                 try {
                     const html = marked.parse(text || '');
                     preview.innerHTML = html;
                     
-                    // Применяем highlight.js к блокам кода
+                    // Сопоставляем каждый блок preview с диапазоном строк исходника
+                    const lines = text.split('\n');
+                    const blocks = Array.from(preview.children); // прямые дети
+                    let lineIndex = 0;
+                    
+                    for (let block of blocks) {
+                        let linesCount = 1;
+                        const tag = block.tagName.toLowerCase();
+                        
+                        if (tag === 'pre') {
+                            // Блок кода занимает столько строк, сколько внутри pre + 2 (```)
+                            const codeLines = block.textContent.split('\n').length;
+                            linesCount = codeLines + 2;
+                        } else if (tag === 'hr' || /^h[1-6]$/.test(tag) || tag === 'blockquote') {
+                            linesCount = 1;
+                        } else {
+                            // Параграф или пустая строка
+                            linesCount = 1;
+                        }
+                        
+                        block.dataset.sourceLineStart = lineIndex;
+                        block.dataset.sourceLineEnd = lineIndex + linesCount - 1;
+                        lineIndex += linesCount;
+                    }
+
+                    // Highlight.js
                     if (window.hljs) {
                         preview.querySelectorAll('pre code').forEach((block) => {
-                            // Сохраняем язык для переприменения темы
                             const classes = block.className.match(/language-(\w+)/);
                             if (classes && classes[1]) {
                                 block.setAttribute('data-language', classes[1]);
                             }
-                            
-                            // Добавляем класс hljs для индикации что highlight применён
                             block.parentElement.classList.add('hljs');
                             hljs.highlightElement(block);
                         });
@@ -606,10 +530,46 @@
                     link.onload = () => renderPreview(currentContent);
                     document.head.appendChild(link);
                 },
+                
+                insertFormatting(prefix, suffix) {
+                    const ta = textarea;
+                    const start = ta.selectionStart;
+                    const end = ta.selectionEnd;
+                    const selected = ta.value.substring(start, end);
+                    const replacement = prefix + (selected || 'text') + suffix;
+                    ta.setRangeText(replacement, start, end, 'end');
+                    ta.dispatchEvent(new Event('input'));
+                    // Если не было выделения — ставим курсор между prefix и suffix
+                    if (start === end) {
+                        const pos = start + prefix.length + (selected || 'text').length;
+                        ta.setSelectionRange(start + prefix.length, pos);
+                    }
+                    ta.focus();
+                },
+
+                insertAtLineStart(prefix) {
+                    const ta = textarea;
+                    const start = ta.selectionStart;
+                    const lineStart = ta.value.lastIndexOf('\n', start - 1) + 1;
+                    ta.setRangeText(prefix, lineStart, lineStart, 'end');
+                    ta.dispatchEvent(new Event('input'));
+                    ta.focus();
+                },
+
+                insertText(text) {
+                    const ta = textarea;
+                    const start = ta.selectionStart;
+                    const end = ta.selectionEnd;
+                    ta.setRangeText(text, start, end, 'end');
+                    ta.dispatchEvent(new Event('input'));
+                    ta.focus();
+                },
+
 
                 getContent() {
                     return currentContent;
                 }
+                
             };
             
             window.initializeEditor = function(initialText = '', isDark = false) {
@@ -644,15 +604,57 @@
                             window.webkit.messageHandlers.swapPanes.postMessage(isSwapped);
                         }
                     });
+                    
+                    // ===== SCROLL SYNC (процентная синхронизация) =====
+                    let isInternalScroll = false;
 
+                    function syncScrollPercent(source, target) {
+                        if (isInternalScroll) return;
+                        isInternalScroll = true;
+
+                        const maxScrollSource = source.scrollHeight - source.clientHeight;
+                        const maxScrollTarget = target.scrollHeight - target.clientHeight;
+
+                        if (maxScrollSource <= 0 || maxScrollTarget <= 0) {
+                            isInternalScroll = false;
+                            return;
+                        }
+
+                        const scrollPercent = source.scrollTop / maxScrollSource;
+                        target.scrollTop = scrollPercent * maxScrollTarget;
+
+                        setTimeout(() => { isInternalScroll = false; }, 20);
+                    }
+
+                    textarea.addEventListener('scroll', () => {
+                        if (!syncScroll) return;
+                        const now = Date.now();
+                        if (now - lastScrollTime.preview < 50) return;
+                        lastScrollTime.markdown = now;
+                        syncScrollPercent(textarea, previewPane);
+                    });
+
+                    previewPane.addEventListener('scroll', () => {
+                        if (!syncScroll) return;
+                        const now = Date.now();
+                        if (now - lastScrollTime.markdown < 50) return;
+                        lastScrollTime.preview = now;
+                        syncScrollPercent(previewPane, textarea);
+                    });
+
+                    window.addEventListener('resize', () => {
+                        if (syncScroll && document.body.classList.contains('mode-split')) {
+                            syncScrollPercent(textarea, previewPane);
+                        }
+                    });
+
+                    console.log('✅ Синхронизация скролла включена');
                     isInitialized = true;
                 }
 
                 console.log('✅ Редактор инициализирован');
             };
 
-
-            
             // ============================================================
             // LIVE MODE — Typora-like inline rendering
             // ============================================================
@@ -661,9 +663,8 @@
             let liveBlocks = [];
             let activeBlockIndex = -1;
             let liveContent = '';
-            let isLiveMode = false;
+            // isLiveMode уже объявлена глобально
 
-            // Парсим Markdown на логические блоки
             function parseMarkdownBlocks(text) {
                 const rawLines = (text || '').split('\n');
                 const blocks = [];
@@ -672,14 +673,12 @@
                 while (i < rawLines.length) {
                     const line = rawLines[i];
 
-                    // Пустая строка
                     if (line.trim() === '') {
                         blocks.push({ type: 'empty', source: '' });
                         i++;
                         continue;
                     }
 
-                    // Code fence
                     if (line.trim().startsWith('```')) {
                         let fenceLines = [line];
                         i++;
@@ -695,7 +694,6 @@
                         continue;
                     }
 
-                    // Заголовки
                     const hMatch = line.match(/^(#{1,6})\s+(.+)/);
                     if (hMatch) {
                         blocks.push({ type: `h${hMatch[1].length}`, source: line });
@@ -703,28 +701,25 @@
                         continue;
                     }
 
-                    // Горизонтальная линия
                     if (/^(\*{3,}|-{3,}|_{3,})\s*$/.test(line.trim())) {
                         blocks.push({ type: 'hr', source: line });
                         i++;
                         continue;
                     }
 
-                    // Цитата
                     if (line.startsWith('>')) {
                         blocks.push({ type: 'blockquote', source: line });
                         i++;
                         continue;
                     }
 
-                    // Параграф
                     blocks.push({ type: 'p', source: line });
                     i++;
                 }
 
                 return blocks;
             }
-            
+
             function detectBlockFromSource(source) {
                 const text = source || '';
 
@@ -752,8 +747,6 @@
                 return { type: 'p', source: text };
             }
 
-
-            // Рендерим inline: **bold**, *em*, `code`, ~~del~~, [link](url)
             function renderInline(text) {
                 let s = (text || '')
                     .replace(/&/g, '&amp;')
@@ -771,7 +764,6 @@
                 return s;
             }
 
-            // Рендеренный HTML для блока
             function renderBlock(block) {
                 if (block.type === 'empty') return '<br>';
                 if (block.type === 'hr') return '';
@@ -814,23 +806,16 @@
                 }
 
                 el.addEventListener('mousedown', (e) => {
-                    if (activeBlockIndex === index) {
-                        return;
-                    }
+                    if (activeBlockIndex === index) return;
 
                     const textOffset = getTextOffsetFromPoint(el, e.clientX, e.clientY);
-
                     e.preventDefault();
                     activateBlock(index, textOffset);
                 });
 
-
                 return el;
             }
 
-
-
-            // Инициализация live mode
             function initLiveEditor(text) {
                 liveEditor.innerHTML = '';
                 liveBlocks = [];
@@ -850,232 +835,198 @@
                     liveEditor.appendChild(el);
                 });
             }
-        
-        
-        function placeCaretAtEnd(el) {
-            const range = document.createRange();
-            const sel = window.getSelection();
-            range.selectNodeContents(el);
-            range.collapse(false);
-            sel.removeAllRanges();
-            sel.addRange(range);
-        }
-        
-        function placeCaretFromPoint(el, clientX, clientY) {
-            el.focus();
 
-            let range = null;
-
-            if (document.caretRangeFromPoint) {
-                range = document.caretRangeFromPoint(clientX, clientY);
-            } else if (document.caretPositionFromPoint) {
-                const pos = document.caretPositionFromPoint(clientX, clientY);
-                if (pos) {
-                    range = document.createRange();
-                    range.setStart(pos.offsetNode, pos.offset);
-                    range.collapse(true);
-                }
-            }
-
-            if (range) {
+            function placeCaretAtEnd(el) {
+                const range = document.createRange();
                 const sel = window.getSelection();
+                range.selectNodeContents(el);
+                range.collapse(false);
                 sel.removeAllRanges();
                 sel.addRange(range);
-            } else {
-                placeCaretAtEnd(el);
-            }
-        }
-
-        function getTextOffsetFromPoint(container, clientX, clientY) {
-            let range = null;
-
-            if (document.caretRangeFromPoint) {
-                range = document.caretRangeFromPoint(clientX, clientY);
-            } else if (document.caretPositionFromPoint) {
-                const pos = document.caretPositionFromPoint(clientX, clientY);
-                if (pos) {
-                    range = document.createRange();
-                    range.setStart(pos.offsetNode, pos.offset);
-                    range.collapse(true);
-                }
             }
 
-            if (!range) return null;
-            if (!container.contains(range.startContainer)) return null;
+            function getTextOffsetFromPoint(container, clientX, clientY) {
+                let range = null;
 
-            const preRange = document.createRange();
-            preRange.selectNodeContents(container);
-            preRange.setEnd(range.startContainer, range.startOffset);
-
-            return preRange.toString().length;
-        }
-
-        function placeCaretAtTextOffset(container, offset) {
-            container.focus();
-
-            const selection = window.getSelection();
-            const range = document.createRange();
-
-            let current = 0;
-            let found = false;
-
-            function walk(node) {
-                if (found) return;
-
-                if (node.nodeType === Node.TEXT_NODE) {
-                    const len = node.textContent.length;
-                    if (offset <= current + len) {
-                        range.setStart(node, Math.max(0, offset - current));
+                if (document.caretRangeFromPoint) {
+                    range = document.caretRangeFromPoint(clientX, clientY);
+                } else if (document.caretPositionFromPoint) {
+                    const pos = document.caretPositionFromPoint(clientX, clientY);
+                    if (pos) {
+                        range = document.createRange();
+                        range.setStart(pos.offsetNode, pos.offset);
                         range.collapse(true);
-                        found = true;
+                    }
+                }
+
+                if (!range) return null;
+                if (!container.contains(range.startContainer)) return null;
+
+                const preRange = document.createRange();
+                preRange.selectNodeContents(container);
+                preRange.setEnd(range.startContainer, range.startOffset);
+
+                return preRange.toString().length;
+            }
+
+            function placeCaretAtTextOffset(container, offset) {
+                container.focus();
+
+                const selection = window.getSelection();
+                const range = document.createRange();
+
+                let current = 0;
+                let found = false;
+
+                function walk(node) {
+                    if (found) return;
+
+                    if (node.nodeType === Node.TEXT_NODE) {
+                        const len = node.textContent.length;
+                        if (offset <= current + len) {
+                            range.setStart(node, Math.max(0, offset - current));
+                            range.collapse(true);
+                            found = true;
+                            return;
+                        }
+                        current += len;
                         return;
                     }
-                    current += len;
-                    return;
+
+                    for (const child of node.childNodes) {
+                        walk(child);
+                        if (found) return;
+                    }
                 }
 
-                for (const child of node.childNodes) {
-                    walk(child);
-                    if (found) return;
+                walk(container);
+
+                if (!found) {
+                    range.selectNodeContents(container);
+                    range.collapse(false);
                 }
+
+                selection.removeAllRanges();
+                selection.addRange(range);
             }
 
-            walk(container);
+            function getCaretOffsetWithin(element) {
+                const sel = window.getSelection();
+                if (!sel || sel.rangeCount === 0) return 0;
 
-            if (!found) {
-                range.selectNodeContents(container);
-                range.collapse(false);
+                const range = sel.getRangeAt(0);
+                if (!element.contains(range.startContainer)) return 0;
+
+                const preRange = document.createRange();
+                preRange.selectNodeContents(element);
+                preRange.setEnd(range.startContainer, range.startOffset);
+
+                return preRange.toString().length;
             }
 
-            selection.removeAllRanges();
-            selection.addRange(range);
-        }
-        
-        
-        function getCaretOffsetWithin(element) {
-            const sel = window.getSelection();
-            if (!sel || sel.rangeCount === 0) return 0;
+            function activateBlockAtOffset(index, offset) {
+                activateBlock(index, null);
 
-            const range = sel.getRangeAt(0);
-            if (!element.contains(range.startContainer)) return 0;
+                requestAnimationFrame(() => {
+                    const block = liveBlocks[index];
+                    if (block && block.el) {
+                        placeCaretAtTextOffset(block.el, offset);
+                    }
+                });
+            }
 
-            const preRange = document.createRange();
-            preRange.selectNodeContents(element);
-            preRange.setEnd(range.startContainer, range.startOffset);
+            function activateBlock(index, clickTextOffset = null) {
+                if (activeBlockIndex === index) return;
 
-            return preRange.toString().length;
-        }
+                if (activeBlockIndex !== -1) {
+                    deactivateCurrentBlock();
+                }
 
-        function activateBlockAtOffset(index, offset) {
-            activateBlock(index, null);
-
-            requestAnimationFrame(() => {
+                activeBlockIndex = index;
                 const block = liveBlocks[index];
-                if (block && block.el) {
-                    placeCaretAtTextOffset(block.el, offset);
-                }
-            });
-        }
 
+                block.el.className = 'live-block is-source';
+                block.el.setAttribute('contenteditable', 'true');
+                block.el.textContent = block.source;
+                block.el.focus();
 
+                requestAnimationFrame(() => {
+                    if (clickTextOffset !== null) {
+                        placeCaretAtTextOffset(block.el, clickTextOffset);
+                    } else {
+                        placeCaretAtEnd(block.el);
+                    }
+                });
 
-        function activateBlock(index, clickTextOffset = null) {
-            if (activeBlockIndex === index) return;
+                block.el.onblur = () => {
+                    if (activeBlockIndex === index) {
+                        deactivateCurrentBlock();
+                    }
+                };
+                block.el.onkeydown = (e) => {
+                    const currentOffset = getCaretOffsetWithin(block.el);
+                    const textLength = block.el.textContent.length;
 
-            if (activeBlockIndex !== -1) {
-                deactivateCurrentBlock();
+                    if (e.key === 'ArrowUp' && currentOffset === 0 && index > 0) {
+                        e.preventDefault();
+                        deactivateCurrentBlock();
+                        activateBlockAtOffset(index - 1, liveBlocks[index - 1].source.length);
+                        return;
+                    }
+
+                    if (e.key === 'ArrowDown' && currentOffset === textLength && index < liveBlocks.length - 1) {
+                        e.preventDefault();
+                        deactivateCurrentBlock();
+                        activateBlockAtOffset(index + 1, 0);
+                        return;
+                    }
+                };
             }
 
-            activeBlockIndex = index;
-            const block = liveBlocks[index];
+            function deactivateCurrentBlock() {
+                if (activeBlockIndex < 0 || activeBlockIndex >= liveBlocks.length) return;
 
-            block.el.className = 'live-block is-source';
-            block.el.setAttribute('contenteditable', 'true');
-            block.el.textContent = block.source;
-            block.el.focus();
+                const block = liveBlocks[activeBlockIndex];
+                const updatedSource = block.el.textContent || '';
+                const updatedBlock = detectBlockFromSource(updatedSource);
 
-            requestAnimationFrame(() => {
-                if (clickTextOffset !== null) {
-                    placeCaretAtTextOffset(block.el, clickTextOffset);
+                block.source = updatedBlock.source;
+                block.type = updatedBlock.type;
+                block.el.setAttribute('data-type', block.type);
+
+                block.el.className = 'live-block is-rendered';
+                block.el.removeAttribute('contenteditable');
+
+                if (block.type === 'empty') {
+                    block.el.innerHTML = '<br>';
+                    block.el.style.minHeight = '1.2em';
+                } else if (block.type === 'hr') {
+                    block.el.innerHTML = '';
                 } else {
-                    placeCaretAtEnd(block.el);
-                }
-            });
-
-            block.el.onblur = () => {
-                if (activeBlockIndex === index) {
-                    deactivateCurrentBlock();
-                }
-            };
-            block.el.onkeydown = (e) => {
-                const currentOffset = getCaretOffsetWithin(block.el);
-                const textLength = block.el.textContent.length;
-
-                if (e.key === 'ArrowUp' && currentOffset === 0 && index > 0) {
-                    e.preventDefault();
-                    deactivateCurrentBlock();
-                    activateBlockAtOffset(index - 1, liveBlocks[index - 1].source.length);
-                    return;
+                    block.el.innerHTML = renderBlock(block);
                 }
 
-                if (e.key === 'ArrowDown' && currentOffset === textLength && index < liveBlocks.length - 1) {
-                    e.preventDefault();
-                    deactivateCurrentBlock();
-                    activateBlockAtOffset(index + 1, 0);
-                    return;
-                }
-            };
-
-        }
-        
-        function deactivateCurrentBlock() {
-            if (activeBlockIndex < 0 || activeBlockIndex >= liveBlocks.length) return;
-
-            const block = liveBlocks[activeBlockIndex];
-            const updatedSource = block.el.textContent || '';
-            const updatedBlock = detectBlockFromSource(updatedSource);
-
-            block.source = updatedBlock.source;
-            block.type = updatedBlock.type;
-            block.el.setAttribute('data-type', block.type);
-
-
-            block.el.className = 'live-block is-rendered';
-            block.el.removeAttribute('contenteditable');
-
-            if (block.type === 'empty') {
-                block.el.innerHTML = '<br>';
-                block.el.style.minHeight = '1.2em';
-            } else if (block.type === 'hr') {
-                block.el.innerHTML = '';
-            } else {
-                block.el.innerHTML = renderBlock(block);
+                activeBlockIndex = -1;
+                syncLiveContentToModel();
             }
 
-            activeBlockIndex = -1;
-            syncLiveContentToModel();
-        }
+            function syncLiveContentToModel() {
+                currentContent = liveBlocks.map(block => block.source).join('\n');
 
-        
-        function syncLiveContentToModel() {
-            currentContent = liveBlocks.map(block => block.source).join('\n');
+                console.log('🟢 syncLiveContentToModel called');
+                console.log('🟢 currentContent length:', currentContent.length);
+                console.log('🟢 currentContent preview:', currentContent.slice(0, 120));
 
-            console.log('🟢 syncLiveContentToModel called');
-            console.log('🟢 currentContent length:', currentContent.length);
-            console.log('🟢 currentContent preview:', currentContent.slice(0, 120));
+                textarea.value = currentContent;
+                renderPreview(currentContent);
 
-            textarea.value = currentContent;
-            renderPreview(currentContent);
-
-            if (window.webkit?.messageHandlers?.contentChanged) {
-                console.log('🟢 sending contentChanged to Swift');
-                window.webkit.messageHandlers.contentChanged.postMessage(currentContent);
-            } else {
-                console.log('🔴 contentChanged handler missing');
+                if (window.webkit?.messageHandlers?.contentChanged) {
+                    console.log('🟢 sending contentChanged to Swift');
+                    window.webkit.messageHandlers.contentChanged.postMessage(currentContent);
+                } else {
+                    console.log('🔴 contentChanged handler missing');
+                }
             }
-        }
-
-
 
 
         </script>

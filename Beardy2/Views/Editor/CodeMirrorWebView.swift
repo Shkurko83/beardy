@@ -49,6 +49,14 @@ struct CodeMirrorWebView: NSViewRepresentable {
             webView.loadFileURL(htmlURL, allowingReadAccessTo: directoryURL)
         }
         
+        NotificationCenter.default.addObserver(
+            context.coordinator,
+            selector: #selector(Coordinator.handleExecJS(_:)),
+            name: .editorExecJS,
+            object: nil
+        )
+
+        
         context.coordinator.webView = webView
         return webView
     }
@@ -217,47 +225,6 @@ struct CodeMirrorWebView: NSViewRepresentable {
             pageLoaded = true
         }
         
-//        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-//            // Логирование для отладки
-//            webView.evaluateJavaScript("console.log('✅ WebView загружен');") { _, _ in }
-//
-//            let initialText = parent.text
-//            let escapedText = initialText
-//                .replacingOccurrences(of: "\\", with: "\\\\")
-//                .replacingOccurrences(of: "`", with: "\\`")
-//                .replacingOccurrences(of: "$", with: "\\$")
-//                .replacingOccurrences(of: "\n", with: "\\n")
-//                .replacingOccurrences(of: "\r", with: "\\r")
-//                .replacingOccurrences(of: "\"", with: "\\\"")
-//            
-//            // Инициализация редактора
-//            let script = """
-//            console.log('🔧 Инициализация из Swift');
-//            window.initializeEditor(`\(escapedText)`, \(parent.isDark));
-//            """
-//            
-//            webView.evaluateJavaScript(script) { result, error in
-//                if let error = error {
-//                    print("❌ Ошибка инициализации:", error)
-//                } else {
-//                    print("✅ Редактор инициализирован")
-//                }
-//            }
-//            
-//            // Установка режима
-//            let mode = parent.viewMode == .edit ? "edit" : (parent.viewMode == .preview ? "preview" : "split")
-//            webView.evaluateJavaScript("window.cmEditor?.setViewMode('\(mode)');")
-//            
-//            // Восстановление состояния swap из UserDefaults
-//            let isSwapped = UserDefaults.standard.bool(forKey: "editorPanesSwapped")
-//            webView.evaluateJavaScript("window.cmEditor?.setSwapped(\(isSwapped));")
-//            
-//            // Сохраняем состояние
-//            lastKnownText = initialText
-//            lastTheme = parent.isDark
-//            lastViewMode = parent.viewMode
-//            pageLoaded = true
-//        }
         
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             
@@ -280,6 +247,16 @@ struct CodeMirrorWebView: NSViewRepresentable {
                 UserDefaults.standard.set(isSwapped, forKey: "editorPanesSwapped")
                 print("💾 Сохранено состояние swap: \(isSwapped)")
             }
+        }
+        
+        func executeFormatting(_ js: String) {
+            guard pageLoaded else { return }
+            webView?.evaluateJavaScript(js, completionHandler: nil)
+        }
+        
+        @objc func handleExecJS(_ notification: Notification) {
+            guard let js = notification.object as? String, pageLoaded else { return }
+            webView?.evaluateJavaScript(js, completionHandler: nil)
         }
     }
 }
