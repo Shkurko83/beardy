@@ -254,6 +254,18 @@
                         word-break: break-word;
                         cursor: text;
                     }
+                    
+                    .live-block::after {
+                        content: "";
+                        display: table;
+                        clear: both;
+                    }
+
+                    .live-block img {
+                        max-width: 100%;
+                        height: auto;
+                    }
+                    
                     .live-block:focus { outline: none; }
                     
                     /* Активный блок — показываем исходник */
@@ -400,9 +412,8 @@
             marked.setOptions({
                 breaks: true,
                 gfm: true,
-                langPrefix: 'language-'
+                sanitize: false,
             });
-            
             
             
             function renderPreview(text) {
@@ -564,6 +575,41 @@
                     ta.dispatchEvent(new Event('input'));
                     ta.focus();
                 },
+                
+                insertLink(clipboardUrl) {
+                    const ta = textarea;
+                    const start = ta.selectionStart;
+                    const end = ta.selectionEnd;
+                    const selected = ta.value.substring(start, end).trim();
+                    const url = clipboardUrl || 'url';
+
+                    let markdown;
+                    if (selected.length > 0) {
+                        // Есть выделение — оно становится текстом ссылки
+                        markdown = `[${selected}](${url})`;
+                        ta.setRangeText(markdown, start, end, 'end');
+                        // Если url пустой — ставим курсор внутрь скобок url
+                        if (!clipboardUrl) {
+                            const urlStart = start + selected.length + 3; // [selected](
+                            ta.setSelectionRange(urlStart, urlStart + 3); // выделяем 'url'
+                        }
+                    } else {
+                        // Нет выделения — вставляем шаблон
+                        markdown = `[link text](${url})`;
+                        ta.setRangeText(markdown, start, end, 'end');
+                        if (!clipboardUrl) {
+                            // Ставим курсор на 'url'
+                            const urlStart = start + 12; // '[link text]('
+                            ta.setSelectionRange(urlStart, urlStart + 3);
+                        } else {
+                            // Выделяем 'link text' чтобы сразу можно было вписать
+                            ta.setSelectionRange(start + 1, start + 10);
+                        }
+                    }
+
+                    ta.dispatchEvent(new Event('input'));
+                    ta.focus();
+                },
 
 
                 getContent() {
@@ -651,6 +697,17 @@
                     console.log('✅ Синхронизация скролла включена');
                     isInitialized = true;
                 }
+                
+                // Перехват кликов по ссылкам — открываем в системном браузере
+                document.addEventListener('click', (e) => {
+                    const link = e.target.closest('a');
+                    if (!link) return;
+                    e.preventDefault();
+                    const href = link.getAttribute('href');
+                    if (href && window.webkit?.messageHandlers?.openURL) {
+                        window.webkit.messageHandlers.openURL.postMessage(href);
+                    }
+                });
 
                 console.log('✅ Редактор инициализирован');
             };
@@ -748,7 +805,14 @@
             }
 
             function renderInline(text) {
-                let s = (text || '')
+                // Сохраняем img теги до экранирования
+                const imgPlaceholders = [];
+                let s = (text || '').replace(/<img\s[^>]*>/gi, (match) => {
+                    imgPlaceholders.push(match);
+                    return `\x00IMG${imgPlaceholders.length - 1}\x00`;
+                });
+
+                s = s
                     .replace(/&/g, '&amp;')
                     .replace(/</g, '&lt;')
                     .replace(/>/g, '&gt;');
@@ -759,10 +823,15 @@
                 s = s.replace(/_(?!_)(.+?)_(?!_)/g, '<em>$1</em>');
                 s = s.replace(/~~(.+?)~~/g, '<del>$1</del>');
                 s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+                s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%;">');
                 s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+
+                // Восстанавливаем img теги
+                s = s.replace(/\x00IMG(\d+)\x00/g, (_, i) => imgPlaceholders[+i]);
 
                 return s;
             }
+
 
             function renderBlock(block) {
                 if (block.type === 'empty') return '<br>';

@@ -11,6 +11,12 @@ import Foundation
 struct HTMLVisitor: MarkupVisitor {
     typealias Result = String
     
+    let documentURL: URL?
+    
+    init(documentURL: URL? = nil) {
+        self.documentURL = documentURL
+    }
+    
     mutating func defaultVisit(_ markup: Markup) -> String {
         var result = ""
         for child in markup.children {
@@ -85,4 +91,46 @@ struct HTMLVisitor: MarkupVisitor {
         let content = defaultVisit(heading)
         return "<h\(level)>\(content)</h\(level)>\n"
     }
+    
+    mutating func visitImage(_ image: Markdown.Image) -> String {
+        let rawSrc = image.source ?? ""
+        let alt = image.plainText
+
+        let finalSrc: String
+
+        if rawSrc.hasPrefix("http://") || rawSrc.hasPrefix("https://") {
+            finalSrc = rawSrc
+        } else if rawSrc.hasPrefix("file://") {
+            let filePath = rawSrc.replacingOccurrences(of: "file://", with: "")
+            let encoded = filePath.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? filePath
+            finalSrc = "beardy://localhost\(encoded)"
+        } else if rawSrc.hasPrefix("/") {
+            let encoded = rawSrc.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? rawSrc
+            finalSrc = "beardy://localhost\(encoded)"
+        } else {
+            if let docURL = documentURL {
+                let docDir = docURL.deletingLastPathComponent()
+                let relativePath = rawSrc.hasPrefix("./") ? String(rawSrc.dropFirst(2)) : rawSrc
+                let absoluteURL = docDir.appendingPathComponent(relativePath)
+                let encoded = absoluteURL.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? absoluteURL.path
+                finalSrc = "beardy://localhost\(encoded)"
+            } else {
+                finalSrc = rawSrc
+            }
+        }
+
+        return "<img src=\"\(finalSrc)\" alt=\"\(alt)\" style=\"max-width:100%; height:auto;\">"
+    }
+
+
+    // HTML блоки: <img src="beardy://..." ...>
+    mutating func visitHTMLBlock(_ html: HTMLBlock) -> String {
+        return html.rawHTML
+    }
+
+    // Инлайн HTML: внутри параграфов
+    mutating func visitInlineHTML(_ html: InlineHTML) -> String {
+        return html.rawHTML
+    }
+
 }

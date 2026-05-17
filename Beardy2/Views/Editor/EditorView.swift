@@ -124,7 +124,7 @@ struct MarkdownEditorArea: View {
             CodeMirrorWebView(
                 text: $textContent,
                 selectedRange: $selectedRange,
-                isDark: themeService.currentTheme.id.contains("dark"),
+                currentDocumentURL: documentManager.currentDocument?.url, isDark: themeService.currentTheme.id.contains("dark"),
                 viewMode: documentManager.viewMode,
                 previewTheme: themeService.currentTheme,
                 codeBlockTheme: themeService.currentCodeTheme
@@ -521,6 +521,7 @@ struct MarkdownPreviewArea: View {
             if let doc = documentManager.currentDocument {
                 MarkdownRenderer(
                     markdown: doc.content,
+                    documentURL: doc.url,
                     textColor: themeService.currentTheme.colors.text.description,
                     isDark: themeService.currentTheme.id.contains("dark"),
                     codeTheme: codeBlockTheme,

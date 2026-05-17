@@ -13,6 +13,7 @@ import Markdown
 struct MarkdownRenderer: NSViewRepresentable {
 
     let markdown: String
+    let documentURL: URL?
     let textColor: String
     let isDark: Bool
     let codeTheme: String
@@ -49,10 +50,13 @@ struct MarkdownRenderer: NSViewRepresentable {
     ]
     
     func makeNSView(context: Context) -> WKWebView {
-        let webView = WKWebView()
-        webView.setValue(false, forKey: "drawsBackground") // Прозрачный фон
+        let config = WKWebViewConfiguration()
+        config.setURLSchemeHandler(ImageSchemeHandler(), forURLScheme: "beardy")
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.setValue(false, forKey: "drawsBackground")
         return webView
     }
+
     
     var invertedColor: String {
         // Если textColor это HEX (напр. #FFFFFF)
@@ -82,7 +86,8 @@ struct MarkdownRenderer: NSViewRepresentable {
             
             
             let document = Document(parsing: processedMarkdown)
-            var visitor = HTMLVisitor()
+            var visitor = HTMLVisitor(documentURL: documentURL)
+
             let bodyHtml = visitor.visit(document)
             
             let currentBg = themeBackgrounds[codeTheme] ?? (isDark ? "#1e1e1e" : "#ededed")
@@ -104,8 +109,14 @@ struct MarkdownRenderer: NSViewRepresentable {
                             color: \(textColor); 
                             background-color: transparent;
                             line-height: 1.5; 
-                            padding: 20px; 
-                            white-space: pre-wrap !important;
+                            padding: 20px;
+                        }
+
+                        img {
+                            max-width: 100%;
+                            height: auto;
+                            display: block;
+                            margin: 12px 0;
                         }
                 
                         pre { 
@@ -213,9 +224,9 @@ struct MarkdownRenderer: NSViewRepresentable {
                 </body>
                 </html>
                 """
-            
             DispatchQueue.main.async {
-                webView.loadHTMLString(html, baseURL: nil)
+                let baseURL = self.documentURL?.deletingLastPathComponent()
+                webView.loadHTMLString(html, baseURL: baseURL)
             }
         } else {
             let js = "window.scrollTo(0, \(scrollPosition));"

@@ -5,6 +5,7 @@ import WebKit
 struct CodeMirrorWebView: NSViewRepresentable {
     @Binding var text: String
     @Binding var selectedRange: NSRange
+    let currentDocumentURL: URL?
     let isDark: Bool
     let viewMode: ViewMode
     let previewTheme: ThemeService.EditorTheme
@@ -12,6 +13,10 @@ struct CodeMirrorWebView: NSViewRepresentable {
     
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
+        config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+        config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
+        config.setURLSchemeHandler(ImageSchemeHandler(), forURLScheme: "beardy")
+        
         let webView = WKWebView(frame: .zero, configuration: config)
         
         webView.navigationDelegate = context.coordinator
@@ -20,9 +25,11 @@ struct CodeMirrorWebView: NSViewRepresentable {
         let contentController = webView.configuration.userContentController
         contentController.add(context.coordinator, name: "contentChanged")
         contentController.add(context.coordinator, name: "logging")
-        contentController.add(context.coordinator, name: "swapPanes") // Новый обработчик
-            
-        // Перехват console.log
+        contentController.add(context.coordinator, name: "swapPanes")
+        
+        contentController.add(context.coordinator, name: "openURL")
+        contentController.add(context.coordinator, name: "insertImage")
+        
         let loggingScript = WKUserScript(
             source: """
             (function() {
@@ -45,8 +52,9 @@ struct CodeMirrorWebView: NSViewRepresentable {
         if let htmlPath = Bundle.main.path(forResource: "codemirror-editor", ofType: "html"),
            let htmlDirectory = Bundle.main.resourcePath {
             let htmlURL = URL(fileURLWithPath: htmlPath)
-            let directoryURL = URL(fileURLWithPath: htmlDirectory)
-            webView.loadFileURL(htmlURL, allowingReadAccessTo: directoryURL)
+            // Даём доступ ко всему диску чтобы WebView мог грузить локальные изображения
+            let rootURL = URL(fileURLWithPath: "/")
+            webView.loadFileURL(htmlURL, allowingReadAccessTo: rootURL)
         }
         
         NotificationCenter.default.addObserver(
@@ -63,7 +71,16 @@ struct CodeMirrorWebView: NSViewRepresentable {
     
     func updateNSView(_ webView: WKWebView, context: Context) {
         guard context.coordinator.pageLoaded else { return }
-        
+        // Перезагружаем с доступом к папке текущего документа
+        if let docURL = context.coordinator.parent.currentDocumentURL,
+           context.coordinator.lastDocumentURL != docURL {
+            context.coordinator.lastDocumentURL = docURL
+            let dirURL = docURL.deletingLastPathComponent()
+            if let htmlPath = Bundle.main.path(forResource: "codemirror-editor", ofType: "html") {
+                webView.loadFileURL(URL(fileURLWithPath: htmlPath), allowingReadAccessTo: dirURL)
+                return
+            }
+        }
         // Обновление текста
         if !context.coordinator.isUpdatingFromJS && context.coordinator.lastKnownText != text {
             context.coordinator.lastKnownText = text
@@ -138,7 +155,8 @@ struct CodeMirrorWebView: NSViewRepresentable {
         var lastViewMode: ViewMode?
         var pageLoaded = false
         var lastPreviewTheme: ThemeService.EditorTheme
-        var lastCodeBlockTheme: ThemeService.CodeTheme 
+        var lastCodeBlockTheme: ThemeService.CodeTheme
+        var lastDocumentURL: URL?
         
         init(_ parent: CodeMirrorWebView) {
             self.parent = parent
@@ -247,6 +265,33 @@ struct CodeMirrorWebView: NSViewRepresentable {
                 UserDefaults.standard.set(isSwapped, forKey: "editorPanesSwapped")
                 print("💾 Сохранено состояние swap: \(isSwapped)")
             }
+            
+            if message.name == "openURL", let urlString = message.body as? String,
+               let url = URL(string: urlString) {
+                NSWorkspace.shared.open(url)
+            }
+            
+            if message.name == "insertImage", let params = message.body as? [String: String] {
+                let alt = params["alt"] ?? "image"
+                let dataURL = params["dataURL"] ?? ""
+                let style = params["style"] ?? ""
+                
+                let markdown: String
+                if style.isEmpty {
+                    markdown = "![\(alt)](\(dataURL))"
+                } else {
+                    markdown = "<img src=\"\(dataURL)\" alt=\"\(alt)\" style=\"\(style)\">"
+                }
+                
+                DispatchQueue.main.async {
+                    let escaped = markdown
+                        .replacingOccurrences(of: "\\", with: "\\\\")
+                        .replacingOccurrences(of: "`", with: "\\`")
+                    let js = "window.cmEditor?.insertText(`\n\n\(escaped)\n\n`);"
+                    self.webView?.evaluateJavaScript(js)
+                }
+            }
+
         }
         
         func executeFormatting(_ js: String) {

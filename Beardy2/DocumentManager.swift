@@ -61,7 +61,7 @@ class DocumentManager: ObservableObject {
             self?.openDocument(at: url)
         }
     }
-
+    
     
     func openDocument(at url: URL) {
         do {
@@ -415,7 +415,19 @@ class DocumentManager: ObservableObject {
     }
     
     func insertLink() {
-        insertText("[link text](url)")
+        // Проверяем клипборд на наличие URL
+        let clipboard = NSPasteboard.general.string(forType: .string) ?? ""
+        let isURL = clipboard.hasPrefix("http://") ||
+        clipboard.hasPrefix("https://") ||
+        clipboard.hasPrefix("ftp://")
+        
+        let urlArg = isURL ? clipboard
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "`", with: "\\`")
+            .replacingOccurrences(of: "'", with: "\\'") : ""
+        
+        let js = "window.cmEditor?.insertLink(`\(urlArg)`);"
+        NotificationCenter.default.post(name: .editorExecJS, object: js)
     }
     
     func insertImage() {
@@ -424,13 +436,124 @@ class DocumentManager: ObservableObject {
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.allowedContentTypes = [.image]
+        panel.title = "Выбрать изображение"
+        panel.prompt = "Вставить"
         
         panel.begin { [weak self] response in
-            if response == .OK, let url = panel.url {
-                self?.insertText("![alt text](\(url.path))")
+            guard let self = self, response == .OK, let url = panel.url else { return }
+            DispatchQueue.main.async {
+                self.showImageInsertDialog(url: url)
             }
         }
     }
+
+    func showImageInsertDialog(url: URL) {
+        let alert = NSAlert()
+        alert.messageText = "Вставить изображение"
+        alert.informativeText = "Настройте параметры изображения"
+        alert.addButton(withTitle: "Вставить")
+        alert.addButton(withTitle: "Отмена")
+
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 340, height: 160))
+
+        let altLabel = NSTextField(labelWithString: "Alt текст:")
+        altLabel.frame = NSRect(x: 0, y: 130, width: 80, height: 20)
+        let altField = NSTextField(frame: NSRect(x: 90, y: 128, width: 250, height: 24))
+        altField.placeholderString = "Описание изображения"
+        altField.stringValue = url.deletingPathExtension().lastPathComponent
+
+        let titleLabel = NSTextField(labelWithString: "Title:")
+        titleLabel.frame = NSRect(x: 0, y: 98, width: 80, height: 20)
+        let titleField = NSTextField(frame: NSRect(x: 90, y: 96, width: 250, height: 24))
+        titleField.placeholderString = "Подсказка при наведении (необязательно)"
+
+        let widthLabel = NSTextField(labelWithString: "Ширина:")
+        widthLabel.frame = NSRect(x: 0, y: 66, width: 80, height: 20)
+        let widthField = NSTextField(frame: NSRect(x: 90, y: 64, width: 80, height: 24))
+        widthField.placeholderString = "100"
+        widthField.stringValue = "100"
+        let widthUnitLabel = NSTextField(labelWithString: "%")
+        widthUnitLabel.frame = NSRect(x: 178, y: 66, width: 20, height: 20)
+
+        let alignLabel = NSTextField(labelWithString: "Выравнивание:")
+        alignLabel.frame = NSRect(x: 0, y: 34, width: 100, height: 20)
+        let alignPopup = NSPopUpButton(frame: NSRect(x: 110, y: 32, width: 150, height: 24))
+        alignPopup.addItems(withTitles: ["Нет", "По левому краю", "По центру", "По правому краю"])
+
+        let pathLabel = NSTextField(labelWithString: url.lastPathComponent)
+        pathLabel.frame = NSRect(x: 0, y: 4, width: 340, height: 20)
+        pathLabel.font = .systemFont(ofSize: 10)
+        pathLabel.textColor = .secondaryLabelColor
+        pathLabel.lineBreakMode = .byTruncatingMiddle
+
+        container.addSubview(altLabel); container.addSubview(altField)
+        container.addSubview(titleLabel); container.addSubview(titleField)
+        container.addSubview(widthLabel); container.addSubview(widthField)
+        container.addSubview(widthUnitLabel); container.addSubview(alignLabel)
+        container.addSubview(alignPopup); container.addSubview(pathLabel)
+        alert.accessoryView = container
+
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return }
+
+        let alt = altField.stringValue.isEmpty ? "image" : altField.stringValue
+        
+        // Сохраняем security-scoped bookmark для будущих открытий
+        if let bookmark = try? url.bookmarkData(
+            options: .withSecurityScope,
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        ) {
+            UserDefaults.standard.set(bookmark, forKey: "bookmark_\(url.path)")
+        }
+
+        
+        let title = titleField.stringValue
+        let widthValue = Int(widthField.stringValue) ?? 100
+        let alignIndex = alignPopup.indexOfSelectedItem
+
+        // Определяем путь к изображению
+        let imagePath: String
+
+        if let docURL = currentDocument?.url {
+            let docDir = docURL.deletingLastPathComponent()
+            let destURL = docDir.appendingPathComponent(url.lastPathComponent)
+
+            if destURL.path != url.path && !FileManager.default.fileExists(atPath: destURL.path) {
+                try? FileManager.default.copyItem(at: url, to: destURL)
+            }
+
+            imagePath = "./\(destURL.lastPathComponent)"
+        } else {
+            imagePath = url.path
+        }
+
+        // Формируем Markdown
+        let titleAttr = title.isEmpty ? "" : " \"\(title)\""
+        var markdown: String
+
+        if widthValue == 100 && alignIndex == 0 {
+            markdown = "![\(alt)](\(imagePath)\(titleAttr))"
+        } else {
+            let alignStyle: String
+            switch alignIndex {
+            case 1: alignStyle = "float:left; margin-right:16px;"
+            case 2: alignStyle = "display:block; margin:0 auto;"
+            case 3: alignStyle = "float:right; margin-left:16px;"
+            default: alignStyle = ""
+            }
+            let style = "width:\(widthValue)%; \(alignStyle)".trimmingCharacters(in: .whitespaces)
+            let titleHtml = title.isEmpty ? "" : " title=\"\(title)\""
+            markdown = "<img src=\"\(imagePath)\" alt=\"\(alt)\"\(titleHtml) style=\"\(style)\">"
+        }
+
+        let escaped = markdown
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "`", with: "\\`")
+        let js = "window.cmEditor?.insertText(`\n\n\(escaped)\n\n`);"
+        NotificationCenter.default.post(name: .editorExecJS, object: js)
+    }
+
     
     func insertTable() {
         let tableText = """

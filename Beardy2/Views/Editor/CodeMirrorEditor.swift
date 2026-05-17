@@ -142,7 +142,8 @@ struct CodeMirrorEditor: NSViewRepresentable {
         </html>
         """
         
-        webView.loadHTMLString(html, baseURL: nil)
+//        webView.loadHTMLString(html, baseURL: nil)
+        webView.loadHTMLString(html, baseURL: URL(fileURLWithPath: NSHomeDirectory()))
     }
     
     private func updateTheme(in webView: WKWebView, isDark: Bool) {
