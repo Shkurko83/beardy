@@ -95,42 +95,66 @@ struct HTMLVisitor: MarkupVisitor {
     mutating func visitImage(_ image: Markdown.Image) -> String {
         let rawSrc = image.source ?? ""
         let alt = image.plainText
-
-        let finalSrc: String
-
-        if rawSrc.hasPrefix("http://") || rawSrc.hasPrefix("https://") {
-            finalSrc = rawSrc
-        } else if rawSrc.hasPrefix("file://") {
-            let filePath = rawSrc.replacingOccurrences(of: "file://", with: "")
-            let encoded = filePath.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? filePath
-            finalSrc = "beardy://localhost\(encoded)"
-        } else if rawSrc.hasPrefix("/") {
-            let encoded = rawSrc.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? rawSrc
-            finalSrc = "beardy://localhost\(encoded)"
-        } else {
-            if let docURL = documentURL {
-                let docDir = docURL.deletingLastPathComponent()
-                let relativePath = rawSrc.hasPrefix("./") ? String(rawSrc.dropFirst(2)) : rawSrc
-                let absoluteURL = docDir.appendingPathComponent(relativePath)
-                let encoded = absoluteURL.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? absoluteURL.path
-                finalSrc = "beardy://localhost\(encoded)"
-            } else {
-                finalSrc = rawSrc
-            }
-        }
-
+        let finalSrc = resolveImageSource(rawSrc)
         return "<img src=\"\(finalSrc)\" alt=\"\(alt)\" style=\"max-width:100%; height:auto;\">"
     }
 
-
-    // HTML блоки: <img src="beardy://..." ...>
     mutating func visitHTMLBlock(_ html: HTMLBlock) -> String {
-        return html.rawHTML
+        rewriteImageSources(in: html.rawHTML)
     }
 
-    // Инлайн HTML: внутри параграфов
     mutating func visitInlineHTML(_ html: InlineHTML) -> String {
-        return html.rawHTML
+        rewriteImageSources(in: html.rawHTML)
+    }
+
+    private func resolveImageSource(_ rawSrc: String) -> String {
+        if rawSrc.hasPrefix("data:")
+            || rawSrc.hasPrefix("http://")
+            || rawSrc.hasPrefix("https://")
+            || rawSrc.hasPrefix("beardy://") {
+            return rawSrc
+        }
+
+        if rawSrc.hasPrefix("file://") {
+            let filePath = rawSrc.replacingOccurrences(of: "file://", with: "")
+            return ImageInsertionHelper.beardyURL(forLocalPath: filePath)
+        }
+
+        if rawSrc.hasPrefix("/") {
+            return ImageInsertionHelper.beardyURL(forLocalPath: rawSrc)
+        }
+
+        if let docURL = documentURL {
+            let docDir = docURL.deletingLastPathComponent()
+            let relativePath = rawSrc.hasPrefix("./") ? String(rawSrc.dropFirst(2)) : rawSrc
+            let absolutePath = docDir.appendingPathComponent(relativePath).path
+            return ImageInsertionHelper.beardyURL(forLocalPath: absolutePath)
+        }
+
+        return rawSrc
+    }
+
+    private func rewriteImageSources(in html: String) -> String {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"src=(["'])([^"']+)\1"#,
+            options: .caseInsensitive
+        ) else {
+            return html
+        }
+
+        let nsHTML = html as NSString
+        var result = html
+        let matches = regex.matches(in: html, range: NSRange(location: 0, length: nsHTML.length)).reversed()
+
+        for match in matches {
+            let quote = nsHTML.substring(with: match.range(at: 1))
+            let src = nsHTML.substring(with: match.range(at: 2))
+            let resolved = resolveImageSource(src)
+            let replacement = "src=\(quote)\(resolved)\(quote)"
+            result = (result as NSString).replacingCharacters(in: match.range, with: replacement)
+        }
+
+        return result
     }
 
 }

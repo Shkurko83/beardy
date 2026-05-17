@@ -120,6 +120,9 @@ struct SidebarView: View {
         .onAppear {
             loadSidebarData()
         }
+        .onChange(of: documentManager.libraryRevision) { _, _ in
+            loadSidebarData()
+        }
     }
     
 //    private var filteredRecentFiles: [RecentDocument] {
@@ -140,11 +143,11 @@ struct SidebarView: View {
                 return true
             }
             
-            // Опционально: поиск в содержимом (медленнее)
-            if let content = try? String(contentsOf: doc.url, encoding: .utf8) {
+            if let url = SecurityBookmarkStore.resolveURL(path: doc.path, bookmark: doc.bookmark),
+               let content = try? String(contentsOf: url, encoding: .utf8) {
                 return content.localizedCaseInsensitiveContains(searchText)
             }
-            
+
             return false
         }
     }
@@ -199,7 +202,8 @@ struct RecentFilesSection: View {
                         icon: "doc.text",
                         name: file.name,
                         subtitle: file.path,
-                        date: file.modifiedDate
+                        date: file.modifiedDate,
+                        isFavorite: documentManager.isFavorite(path: file.path)
                     ) {
                         documentManager.openRecentDocument(file)
                     } onFavorite: {
@@ -267,7 +271,10 @@ struct FoldersSection: View {
                 ForEach(folders) { folder in
                     FolderRowView(
                         folder: folder,
-                        isExpanded: expandedFolders.contains(folder.id)
+                        isExpanded: expandedFolders.contains(folder.id),
+                        onOpenFile: { file in
+                            documentManager.openDocument(at: file.url, inNewTab: true)
+                        }
                     ) {
                         toggleFolder(folder.id)
                     } onOpen: {
@@ -346,6 +353,7 @@ struct SidebarFileRow: View {
 struct FolderRowView: View {
     let folder: FolderItem
     let isExpanded: Bool
+    let onOpenFile: (FileItem) -> Void
     let onToggle: () -> Void
     let onOpen: () -> Void
     
@@ -402,8 +410,9 @@ struct FolderRowView: View {
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
+                    .contentShape(Rectangle())
                     .onTapGesture {
-                        // Open specific file
+                        onOpenFile(file)
                     }
                 }
             }
@@ -445,6 +454,7 @@ struct FavoriteDocument: Identifiable {
     let path: String
     let url: URL
     let addedDate: Date
+    let bookmark: Data?
 }
 
 struct FolderItem: Identifiable {
@@ -454,6 +464,7 @@ struct FolderItem: Identifiable {
     let url: URL
     var fileCount: Int
     var files: [FileItem]
+    let bookmark: Data?
 }
 
 struct FileItem: Identifiable {

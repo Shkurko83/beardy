@@ -84,9 +84,15 @@ struct AppConstants {
         
         // Appearance
         static let previewTheme = "previewTheme"
+        static let themeFamily = "themeFamily"
         static let previewSyncScroll = "previewSyncScroll"
         static let codeBlockTheme = "codeBlockTheme"
+        static let codeThemeAutomatic = "codeThemeAutomatic"
         static let isDarkMode = "isDarkMode"
+        static let showCodeLineNumbers = "showCodeLineNumbers"
+        static let focusDimInactiveLines = "focusDimInactiveLines"
+        static let focusHideToolbar = "focusHideToolbar"
+        static let followSystemAppearance = "followSystemAppearance"
         
         // Export
         static let exportImageFormat = "exportImageFormat"

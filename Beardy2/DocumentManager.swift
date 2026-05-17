@@ -5,9 +5,12 @@ import Combine
 internal import UniformTypeIdentifiers
 
 class DocumentManager: ObservableObject {
+    private var statisticsUpdateWorkItem: DispatchWorkItem?
+
     // MARK: - Published Properties
-    @Published var currentDocument: MarkdownDocument?
-    @Published var isDarkMode: Bool = true
+    @Published var tabs: [EditorTab] = []
+    @Published var selectedTabID: UUID?
+    @Published var libraryRevision = 0
     @Published var focusMode: Bool = false
     @Published var typewriterMode: Bool = false
     @Published var sidebarToggleSignal: Bool = false
@@ -22,58 +25,195 @@ class DocumentManager: ObservableObject {
     
     // Binding for sidebar
     var showSidebarBinding: Binding<Bool>?
-    
+
+    var currentDocument: MarkdownDocument? {
+        get {
+            guard let id = selectedTabID else { return nil }
+            return tabs.first(where: { $0.id == id })?.document
+        }
+        set {
+            guard let newValue else {
+                if let id = selectedTabID {
+                    tabs.removeAll { $0.id == id }
+                    selectedTabID = tabs.last?.id
+                }
+                return
+            }
+            if let id = selectedTabID, let index = tabs.firstIndex(where: { $0.id == id }) {
+                tabs[index].document = newValue
+            } else {
+                let tab = EditorTab(document: newValue)
+                tabs.append(tab)
+                selectedTabID = tab.id
+            }
+        }
+    }
+
+    var hasOpenTabs: Bool { !tabs.isEmpty }
+
     // MARK: - Initialization
     init() {
         loadRecentDocuments()
         loadFavorites()
         loadFolders()
+        focusMode = UserDefaults.standard.bool(forKey: AppConstants.Keys.focusMode)
         setupAutoSave()
-        
-        // Detect system appearance
-        if let appearance = NSApp.effectiveAppearance.name.rawValue as? String {
-            isDarkMode = appearance.contains("Dark")
+        setupImagePasteObserver()
+
+    }
+
+    private func setupImagePasteObserver() {
+        NotificationCenter.default.addObserver(
+            forName: .processImageFile,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self,
+                  let data = notification.userInfo?["data"] as? Data,
+                  let filename = notification.userInfo?["filename"] as? String else { return }
+            self.insertImageFromData(data, suggestedFilename: filename)
         }
     }
     
+    // MARK: - Tabs
+    func selectTab(_ id: UUID) {
+        guard tabs.contains(where: { $0.id == id }) else { return }
+        DocumentSecurityAccess.deactivate()
+        selectedTabID = id
+        if let url = currentDocument?.url {
+            DocumentSecurityAccess.activate(document: url)
+        }
+    }
+
+    func closeTab(_ id: UUID) {
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        let tab = tabs[index]
+
+        if tab.document.hasUnsavedChanges {
+            let alert = NSAlert()
+            alert.messageText = "Save \"\(tab.document.fileName)\"?"
+            alert.informativeText = "Your changes will be lost if you don't save."
+            alert.addButton(withTitle: "Save")
+            alert.addButton(withTitle: "Don't Save")
+            alert.addButton(withTitle: "Cancel")
+            let response = alert.runModal()
+            if response == .alertFirstButtonReturn {
+                let previous = selectedTabID
+                selectedTabID = id
+                saveDocument()
+                selectedTabID = previous
+            } else if response == .alertThirdButtonReturn {
+                return
+            }
+        }
+
+        tabs.remove(at: index)
+        if selectedTabID == id {
+            if tabs.isEmpty {
+                selectedTabID = nil
+            } else {
+                let nextIndex = min(index, tabs.count - 1)
+                selectedTabID = tabs[nextIndex].id
+            }
+        }
+        if let url = currentDocument?.url {
+            DocumentSecurityAccess.activate(document: url)
+        } else {
+            DocumentSecurityAccess.deactivate()
+        }
+    }
+
+    /// Moves a tab so it sits at `destinationIndex` (0 = before first tab, `tabs.count` = after last).
+    func moveTab(from sourceID: UUID, toIndex destinationIndex: Int) {
+        guard let fromIndex = tabs.firstIndex(where: { $0.id == sourceID }) else { return }
+        var dest = min(max(0, destinationIndex), tabs.count)
+        if fromIndex < dest { dest -= 1 }
+        guard fromIndex != dest else { return }
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            let tab = tabs.remove(at: fromIndex)
+            tabs.insert(tab, at: dest)
+        }
+    }
+
+    private func openInNewTab(_ doc: MarkdownDocument) {
+        if let url = doc.url,
+           let existing = tabs.first(where: { $0.document.url?.standardizedFileURL == url.standardizedFileURL }) {
+            selectTab(existing.id)
+            return
+        }
+        let tab = EditorTab(document: doc)
+        tabs.append(tab)
+        selectedTabID = tab.id
+    }
+
+    private func nextUntitledFileName() -> String {
+        var usedNumbers = Set<Int>()
+        for tab in tabs {
+            let name = tab.document.fileName
+            if name == "Untitled.md" {
+                usedNumbers.insert(1)
+                continue
+            }
+            guard name.hasPrefix("Untitled"), name.hasSuffix(".md") else { continue }
+            let middle = String(name.dropFirst("Untitled".count).dropLast(3))
+            if middle.isEmpty {
+                usedNumbers.insert(1)
+            } else if let number = Int(middle) {
+                usedNumbers.insert(number)
+            }
+        }
+        var candidate = 1
+        while usedNumbers.contains(candidate) { candidate += 1 }
+        return candidate == 1 ? "Untitled.md" : "Untitled\(candidate).md"
+    }
+
     // MARK: - Document Operations
     func createNewDocument() {
-        let newDoc = MarkdownDocument()
-        currentDocument = newDoc
-        saveToRecent(newDoc)
+        let newDoc = MarkdownDocument(fileName: nextUntitledFileName())
+        openInNewTab(newDoc)
     }
-    
+
     func openDocument() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        
-        // Самый надёжный и современный способ
         panel.allowedContentTypes = [
             UTType(filenameExtension: "md") ?? .plainText,
             UTType(filenameExtension: "markdown") ?? .plainText,
             .plainText
         ]
-        
+
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
-            self?.openDocument(at: url)
+            Self.grantAccessAndSaveBookmarks(for: url)
+            self?.openDocument(at: url, inNewTab: true)
         }
     }
-    
-    
-    func openDocument(at url: URL) {
+
+    func openDocument(at url: URL, inNewTab: Bool = true) {
+        let resolved = SecurityBookmarkStore.resolveURL(path: url.path) ?? url
+        Self.grantAccessAndSaveBookmarks(for: resolved)
+        DocumentSecurityAccess.activate(document: resolved)
+
         do {
-            let content = try String(contentsOf: url, encoding: .utf8)
+            let content = try String(contentsOf: resolved, encoding: .utf8)
             let doc = MarkdownDocument(
-                fileName: url.lastPathComponent,
+                fileName: resolved.lastPathComponent,
                 content: content,
-                url: url
+                url: resolved
             )
-            currentDocument = doc
+            if inNewTab {
+                openInNewTab(doc)
+            } else {
+                currentDocument = doc
+            }
             saveToRecent(doc)
         } catch {
+            DocumentSecurityAccess.deactivate()
             showError("Failed to open document: \(error.localizedDescription)")
         }
     }
@@ -103,26 +243,40 @@ class DocumentManager: ObservableObject {
         panel.nameFieldStringValue = doc.fileName
         
         panel.begin { [weak self] response in
-            if response == .OK, let url = panel.url {
-                self?.saveDocument(to: url)
-            }
+            guard response == .OK, let url = panel.url else { return }
+            Self.grantAccessAndSaveBookmarks(for: url)
+            self?.saveDocument(to: url)
         }
     }
     
     private func saveDocument(to url: URL) {
-        guard let doc = currentDocument else { return }
-        
+        guard let id = selectedTabID,
+              let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        var doc = tabs[index].document
+
         do {
             try doc.content.write(to: url, atomically: true, encoding: .utf8)
-            currentDocument?.url = url
-            currentDocument?.fileName = url.lastPathComponent
-            currentDocument?.hasUnsavedChanges = false
-            currentDocument?.lastSavedDate = Date()
-            
+            doc.url = url
+            doc.fileName = url.lastPathComponent
+            doc.hasUnsavedChanges = false
+            doc.lastSavedDate = Date()
+            tabs[index].document = doc
+
+            Self.grantAccessAndSaveBookmarks(for: url)
+            DocumentSecurityAccess.activate(document: url)
             saveToRecent(doc)
         } catch {
             showError("Failed to save document: \(error.localizedDescription)")
         }
+    }
+
+    /// Starts security-scoped access and stores bookmarks for the file and its parent folder (required for image copy).
+    private static func grantAccessAndSaveBookmarks(for fileURL: URL) {
+        _ = fileURL.startAccessingSecurityScopedResource()
+        let directoryURL = fileURL.deletingLastPathComponent()
+        _ = directoryURL.startAccessingSecurityScopedResource()
+        SecurityBookmarkStore.saveBookmark(for: fileURL)
+        SecurityBookmarkStore.saveBookmark(for: directoryURL)
     }
     
     func exportAsPDF() {
@@ -146,15 +300,28 @@ class DocumentManager: ObservableObject {
     }
     
     func updateContent(_ newContent: String) {
-        guard var doc = currentDocument else { return }
-        
-        if doc.content != newContent {
-            doc.content = newContent
-            doc.hasUnsavedChanges = true
-            doc.lastModifiedDate = Date()
+        guard let id = selectedTabID,
+              let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        var doc = tabs[index].document
+        guard doc.content != newContent else { return }
+        doc.content = newContent
+        doc.hasUnsavedChanges = true
+        doc.lastModifiedDate = Date()
+        tabs[index].document = doc
+        scheduleStatisticsUpdate(tabIndex: index)
+    }
+
+    private func scheduleStatisticsUpdate(tabIndex: Int) {
+        statisticsUpdateWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self,
+                  tabIndex < self.tabs.count else { return }
+            var doc = self.tabs[tabIndex].document
             doc.updateStatistics()
-            currentDocument = doc
+            self.tabs[tabIndex].document = doc
         }
+        statisticsUpdateWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
     }
     
     // MARK: - Recent Documents
@@ -163,7 +330,35 @@ class DocumentManager: ObservableObject {
     }
     
     func openRecentDocument(_ doc: RecentDocument) {
-        openDocument(at: doc.url)
+        guard let url = SecurityBookmarkStore.resolveURL(path: doc.path, bookmark: doc.bookmark) else {
+            promptReopenMissingFile(storedPath: doc.path, title: doc.name)
+            return
+        }
+        openDocument(at: url, inNewTab: true)
+    }
+
+    private func promptReopenMissingFile(storedPath: String, title: String) {
+        let alert = NSAlert()
+        alert.messageText = "Cannot access file"
+        alert.informativeText = "\"\(title)\" is not available. Please select the file again."
+        alert.addButton(withTitle: "Choose File…")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [
+            UTType(filenameExtension: "md") ?? .plainText,
+            .plainText
+        ]
+        panel.directoryURL = URL(fileURLWithPath: (storedPath as NSString).deletingLastPathComponent)
+        panel.nameFieldStringValue = (storedPath as NSString).lastPathComponent
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            Self.grantAccessAndSaveBookmarks(for: url)
+            self?.openDocument(at: url, inNewTab: true)
+        }
     }
     
     func clearRecentDocuments() {
@@ -182,27 +377,35 @@ class DocumentManager: ObservableObject {
             name: doc.fileName,
             path: url.path,
             url: url,
-            modifiedDate: Date()
+            modifiedDate: Date(),
+            bookmark: SecurityBookmarkStore.bookmarkData(for: url.path)
         )
         recentDocuments.insert(recent, at: 0)
         
-        // Keep only last 10
-        if recentDocuments.count > 10 {
-            recentDocuments = Array(recentDocuments.prefix(10))
+        if recentDocuments.count > 20 {
+            recentDocuments = Array(recentDocuments.prefix(20))
         }
         
         saveRecentDocuments()
+        bumpLibraryRevision()
+    }
+
+    private func bumpLibraryRevision() {
+        libraryRevision += 1
     }
     
     private func loadRecentDocuments() {
         if let data = UserDefaults.standard.data(forKey: "recentDocuments"),
            let decoded = try? JSONDecoder().decode([RecentDocumentData].self, from: data) {
             recentDocuments = decoded.map { data in
-                RecentDocument(
+                let url = SecurityBookmarkStore.resolveURL(path: data.path, bookmark: data.bookmark)
+                    ?? URL(fileURLWithPath: data.path)
+                return RecentDocument(
                     name: data.name,
                     path: data.path,
-                    url: URL(fileURLWithPath: data.path),
-                    modifiedDate: data.modifiedDate
+                    url: url,
+                    modifiedDate: data.modifiedDate,
+                    bookmark: data.bookmark
                 )
             }
         }
@@ -213,7 +416,8 @@ class DocumentManager: ObservableObject {
             RecentDocumentData(
                 name: doc.name,
                 path: doc.path,
-                modifiedDate: doc.modifiedDate
+                modifiedDate: doc.modifiedDate,
+                bookmark: SecurityBookmarkStore.bookmarkData(for: doc.path) ?? doc.bookmark
             )
         }
         
@@ -227,39 +431,65 @@ class DocumentManager: ObservableObject {
         return favorites
     }
     
+    func isFavorite(path: String) -> Bool {
+        favorites.contains { $0.path == path }
+    }
+
+    func toggleFavoriteForActiveDocument() {
+        guard let doc = currentDocument, let url = doc.url else { return }
+        let recent = RecentDocument(
+            name: doc.fileName,
+            path: url.path,
+            url: url,
+            modifiedDate: Date(),
+            bookmark: SecurityBookmarkStore.bookmarkData(for: url.path)
+        )
+        toggleFavorite(recent)
+    }
+
     func toggleFavorite(_ doc: RecentDocument) {
-        if let index = favorites.firstIndex(where: { $0.url == doc.url }) {
+        if let index = favorites.firstIndex(where: { $0.path == doc.path }) {
             favorites.remove(at: index)
         } else {
             let favorite = FavoriteDocument(
                 name: doc.name,
                 path: doc.path,
                 url: doc.url,
-                addedDate: Date()
+                addedDate: Date(),
+                bookmark: SecurityBookmarkStore.bookmarkData(for: doc.path) ?? doc.bookmark
             )
             favorites.append(favorite)
         }
         saveFavorites()
+        bumpLibraryRevision()
     }
     
     func removeFavorite(_ favorite: FavoriteDocument) {
         favorites.removeAll { $0.id == favorite.id }
         saveFavorites()
+        bumpLibraryRevision()
     }
     
     func openFavorite(_ favorite: FavoriteDocument) {
-        openDocument(at: favorite.url)
+        guard let url = SecurityBookmarkStore.resolveURL(path: favorite.path, bookmark: favorite.bookmark) else {
+            promptReopenMissingFile(storedPath: favorite.path, title: favorite.name)
+            return
+        }
+        openDocument(at: url, inNewTab: true)
     }
     
     private func loadFavorites() {
         if let data = UserDefaults.standard.data(forKey: "favorites"),
            let decoded = try? JSONDecoder().decode([FavoriteDocumentData].self, from: data) {
             favorites = decoded.map { data in
-                FavoriteDocument(
+                let url = SecurityBookmarkStore.resolveURL(path: data.path, bookmark: data.bookmark)
+                    ?? URL(fileURLWithPath: data.path)
+                return FavoriteDocument(
                     name: data.name,
                     path: data.path,
-                    url: URL(fileURLWithPath: data.path),
-                    addedDate: data.addedDate
+                    url: url,
+                    addedDate: data.addedDate,
+                    bookmark: data.bookmark
                 )
             }
         }
@@ -270,7 +500,8 @@ class DocumentManager: ObservableObject {
             FavoriteDocumentData(
                 name: fav.name,
                 path: fav.path,
-                addedDate: fav.addedDate
+                addedDate: fav.addedDate,
+                bookmark: SecurityBookmarkStore.bookmarkData(for: fav.path) ?? fav.bookmark
             )
         }
         
@@ -292,6 +523,8 @@ class DocumentManager: ObservableObject {
         
         panel.begin { [weak self] response in
             if response == .OK, let url = panel.url {
+                _ = url.startAccessingSecurityScopedResource()
+                SecurityBookmarkStore.saveBookmark(for: url)
                 self?.addFolder(at: url)
             }
         }
@@ -303,11 +536,13 @@ class DocumentManager: ObservableObject {
             path: url.path,
             url: url,
             fileCount: countMarkdownFiles(in: url),
-            files: loadFiles(from: url)
+            files: loadFiles(from: url),
+            bookmark: SecurityBookmarkStore.bookmarkData(for: url.path)
         )
         
         folders.append(folder)
         saveFolders()
+        bumpLibraryRevision()
     }
     
     func openFolder(_ folder: FolderItem) {
@@ -315,6 +550,8 @@ class DocumentManager: ObservableObject {
     }
     
     private func countMarkdownFiles(in url: URL) -> Int {
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
         guard let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: nil) else {
             return 0
         }
@@ -329,6 +566,8 @@ class DocumentManager: ObservableObject {
     }
     
     private func loadFiles(from url: URL) -> [FileItem] {
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
         guard let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: nil) else {
             return []
         }
@@ -336,6 +575,7 @@ class DocumentManager: ObservableObject {
         var files: [FileItem] = []
         for case let fileURL as URL in enumerator {
             if fileURL.pathExtension == "md" || fileURL.pathExtension == "markdown" {
+                SecurityBookmarkStore.saveBookmark(for: fileURL)
                 files.append(FileItem(name: fileURL.lastPathComponent, url: fileURL))
             }
         }
@@ -346,13 +586,15 @@ class DocumentManager: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: "folders"),
            let decoded = try? JSONDecoder().decode([FolderItemData].self, from: data) {
             folders = decoded.map { data in
-                let url = URL(fileURLWithPath: data.path)
+                let url = SecurityBookmarkStore.resolveURL(path: data.path, bookmark: data.bookmark)
+                    ?? URL(fileURLWithPath: data.path)
                 return FolderItem(
                     name: data.name,
                     path: data.path,
                     url: url,
                     fileCount: countMarkdownFiles(in: url),
-                    files: loadFiles(from: url)
+                    files: loadFiles(from: url),
+                    bookmark: data.bookmark
                 )
             }
         }
@@ -360,7 +602,11 @@ class DocumentManager: ObservableObject {
     
     private func saveFolders() {
         let data = folders.map { folder in
-            FolderItemData(name: folder.name, path: folder.path)
+            FolderItemData(
+                name: folder.name,
+                path: folder.path,
+                bookmark: SecurityBookmarkStore.bookmarkData(for: folder.path) ?? folder.bookmark
+            )
         }
         
         if let encoded = try? JSONEncoder().encode(data) {
@@ -426,22 +672,28 @@ class DocumentManager: ObservableObject {
             .replacingOccurrences(of: "`", with: "\\`")
             .replacingOccurrences(of: "'", with: "\\'") : ""
         
-        let js = "window.cmEditor?.insertLink(`\(urlArg)`);"
-        NotificationCenter.default.post(name: .editorExecJS, object: js)
+        execEditorJS("window.cmEditor?.insertLink(`\(urlArg)`);")
     }
     
     func insertImage() {
+        if !hasOpenTabs { createNewDocument() }
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.allowedContentTypes = [.image]
-        panel.title = "Выбрать изображение"
-        panel.prompt = "Вставить"
+        panel.title = "Choose Image"
+        panel.prompt = "Insert"
         
         panel.begin { [weak self] response in
             guard let self = self, response == .OK, let url = panel.url else { return }
+            let sourceAccess = url.startAccessingSecurityScopedResource()
             DispatchQueue.main.async {
+                defer {
+                    if sourceAccess {
+                        url.stopAccessingSecurityScopedResource()
+                    }
+                }
                 self.showImageInsertDialog(url: url)
             }
         }
@@ -449,39 +701,52 @@ class DocumentManager: ObservableObject {
 
     func showImageInsertDialog(url: URL) {
         let alert = NSAlert()
-        alert.messageText = "Вставить изображение"
-        alert.informativeText = "Настройте параметры изображения"
-        alert.addButton(withTitle: "Вставить")
-        alert.addButton(withTitle: "Отмена")
+        alert.messageText = "Insert Image"
+        alert.informativeText = "Choose how to reference this image in the document"
+        alert.addButton(withTitle: "Insert")
+        alert.addButton(withTitle: "Cancel")
 
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 340, height: 160))
+        let hasSavedDocument = currentDocument?.url != nil
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 380, height: 200))
 
-        let altLabel = NSTextField(labelWithString: "Alt текст:")
-        altLabel.frame = NSRect(x: 0, y: 130, width: 80, height: 20)
-        let altField = NSTextField(frame: NSRect(x: 90, y: 128, width: 250, height: 24))
-        altField.placeholderString = "Описание изображения"
+        let altLabel = NSTextField(labelWithString: "Alt text:")
+        altLabel.frame = NSRect(x: 0, y: 168, width: 80, height: 20)
+        let altField = NSTextField(frame: NSRect(x: 90, y: 166, width: 280, height: 24))
+        altField.placeholderString = "Image description"
         altField.stringValue = url.deletingPathExtension().lastPathComponent
 
         let titleLabel = NSTextField(labelWithString: "Title:")
-        titleLabel.frame = NSRect(x: 0, y: 98, width: 80, height: 20)
-        let titleField = NSTextField(frame: NSRect(x: 90, y: 96, width: 250, height: 24))
-        titleField.placeholderString = "Подсказка при наведении (необязательно)"
+        titleLabel.frame = NSRect(x: 0, y: 136, width: 80, height: 20)
+        let titleField = NSTextField(frame: NSRect(x: 90, y: 134, width: 280, height: 24))
+        titleField.placeholderString = "Tooltip on hover (optional)"
 
-        let widthLabel = NSTextField(labelWithString: "Ширина:")
-        widthLabel.frame = NSRect(x: 0, y: 66, width: 80, height: 20)
-        let widthField = NSTextField(frame: NSRect(x: 90, y: 64, width: 80, height: 24))
+        let widthLabel = NSTextField(labelWithString: "Width:")
+        widthLabel.frame = NSRect(x: 0, y: 104, width: 80, height: 20)
+        let widthField = NSTextField(frame: NSRect(x: 90, y: 102, width: 80, height: 24))
         widthField.placeholderString = "100"
         widthField.stringValue = "100"
         let widthUnitLabel = NSTextField(labelWithString: "%")
-        widthUnitLabel.frame = NSRect(x: 178, y: 66, width: 20, height: 20)
+        widthUnitLabel.frame = NSRect(x: 178, y: 104, width: 20, height: 20)
 
-        let alignLabel = NSTextField(labelWithString: "Выравнивание:")
-        alignLabel.frame = NSRect(x: 0, y: 34, width: 100, height: 20)
-        let alignPopup = NSPopUpButton(frame: NSRect(x: 110, y: 32, width: 150, height: 24))
-        alignPopup.addItems(withTitles: ["Нет", "По левому краю", "По центру", "По правому краю"])
+        let alignLabel = NSTextField(labelWithString: "Alignment:")
+        alignLabel.frame = NSRect(x: 0, y: 72, width: 100, height: 20)
+        let alignPopup = NSPopUpButton(frame: NSRect(x: 110, y: 70, width: 180, height: 24))
+        alignPopup.addItems(withTitles: ["None", "Left", "Center", "Right"])
+
+        let copyCheckbox = NSButton(checkboxWithTitle: "Copy image to folder containing document", target: nil, action: nil)
+        copyCheckbox.frame = NSRect(x: 0, y: 18, width: 360, height: 20)
+        copyCheckbox.state = (hasSavedDocument && ImageInsertionHelper.copyImagesToDocumentFolder) ? .on : .off
+        copyCheckbox.isEnabled = hasSavedDocument
+
+        let copyHint = NSTextField(labelWithString: hasSavedDocument
+            ? "Recommended: keep the .md file portable with its images"
+            : "Save the document first to copy images beside it")
+        copyHint.frame = NSRect(x: 22, y: 2, width: 350, height: 14)
+        copyHint.font = .systemFont(ofSize: 10)
+        copyHint.textColor = .secondaryLabelColor
 
         let pathLabel = NSTextField(labelWithString: url.lastPathComponent)
-        pathLabel.frame = NSRect(x: 0, y: 4, width: 340, height: 20)
+        pathLabel.frame = NSRect(x: 0, y: 50, width: 360, height: 16)
         pathLabel.font = .systemFont(ofSize: 10)
         pathLabel.textColor = .secondaryLabelColor
         pathLabel.lineBreakMode = .byTruncatingMiddle
@@ -490,67 +755,92 @@ class DocumentManager: ObservableObject {
         container.addSubview(titleLabel); container.addSubview(titleField)
         container.addSubview(widthLabel); container.addSubview(widthField)
         container.addSubview(widthUnitLabel); container.addSubview(alignLabel)
-        container.addSubview(alignPopup); container.addSubview(pathLabel)
+        container.addSubview(alignPopup)
+        container.addSubview(pathLabel)
+        container.addSubview(copyCheckbox)
+        container.addSubview(copyHint)
         alert.accessoryView = container
 
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return }
 
         let alt = altField.stringValue.isEmpty ? "image" : altField.stringValue
-        
-        // Сохраняем security-scoped bookmark для будущих открытий
-        if let bookmark = try? url.bookmarkData(
-            options: .withSecurityScope,
-            includingResourceValuesForKeys: nil,
-            relativeTo: nil
-        ) {
-            UserDefaults.standard.set(bookmark, forKey: "bookmark_\(url.path)")
-        }
-
-        
         let title = titleField.stringValue
         let widthValue = Int(widthField.stringValue) ?? 100
         let alignIndex = alignPopup.indexOfSelectedItem
+        let alignment = ImageAlignmentOption(rawValue: alignIndex) ?? .none
+        let shouldCopy = copyCheckbox.state == .on
+        ImageInsertionHelper.copyImagesToDocumentFolder = shouldCopy
 
-        // Определяем путь к изображению
-        let imagePath: String
+        let strategy: ImagePathStrategy = shouldCopy ? .copyBesideDocument : .useOriginalPath
 
-        if let docURL = currentDocument?.url {
-            let docDir = docURL.deletingLastPathComponent()
-            let destURL = docDir.appendingPathComponent(url.lastPathComponent)
+        do {
+            let imageSource = try ImageInsertionHelper.imagePath(
+                from: url,
+                documentURL: currentDocument?.url,
+                strategy: strategy
+            )
 
-            if destURL.path != url.path && !FileManager.default.fileExists(atPath: destURL.path) {
-                try? FileManager.default.copyItem(at: url, to: destURL)
-            }
+            let markdown = ImageInsertionHelper.buildMarkdown(
+                imagePath: imageSource,
+                alt: alt,
+                title: title,
+                widthPercent: widthValue,
+                alignment: alignment
+            )
 
-            imagePath = "./\(destURL.lastPathComponent)"
-        } else {
-            imagePath = url.path
+            insertMarkdownSnippet(markdown)
+        } catch {
+            showError(error.localizedDescription)
+        }
+    }
+
+    /// Вставка из буфера / drag-and-drop — тот же диалог, что и для файла.
+    func insertImageFromData(_ data: Data, suggestedFilename: String) {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(suggestedFilename)
+        do {
+            try data.write(to: tempURL, options: .atomic)
+            showImageInsertDialog(url: tempURL)
+        } catch {
+            showError("Could not process image from clipboard")
+        }
+    }
+
+    /// Вставляет Markdown в активную вкладку и синхронизирует редактор.
+    func insertMarkdownSnippet(_ markdown: String) {
+        guard let id = selectedTabID,
+              let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        var doc = tabs[index].document
+        let snippet = doc.content.isEmpty ? markdown : "\n\n\(markdown)\n\n"
+        doc.content += snippet
+        doc.hasUnsavedChanges = true
+        doc.updateStatistics()
+        tabs[index].document = doc
+        let fullContent = doc.content
+        updateContent(fullContent)
+
+        if let docURL = doc.url {
+            let folderPath = docURL.deletingLastPathComponent().path
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "`", with: "\\`")
+            execEditorJS("window.cmEditor?.setDocumentPath(`\(folderPath)`);")
         }
 
-        // Формируем Markdown
-        let titleAttr = title.isEmpty ? "" : " \"\(title)\""
-        var markdown: String
+        guard viewMode != .preview else { return }
 
-        if widthValue == 100 && alignIndex == 0 {
-            markdown = "![\(alt)](\(imagePath)\(titleAttr))"
-        } else {
-            let alignStyle: String
-            switch alignIndex {
-            case 1: alignStyle = "float:left; margin-right:16px;"
-            case 2: alignStyle = "display:block; margin:0 auto;"
-            case 3: alignStyle = "float:right; margin-left:16px;"
-            default: alignStyle = ""
-            }
-            let style = "width:\(widthValue)%; \(alignStyle)".trimmingCharacters(in: .whitespaces)
-            let titleHtml = title.isEmpty ? "" : " title=\"\(title)\""
-            markdown = "<img src=\"\(imagePath)\" alt=\"\(alt)\"\(titleHtml) style=\"\(style)\">"
-        }
-
-        let escaped = markdown
+        let escaped = doc.content
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "`", with: "\\`")
-        let js = "window.cmEditor?.insertText(`\n\n\(escaped)\n\n`);"
+            .replacingOccurrences(of: "$", with: "\\$")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\r", with: "\\r")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+
+        execEditorJS("window.cmEditor?.updateContent(`\(escaped)`);")
+    }
+
+    private func execEditorJS(_ js: String) {
         NotificationCenter.default.post(name: .editorExecJS, object: js)
     }
 
@@ -568,22 +858,26 @@ class DocumentManager: ObservableObject {
     }
     
     private func insertFormatting(prefix: String, suffix: String) {
-        let js = "window.cmEditor?.insertFormatting(`\(prefix)`, `\(suffix)`);"
-        NotificationCenter.default.post(name: .editorExecJS, object: js)
+        let escapedPrefix = escapeForJS(prefix)
+        let escapedSuffix = escapeForJS(suffix)
+        execEditorJS("window.cmEditor?.insertFormatting(`\(escapedPrefix)`, `\(escapedSuffix)`);")
     }
-    
+
     private func insertAtCurrentLine(prefix: String) {
-        let js = "window.cmEditor?.insertAtLineStart(`\(prefix)`);"
-        NotificationCenter.default.post(name: .editorExecJS, object: js)
+        execEditorJS("window.cmEditor?.insertAtLineStart(`\(escapeForJS(prefix))`);")
     }
-    
+
     private func insertText(_ text: String) {
-        let escaped = text
+        execEditorJS("window.cmEditor?.insertText(`\(escapeForJS(text))`);")
+    }
+
+    private func escapeForJS(_ text: String) -> String {
+        text
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "`", with: "\\`")
             .replacingOccurrences(of: "\n", with: "\\n")
-        let js = "window.cmEditor?.insertText(`\(escaped)`);"
-        NotificationCenter.default.post(name: .editorExecJS, object: js)
+            .replacingOccurrences(of: "\r", with: "\\r")
+            .replacingOccurrences(of: "$", with: "\\$")
     }
     
     // MARK: - View Operations
@@ -597,6 +891,8 @@ class DocumentManager: ObservableObject {
     
     func toggleFocusMode() {
         focusMode.toggle()
+        UserDefaults.standard.set(focusMode, forKey: AppConstants.Keys.focusMode)
+        EditorAppearanceSync.pushFocusMode()
     }
     
     func toggleTypewriterMode() {
@@ -710,21 +1006,25 @@ struct RecentDocumentData: Codable {
     let name: String
     let path: String
     let modifiedDate: Date
+    var bookmark: Data?
 }
 
 struct FavoriteDocumentData: Codable {
     let name: String
     let path: String
     let addedDate: Date
+    var bookmark: Data?
 }
 
 struct FolderItemData: Codable {
     let name: String
     let path: String
+    var bookmark: Data?
 }
 
 extension Notification.Name {
     static let showFindPanel = Notification.Name("showFindPanel")
     static let showReplacePanel = Notification.Name("showReplacePanel")
     static let editorExecJS = Notification.Name("editorExecJS")
+    static let processImageFile = Notification.Name("processImageFile")
 }

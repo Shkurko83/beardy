@@ -4,6 +4,7 @@
         <meta charset="UTF-8">
             <link id="highlight-theme" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
                 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+                <script src="https://cdnjs.cloudflare.com/ajax/libs/highlightjs-line-numbers.js/2.9.0/highlightjs-line-numbers.min.js"></script>
                 <style>
                     * { margin: 0; padding: 0; box-sizing: border-box; }
                     body {
@@ -57,8 +58,6 @@
                         width: 100vw;
                         height: 100vh;
                         position: relative;
-                        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-                        
                     }
                     
                     #editor-container.swapped {
@@ -71,7 +70,6 @@
                         height: 100%;
                         overflow: auto;
                         position: relative;
-                        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
                     }
                     
                     /* Border для markdown-панели когда она слева */
@@ -131,7 +129,17 @@
                     body.mode-live #preview-pane { display: none; }
                     body.mode-live #swap-button { display: none; }
 
-                    
+                    body.editor-focus-mode #editor-container {
+                        box-shadow: inset 0 40px 60px -40px rgba(0,0,0,0.18), inset 0 -40px 60px -40px rgba(0,0,0,0.18);
+                    }
+                    body.editor-focus-mode.focus-dim-lines #markdown-textarea {
+                        opacity: 0.92;
+                    }
+                    body.editor-focus-mode.focus-dim-lines #preview-content,
+                    body.editor-focus-mode.focus-dim-lines #live-editor {
+                        opacity: 0.96;
+                    }
+
                     /* Стили превью */
                     #preview-content {
                         line-height: 1.6;
@@ -167,15 +175,54 @@
                     
                     /* Блоки кода - используем стили highlight.js */
                     #preview-content pre {
-                        border-radius: 6px;
+                        border-radius: 8px;
                         overflow: auto;
                         margin: 1em 0;
-                        padding: 16px;
+                        padding: 0;
                     }
                     #preview-content pre code {
                         font-family: 'SF Mono', Monaco, Consolas, monospace;
                         background: transparent !important;
+                        background-color: transparent !important;
                         padding: 0;
+                        display: block;
+                    }
+
+                    /* Code blocks: single background, no zebra striping */
+                    #preview-content pre.hljs,
+                    #live-editor pre.hljs {
+                        background-color: var(--md-code-bg, #f6f8fa) !important;
+                        border: 1px solid var(--md-border, #d0d7de);
+                        padding: 14px 16px !important;
+                    }
+                    #preview-content pre.hljs code,
+                    #live-editor pre.hljs code,
+                    #preview-content pre.hljs code *,
+                    #live-editor pre.hljs code *,
+                    #preview-content pre.hljs .hljs,
+                    #live-editor pre.hljs .hljs {
+                        background: transparent !important;
+                        background-color: transparent !important;
+                    }
+                    #preview-content .hljs-ln,
+                    #live-editor .hljs-ln,
+                    #preview-content .hljs-ln tr,
+                    #live-editor .hljs-ln tr,
+                    #preview-content .hljs-ln td,
+                    #live-editor .hljs-ln td {
+                        background: transparent !important;
+                    }
+                    #preview-content .hljs-ln td.hljs-ln-numbers,
+                    #live-editor .hljs-ln td.hljs-ln-numbers {
+                        color: var(--md-secondary, #6a737d);
+                        border-right: 1px solid var(--md-border, #d0d7de);
+                        padding-right: 10px !important;
+                        user-select: none;
+                        vertical-align: top;
+                    }
+                    #preview-content .hljs-ln td.hljs-ln-code,
+                    #live-editor .hljs-ln td.hljs-ln-code {
+                        padding-left: 12px !important;
                     }
                     #preview-content table {
                         border-collapse: collapse;
@@ -356,7 +403,7 @@
                     #live-editor:focus-within .live-block.is-source { caret-color: currentColor; }
                 </style>
     </head>
-    <body class="mode-split">
+    <body class="mode-edit">
         
         <!-- Live mode editor -->
         <div id="live-editor" tabindex="0"></div>
@@ -394,8 +441,256 @@
             let isLiveMode = false;
             let lastScrollTime = { markdown: 0, preview: 0 };
             let scrollDebounce = null;
-            
-            
+            let documentBasePath = null;
+            let showCodeLineNumbers = false;
+            let loadedCodeThemeURLs = new Set();
+            let focusModeActive = false;
+            let focusDimLines = false;
+            let currentCodeBlockBg = '#f6f8fa';
+            let currentCodeBlockBorder = '#d0d7de';
+
+            function debounce(fn, ms) {
+                let timer;
+                const debounced = function(...args) {
+                    clearTimeout(timer);
+                    timer = setTimeout(() => fn(...args), ms);
+                };
+                debounced.flush = function(...args) {
+                    clearTimeout(timer);
+                    fn(...args);
+                };
+                debounced.cancel = function() {
+                    clearTimeout(timer);
+                };
+                return debounced;
+            }
+
+            function isPreviewActive() {
+                return document.body.classList.contains('mode-split')
+                    || document.body.classList.contains('mode-preview');
+            }
+
+            function isLiveActive() {
+                return document.body.classList.contains('mode-live');
+            }
+
+            function updateCodeBlockChromeStyle(bg, border) {
+                if (bg) currentCodeBlockBg = bg;
+                if (border) currentCodeBlockBorder = border;
+                document.documentElement.style.setProperty('--md-code-bg', currentCodeBlockBg);
+                document.documentElement.style.setProperty('--md-code-border', currentCodeBlockBorder);
+
+                let el = document.getElementById('code-block-chrome-style');
+                if (!el) {
+                    el = document.createElement('style');
+                    el.id = 'code-block-chrome-style';
+                    document.head.appendChild(el);
+                }
+                el.textContent = `
+                    #preview-content pre.hljs,
+                    #live-editor pre.hljs {
+                        background-color: ${currentCodeBlockBg} !important;
+                        border-color: ${currentCodeBlockBorder} !important;
+                    }
+                    #preview-content pre.hljs code,
+                    #preview-content pre.hljs .hljs,
+                    #preview-content pre.hljs code *,
+                    #live-editor pre.hljs code,
+                    #live-editor pre.hljs .hljs,
+                    #live-editor pre.hljs code * {
+                        background: transparent !important;
+                        background-color: transparent !important;
+                    }
+                `;
+            }
+
+            function applyCodeBlockChrome(container) {
+                if (!container) return;
+                container.querySelectorAll('pre.hljs').forEach((pre) => {
+                    pre.style.setProperty('background-color', currentCodeBlockBg, 'important');
+                    pre.style.setProperty('border-color', currentCodeBlockBorder, 'important');
+                    pre.querySelectorAll('code, .hljs, span').forEach((node) => {
+                        node.style.setProperty('background', 'transparent', 'important');
+                        node.style.setProperty('background-color', 'transparent', 'important');
+                    });
+                });
+            }
+
+            const schedulePreviewRender = debounce((text) => {
+                if (isPreviewActive()) {
+                    renderPreview(text, { preserveScroll: true });
+                }
+            }, 280);
+
+            const scheduleLiveRebuild = debounce((text) => {
+                if (isLiveActive()) {
+                    initLiveEditor(text);
+                }
+            }, 320);
+
+            const scheduleContentSync = debounce((text) => {
+                if (window.webkit?.messageHandlers?.contentChanged) {
+                    window.webkit.messageHandlers.contentChanged.postMessage(text);
+                }
+            }, 180);
+
+            function flushPendingEditorUpdates() {
+                const text = textarea.value;
+                schedulePreviewRender.flush(text);
+                scheduleLiveRebuild.flush(text);
+                scheduleContentSync.flush(text);
+            }
+
+            function captureScrollState() {
+                return {
+                    markdown: markdownPane ? markdownPane.scrollTop : 0,
+                    preview: previewPane ? previewPane.scrollTop : 0,
+                    live: liveEditor ? liveEditor.scrollTop : 0,
+                    textarea: textarea ? textarea.scrollTop : 0,
+                };
+            }
+
+            function restoreScrollState(state) {
+                if (!state) return;
+                requestAnimationFrame(() => {
+                    if (markdownPane) markdownPane.scrollTop = state.markdown;
+                    if (previewPane) previewPane.scrollTop = state.preview;
+                    if (liveEditor) liveEditor.scrollTop = state.live;
+                    if (textarea) textarea.scrollTop = state.textarea;
+                });
+            }
+
+            function updateCustomThemeCSS(themeCSS) {
+                let oldStyle = document.getElementById('custom-theme-style');
+                if (oldStyle) oldStyle.remove();
+                const style = document.createElement('style');
+                style.id = 'custom-theme-style';
+                style.textContent = themeCSS;
+                document.head.appendChild(style);
+            }
+
+            function extractCodeText(pre, code) {
+                const table = pre.querySelector('table.hljs-ln');
+                if (table) {
+                    const lines = [];
+                    table.querySelectorAll('td.hljs-ln-code').forEach((cell) => {
+                        lines.push(cell.textContent || '');
+                    });
+                    return lines.join('\n');
+                }
+                return code.textContent || pre.textContent || '';
+            }
+
+            function restoreCodeBlock(pre) {
+                const existingCode = pre.querySelector('code');
+                const langMatch = existingCode?.className?.match(/language-(\w+)/);
+                const lang = langMatch ? langMatch[1] : existingCode?.getAttribute('data-language');
+                const text = extractCodeText(pre, existingCode || pre);
+
+                pre.innerHTML = '';
+                pre.className = 'hljs';
+
+                const code = document.createElement('code');
+                if (lang) {
+                    code.className = `language-${lang}`;
+                    code.setAttribute('data-language', lang);
+                }
+                code.textContent = text;
+                pre.appendChild(code);
+                return code;
+            }
+
+            function highlightCodeBlocks(container) {
+                if (!window.hljs || !container) return;
+                container.querySelectorAll('pre').forEach((pre) => {
+                    const code = restoreCodeBlock(pre);
+                    const text = (code.textContent || '').trimEnd();
+                    if (!text) return;
+
+                    code.removeAttribute('data-highlighted');
+                    code.classList.remove('hljs');
+                    pre.classList.add('hljs');
+
+                    try {
+                        hljs.highlightElement(code);
+                    } catch (e) {
+                        console.warn('hljs.highlightElement failed', e);
+                    }
+
+                    if (showCodeLineNumbers && typeof hljs.lineNumbersBlock === 'function') {
+                        try {
+                            hljs.lineNumbersBlock(code);
+                        } catch (e) {
+                            console.warn('lineNumbersBlock failed', e);
+                        }
+                    }
+                });
+                applyCodeBlockChrome(container);
+            }
+
+            function rehighlightCodeBlocks() {
+                highlightCodeBlocks(preview);
+                if (liveEditor) highlightCodeBlocks(liveEditor);
+            }
+
+            function toBeardyURL(filePath) {
+                if (!filePath) return filePath;
+                if (filePath.startsWith('beardy://')) return filePath;
+                const encoded = filePath.split('/').map(part => encodeURIComponent(part)).join('/');
+                return 'beardy://localhost' + encoded;
+            }
+
+            function resolveImageSrc(src) {
+                if (!src) return src;
+                src = src.trim();
+                if (/^(https?:|data:|beardy:)/i.test(src)) return src;
+
+                let absolutePath;
+                if (src.startsWith('./') && documentBasePath) {
+                    absolutePath = documentBasePath + '/' + src.slice(2);
+                } else if (src.startsWith('/') && !src.startsWith('//')) {
+                    absolutePath = src;
+                } else if (documentBasePath && !src.includes('://')) {
+                    absolutePath = documentBasePath + '/' + src.replace(/^\.\//, '');
+                } else {
+                    return src;
+                }
+                return toBeardyURL(absolutePath);
+            }
+
+            function rewriteImagesInContainer(container) {
+                if (!container) return;
+                container.querySelectorAll('img').forEach(img => {
+                    const src = img.getAttribute('src');
+                    if (src) img.setAttribute('src', resolveImageSrc(src));
+                });
+            }
+
+            function syncLiveToTextarea() {
+                if (isLiveMode && liveBlocks.length) {
+                    currentContent = liveBlocks.map(b => b.source).join('\n');
+                    textarea.value = currentContent;
+                }
+            }
+
+            async function handleImageFiles(files) {
+                for (const file of files) {
+                    if (!file.type.startsWith('image/')) continue;
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        const dataURL = reader.result;
+                        const base64 = String(dataURL).split(',')[1];
+                        if (!base64 || !window.webkit?.messageHandlers?.processImageFile) return;
+                        window.webkit.messageHandlers.processImageFile.postMessage({
+                            base64,
+                            filename: file.name || 'image.png',
+                            mimeType: file.type
+                        });
+                    };
+                    reader.readAsDataURL(file);
+                }
+            }
+
             const textarea = document.getElementById('markdown-textarea');
             const preview = document.getElementById('preview-content');
             const markdownPane = document.getElementById('markdown-pane');
@@ -409,58 +704,65 @@
             console.log('previewPane:', previewPane);
             console.log('syncScroll:', syncScroll);
             
+            const markedRenderer = new marked.Renderer();
+            const defaultImageRenderer = markedRenderer.image.bind(markedRenderer);
+            markedRenderer.image = function(hrefOrToken, title, text) {
+                let href, alt, titleAttr;
+                if (hrefOrToken && typeof hrefOrToken === 'object') {
+                    href = hrefOrToken.href;
+                    alt = hrefOrToken.text || '';
+                    titleAttr = hrefOrToken.title || '';
+                } else {
+                    href = hrefOrToken;
+                    alt = text || '';
+                    titleAttr = title || '';
+                }
+                const src = resolveImageSrc(href);
+                if (defaultImageRenderer.length <= 1) {
+                    return defaultImageRenderer({ href: src, title: titleAttr, text: alt });
+                }
+                let html = defaultImageRenderer(src, titleAttr, alt);
+                return html.replace(/<img /, '<img style="max-width:100%;height:auto;" ');
+            };
+
             marked.setOptions({
                 breaks: true,
                 gfm: true,
                 sanitize: false,
+                renderer: markedRenderer,
             });
-            
-            
-            function renderPreview(text) {
+
+            function renderPreview(text, options = {}) {
+                const scroll = options.preserveScroll ? captureScrollState() : null;
                 try {
                     const html = marked.parse(text || '');
                     preview.innerHTML = html;
-                    
-                    // Сопоставляем каждый блок preview с диапазоном строк исходника
-                    const lines = text.split('\n');
-                    const blocks = Array.from(preview.children); // прямые дети
+                    rewriteImagesInContainer(preview);
+
+                    const lines = (text || '').split('\n');
+                    const blocks = Array.from(preview.children);
                     let lineIndex = 0;
-                    
+
                     for (let block of blocks) {
                         let linesCount = 1;
                         const tag = block.tagName.toLowerCase();
-                        
+
                         if (tag === 'pre') {
-                            // Блок кода занимает столько строк, сколько внутри pre + 2 (```)
                             const codeLines = block.textContent.split('\n').length;
                             linesCount = codeLines + 2;
-                        } else if (tag === 'hr' || /^h[1-6]$/.test(tag) || tag === 'blockquote') {
-                            linesCount = 1;
-                        } else {
-                            // Параграф или пустая строка
-                            linesCount = 1;
                         }
-                        
+
                         block.dataset.sourceLineStart = lineIndex;
                         block.dataset.sourceLineEnd = lineIndex + linesCount - 1;
                         lineIndex += linesCount;
                     }
 
-                    // Highlight.js
-                    if (window.hljs) {
-                        preview.querySelectorAll('pre code').forEach((block) => {
-                            const classes = block.className.match(/language-(\w+)/);
-                            if (classes && classes[1]) {
-                                block.setAttribute('data-language', classes[1]);
-                            }
-                            block.parentElement.classList.add('hljs');
-                            hljs.highlightElement(block);
-                        });
-                    }
+                    highlightCodeBlocks(preview);
                 } catch (e) {
-                    console.error('❌ Ошибка парсинга Markdown:', e);
+                    console.error('Preview parse error:', e);
                     preview.textContent = text;
                 }
+                if (scroll) restoreScrollState(scroll);
             }
             
             window.cmEditor = {
@@ -468,22 +770,29 @@
                     if (isSyncing) return;
                     currentContent = text;
                     textarea.value = text;
-                    renderPreview(text);
-                    if (isLiveMode) {
+                    schedulePreviewRender.cancel();
+                    scheduleLiveRebuild.cancel();
+                    scheduleContentSync.cancel();
+                    if (isPreviewActive()) {
+                        renderPreview(text, { preserveScroll: true });
+                    }
+                    if (isLiveActive()) {
                         initLiveEditor(text);
                     }
                 },
 
                 setTheme(isDark) {
-                    if (isDark) {
-                        document.body.classList.add('dark');
-                        textarea.style.backgroundColor = '#0d1117';
-                        textarea.style.color = '#c9d1d9';
-                    } else {
-                        document.body.classList.remove('dark');
-                        textarea.style.backgroundColor = 'transparent';
-                        textarea.style.color = 'inherit';
-                    }
+                    document.body.classList.toggle('dark', !!isDark);
+                    textarea.style.backgroundColor = 'transparent';
+                    textarea.style.color = 'inherit';
+                    const markdownPane = document.getElementById('markdown-pane');
+                    const previewPane = document.getElementById('preview-pane');
+                    const liveEditor = document.getElementById('live-editor');
+                    [textarea, markdownPane, previewPane, liveEditor].forEach((el) => {
+                        if (!el) return;
+                        el.style.backgroundColor = 'transparent';
+                        el.style.color = 'inherit';
+                    });
                 },
 
                 setViewMode(mode) {
@@ -494,14 +803,20 @@
 
                     isLiveMode = (mode === 'live');
 
+                    const keepDark = document.body.classList.contains('dark');
                     document.body.className = document.body.className
                         .replace(/mode-\w+/g, '')
                         .trim();
-
+                    if (keepDark) {
+                        document.body.classList.add('dark');
+                    }
                     document.body.classList.add(`mode-${mode}`);
 
+                    flushPendingEditorUpdates();
                     if (mode === 'live') {
                         initLiveEditor(currentContent);
+                    } else if (mode === 'preview' || mode === 'split') {
+                        renderPreview(currentContent);
                     }
                 },
 
@@ -519,30 +834,135 @@
                 },
 
                 setPreviewTheme(themeName, themeCSS) {
-                    let oldStyle = document.getElementById('custom-theme-style');
-                    if (oldStyle) oldStyle.remove();
-
-                    const style = document.createElement('style');
-                    style.id = 'custom-theme-style';
-                    style.textContent = themeCSS;
-                    document.head.appendChild(style);
-
-                    renderPreview(currentContent);
+                    const scroll = captureScrollState();
+                    updateCustomThemeCSS(themeCSS);
+                    rehighlightCodeBlocks();
+                    restoreScrollState(scroll);
                 },
 
-                setCodeBlockTheme(themeName, cdnURL) {
-                    let oldLink = document.getElementById('highlight-theme');
-                    if (oldLink) oldLink.remove();
+                setCodeBlockTheme(themeName, cdnURL, codeBlockBg, codeBlockBorder) {
+                    if (codeBlockBg) {
+                        updateCodeBlockChromeStyle(codeBlockBg, codeBlockBorder);
+                    }
+                    const scroll = captureScrollState();
+                    const finish = () => {
+                        rehighlightCodeBlocks();
+                        restoreScrollState(scroll);
+                    };
+
+                    const existing = document.getElementById('highlight-theme');
+                    if (existing && existing.href === cdnURL) {
+                        finish();
+                        return;
+                    }
+
+                    if (loadedCodeThemeURLs.has(cdnURL) && existing) {
+                        existing.href = cdnURL;
+                        finish();
+                        return;
+                    }
+
+                    if (existing) existing.remove();
 
                     const link = document.createElement('link');
                     link.id = 'highlight-theme';
                     link.rel = 'stylesheet';
                     link.href = cdnURL;
-                    link.onload = () => renderPreview(currentContent);
+                    link.onload = () => {
+                        loadedCodeThemeURLs.add(cdnURL);
+                        finish();
+                    };
+                    link.onerror = finish;
                     document.head.appendChild(link);
+                },
+
+                setShowLineNumbers(enabled) {
+                    showCodeLineNumbers = !!enabled;
+                    rehighlightCodeBlocks();
+                },
+
+                setFocusMode(active, dimLines, hideToolbar) {
+                    focusModeActive = !!active;
+                    focusDimLines = !!dimLines;
+                    document.body.classList.toggle('editor-focus-mode', focusModeActive);
+                    document.body.classList.toggle('focus-dim-lines', focusModeActive && focusDimLines);
+                },
+
+                applyAppearance(options) {
+                    const scroll = captureScrollState();
+
+                    if (typeof options.isDark === 'boolean') {
+                        document.body.classList.toggle('dark', options.isDark);
+                        [textarea, markdownPane, previewPane, liveEditor].forEach((el) => {
+                            if (!el) return;
+                            el.style.backgroundColor = 'transparent';
+                            el.style.color = 'inherit';
+                        });
+                    }
+
+                    if (options.themeCSS) {
+                        updateCustomThemeCSS(options.themeCSS);
+                    }
+
+                    if (options.codeBlockBg) {
+                        updateCodeBlockChromeStyle(options.codeBlockBg, options.codeBlockBorder);
+                    }
+
+                    if (options.showLineNumbers !== undefined) {
+                        showCodeLineNumbers = !!options.showLineNumbers;
+                    }
+
+                    if (options.focusActive !== undefined) {
+                        this.setFocusMode(options.focusActive, options.focusDimLines, options.focusHideToolbar);
+                    }
+
+                    const finish = () => {
+                        rehighlightCodeBlocks();
+                        restoreScrollState(scroll);
+                    };
+
+                    const url = options.codeThemeURL;
+                    if (!url) {
+                        finish();
+                        return;
+                    }
+
+                    const existing = document.getElementById('highlight-theme');
+                    if (existing && existing.href === url) {
+                        finish();
+                        return;
+                    }
+
+                    if (loadedCodeThemeURLs.has(url) && existing) {
+                        existing.href = url;
+                        finish();
+                        return;
+                    }
+
+                    if (existing) existing.remove();
+
+                    const link = document.createElement('link');
+                    link.id = 'highlight-theme';
+                    link.rel = 'stylesheet';
+                    link.href = url;
+                    link.onload = () => {
+                        loadedCodeThemeURLs.add(url);
+                        finish();
+                    };
+                    link.onerror = finish;
+                    document.head.appendChild(link);
+                },
+
+                setDocumentPath(path) {
+                    documentBasePath = path || null;
+                    renderPreview(currentContent);
+                    if (isLiveMode) {
+                        initLiveEditor(currentContent);
+                    }
                 },
                 
                 insertFormatting(prefix, suffix) {
+                    if (isLiveMode) syncLiveToTextarea();
                     const ta = textarea;
                     const start = ta.selectionStart;
                     const end = ta.selectionEnd;
@@ -555,28 +975,37 @@
                         const pos = start + prefix.length + (selected || 'text').length;
                         ta.setSelectionRange(start + prefix.length, pos);
                     }
+                    if (isLiveMode) initLiveEditor(ta.value);
                     ta.focus();
                 },
 
                 insertAtLineStart(prefix) {
+                    if (isLiveMode) syncLiveToTextarea();
                     const ta = textarea;
                     const start = ta.selectionStart;
                     const lineStart = ta.value.lastIndexOf('\n', start - 1) + 1;
                     ta.setRangeText(prefix, lineStart, lineStart, 'end');
                     ta.dispatchEvent(new Event('input'));
+                    if (isLiveMode) initLiveEditor(ta.value);
                     ta.focus();
                 },
 
                 insertText(text) {
+                    if (isLiveMode) syncLiveToTextarea();
                     const ta = textarea;
-                    const start = ta.selectionStart;
-                    const end = ta.selectionEnd;
+                    let start = ta.selectionStart;
+                    let end = ta.selectionEnd;
+                    if (isLiveMode && start === 0 && end === 0 && ta.value.length > 0) {
+                        start = end = ta.value.length;
+                    }
                     ta.setRangeText(text, start, end, 'end');
                     ta.dispatchEvent(new Event('input'));
+                    if (isLiveMode) initLiveEditor(ta.value);
                     ta.focus();
                 },
                 
                 insertLink(clipboardUrl) {
+                    if (isLiveMode) syncLiveToTextarea();
                     const ta = textarea;
                     const start = ta.selectionStart;
                     const end = ta.selectionEnd;
@@ -608,6 +1037,7 @@
                     }
 
                     ta.dispatchEvent(new Event('input'));
+                    if (isLiveMode) initLiveEditor(ta.value);
                     ta.focus();
                 },
 
@@ -631,15 +1061,15 @@
                         if (isSyncing) return;
                         const text = textarea.value;
                         currentContent = text;
-                        renderPreview(text);
-
-                        if (window.webkit?.messageHandlers?.contentChanged) {
-                            window.webkit.messageHandlers.contentChanged.postMessage(text);
+                        schedulePreviewRender(text);
+                        scheduleContentSync(text);
+                        if (isLiveActive()) {
+                            scheduleLiveRebuild(text);
                         }
+                    });
 
-                        if (isLiveMode) {
-                            initLiveEditor(text);
-                        }
+                    textarea.addEventListener('blur', () => {
+                        flushPendingEditorUpdates();
                     });
 
                     swapButton.addEventListener('click', () => {
@@ -695,6 +1125,38 @@
                     });
 
                     console.log('✅ Синхронизация скролла включена');
+
+                    document.addEventListener('paste', (e) => {
+                        const items = e.clipboardData?.items;
+                        if (!items) return;
+                        const imageFiles = [];
+                        for (const item of items) {
+                            if (item.type.startsWith('image/')) {
+                                const file = item.getAsFile();
+                                if (file) imageFiles.push(file);
+                            }
+                        }
+                        if (imageFiles.length) {
+                            e.preventDefault();
+                            handleImageFiles(imageFiles);
+                        }
+                    });
+
+                    document.addEventListener('dragover', (e) => {
+                        if (e.dataTransfer?.types?.includes('Files')) {
+                            e.preventDefault();
+                        }
+                    });
+
+                    document.addEventListener('drop', (e) => {
+                        const files = Array.from(e.dataTransfer?.files || [])
+                            .filter(f => f.type.startsWith('image/'));
+                        if (files.length) {
+                            e.preventDefault();
+                            handleImageFiles(files);
+                        }
+                    });
+
                     isInitialized = true;
                 }
                 
@@ -770,6 +1232,13 @@
                         continue;
                     }
 
+                    const trimmed = line.trim();
+                    if (/^<img\s/i.test(trimmed) || /^!\[[^\]]*\]\([^)]+\)/.test(trimmed)) {
+                        blocks.push({ type: 'image', source: line });
+                        i++;
+                        continue;
+                    }
+
                     blocks.push({ type: 'p', source: line });
                     i++;
                 }
@@ -805,10 +1274,12 @@
             }
 
             function renderInline(text) {
-                // Сохраняем img теги до экранирования
                 const imgPlaceholders = [];
                 let s = (text || '').replace(/<img\s[^>]*>/gi, (match) => {
-                    imgPlaceholders.push(match);
+                    const resolved = match.replace(/\ssrc=(["'])(.*?)\1/i, (_, quote, src) => {
+                        return ` src=${quote}${resolveImageSrc(src)}${quote}`;
+                    });
+                    imgPlaceholders.push(resolved);
                     return `\x00IMG${imgPlaceholders.length - 1}\x00`;
                 });
 
@@ -823,7 +1294,9 @@
                 s = s.replace(/_(?!_)(.+?)_(?!_)/g, '<em>$1</em>');
                 s = s.replace(/~~(.+?)~~/g, '<del>$1</del>');
                 s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-                s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%;">');
+                s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, src) => {
+                    return `<img src="${resolveImageSrc(src)}" alt="${alt}" style="max-width:100%;height:auto;">`;
+                });
                 s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
 
                 // Восстанавливаем img теги
@@ -836,6 +1309,16 @@
             function renderBlock(block) {
                 if (block.type === 'empty') return '<br>';
                 if (block.type === 'hr') return '';
+
+                if (block.type === 'image') {
+                    const trimmed = block.source.trim();
+                    if (trimmed.startsWith('<img')) {
+                        return trimmed.replace(/\ssrc=(["'])(.*?)\1/i, (_, quote, src) => {
+                            return ` src=${quote}${resolveImageSrc(src)}${quote}`;
+                        });
+                    }
+                    return renderInline(trimmed);
+                }
 
                 if (block.type === 'code-fence') {
                     const lines = block.source.split('\n');
@@ -1081,20 +1564,9 @@
 
             function syncLiveContentToModel() {
                 currentContent = liveBlocks.map(block => block.source).join('\n');
-
-                console.log('🟢 syncLiveContentToModel called');
-                console.log('🟢 currentContent length:', currentContent.length);
-                console.log('🟢 currentContent preview:', currentContent.slice(0, 120));
-
                 textarea.value = currentContent;
-                renderPreview(currentContent);
-
-                if (window.webkit?.messageHandlers?.contentChanged) {
-                    console.log('🟢 sending contentChanged to Swift');
-                    window.webkit.messageHandlers.contentChanged.postMessage(currentContent);
-                } else {
-                    console.log('🔴 contentChanged handler missing');
-                }
+                schedulePreviewRender(currentContent);
+                scheduleContentSync(currentContent);
             }
 
 

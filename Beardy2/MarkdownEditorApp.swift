@@ -40,6 +40,14 @@ struct MarkdownEditorApp: App {
                     documentManager.openDocument()
                 }
                 .keyboardShortcut("o", modifiers: .command)
+
+                Button("Close Tab") {
+                    if let id = documentManager.selectedTabID {
+                        documentManager.closeTab(id)
+                    }
+                }
+                .keyboardShortcut("w", modifiers: .command)
+                .disabled(documentManager.selectedTabID == nil)
             }
             
             CommandGroup(after: .newItem) {
@@ -165,10 +173,10 @@ struct MarkdownEditorApp: App {
         
         Settings {
             SettingsView()
+                .environmentObject(themeService)
         }
         Window("Settings", id: "custom_settings") {
             SettingsView()
-                .environmentObject(documentManager)
                 .environmentObject(themeService)
         }
         .windowResizability(.contentSize)

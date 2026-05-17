@@ -11,68 +11,22 @@ struct EditorView: View {
     
     var body: some View {
         GeometryReader { geometry in
-            VStack {
-                // Editor Toolbar
-                EditorToolbar()
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 8)
-                    .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
-                
-                HStack(spacing: 0) {
-                    // Main Editor Area
-                    ZStack {
-                        switch documentManager.viewMode {
-                        case .edit:
-                            // Только редактор с разметкой
-                            MarkdownEditorArea(scrollPosition: $scrollPosition)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            
-                        case .live:
-                            // Typora-like режим: один экран, визуальное редактирование
-                            MarkdownEditorArea(scrollPosition: $scrollPosition)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            
-                        case .preview:
-                            // Только превью (визуальный режим)
-                            MarkdownPreviewArea(editorScrollPosition: $scrollPosition)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            
-                        case .split:
-                            MarkdownEditorArea(scrollPosition: $scrollPosition)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        }
-                    }
-//                    ZStack {
-//                        switch documentManager.viewMode {
-//                        case .edit:
-//                            MarkdownEditorArea(scrollPosition: $scrollPosition)
-//                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-//                        case .preview:
-//                            MarkdownPreviewArea(editorScrollPosition: $scrollPosition)
-//                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-//                            
-//                        case .split:
-//                            HSplitView {
-//                                MarkdownEditorArea(scrollPosition: $scrollPosition)
-//                                    .frame(minWidth: 300)
-//                                
-//                                MarkdownPreviewArea(editorScrollPosition: $scrollPosition)
-//                                    .frame(minWidth: 300)
-//                            }
-//                        }
-//                    }
-                    
-                    // Outline Sidebar
-                    if showOutline {
+            HStack(spacing: 0) {
+                MarkdownEditorArea(scrollPosition: $scrollPosition)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if showOutline {
                         Divider()
-                        
+
                         OutlineView()
                             .frame(width: outlineWidth)
                             .frame(maxHeight: .infinity)
                     }
-                }
             }
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
+        .animation(nil, value: documentManager.viewMode)
+        .animation(nil, value: themeService.appearanceToken)
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
                 Button(action: {
@@ -124,24 +78,38 @@ struct MarkdownEditorArea: View {
             CodeMirrorWebView(
                 text: $textContent,
                 selectedRange: $selectedRange,
-                currentDocumentURL: documentManager.currentDocument?.url, isDark: themeService.currentTheme.id.contains("dark"),
+                currentDocumentURL: documentManager.currentDocument?.url,
+                isDark: themeService.isDarkMode,
                 viewMode: documentManager.viewMode,
-                previewTheme: themeService.currentTheme,
-                codeBlockTheme: themeService.currentCodeTheme
+                editorTheme: themeService.currentTheme,
+                codeBlockTheme: themeService.currentCodeTheme,
+                appearanceToken: themeService.appearanceToken
             )
-            
-            .id(documentManager.currentDocument?.id)
             .focused($isEditorFocused)
         }
         .onAppear {
             loadDocumentContent()
             isEditorFocused = true
+            EditorAppearanceSync.pushToEditor()
         }
-        .onChange(of: documentManager.currentDocument?.id) { _, _ in
+        .onChange(of: documentManager.selectedTabID) { _, _ in
             loadDocumentContent()
+            EditorAppearanceSync.pushToEditor()
+        }
+        .onChange(of: themeService.appearanceToken) { _, _ in
+            EditorAppearanceSync.pushToEditor()
         }
         .onChange(of: textContent) { _, newValue in
             documentManager.updateContent(newValue)
+        }
+        .onChange(of: previewSyncScroll) { _, enabled in
+            NotificationCenter.default.post(
+                name: .editorExecJS,
+                object: "window.cmEditor?.setSyncScroll(\(enabled));"
+            )
+        }
+        .onChange(of: documentManager.focusMode) { _, _ in
+            EditorAppearanceSync.pushFocusMode()
         }
         .findReplacePanel(
             isPresented: $showFindPanel,
@@ -511,9 +479,8 @@ struct MarkdownTextEditor: NSViewRepresentable {
 struct MarkdownPreviewArea: View {
     @EnvironmentObject var documentManager: DocumentManager
     @EnvironmentObject var themeService: ThemeService
-    @AppStorage("codeBlockTheme") private var codeBlockTheme: String = "github-dark"
-    @AppStorage("showCodeLineNumbers") private var showCodeLineNumbers: Bool = false
-    @AppStorage("previewSyncScroll") private var previewSyncScroll: Bool = true
+    @AppStorage(AppConstants.Keys.showCodeLineNumbers) private var showCodeLineNumbers: Bool = false
+    @AppStorage(AppConstants.Keys.previewSyncScroll) private var previewSyncScroll: Bool = true
     @Binding var editorScrollPosition: CGFloat
     
     var body: some View {
@@ -522,9 +489,9 @@ struct MarkdownPreviewArea: View {
                 MarkdownRenderer(
                     markdown: doc.content,
                     documentURL: doc.url,
-                    textColor: themeService.currentTheme.colors.text.description,
-                    isDark: themeService.currentTheme.id.contains("dark"),
-                    codeTheme: codeBlockTheme,
+                    textColor: themeService.colors.text.description,
+                    isDark: themeService.isDarkMode,
+                    codeTheme: themeService.currentCodeTheme.rawValue,
                     showLineNumbers: showCodeLineNumbers,
                     scrollPosition: previewSyncScroll ? editorScrollPosition : 0
                 )

@@ -15,7 +15,12 @@ struct ContentView: View {
     @State private var sidebarWidth: CGFloat = 250
     @State private var selectedSidebarItem: SidebarItem? = .recentFiles
     @State private var editorScrollPosition: CGFloat = 0
-    
+    @AppStorage(AppConstants.Keys.focusHideToolbar) private var focusHideToolbar = false
+
+    private var showsEditorToolbar: Bool {
+        !(documentManager.focusMode && focusHideToolbar)
+    }
+
     var body: some View {
         NavigationView {
             // Sidebar
@@ -26,14 +31,31 @@ struct ContentView: View {
             }
             
             // Main Editor Area
-            ZStack {
-                if documentManager.currentDocument == nil {
-                    WelcomeView()
-                } else {
+            VStack(spacing: 0) {
+                if documentManager.hasOpenTabs {
+                    if showsEditorToolbar {
+                        EditorToolbar()
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 8)
+                            .background(themeService.currentTheme.colors.code)
+
+                        ThemedDivider()
+                    }
+
+                    DocumentTabBar()
+                        .layoutPriority(0)
+
+                    ThemedDivider()
+
                     EditorView(scrollPosition: $editorScrollPosition)
+                        .layoutPriority(1)
+                } else {
+                    WelcomeView()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .animation(nil, value: themeService.appearanceToken)
+            .animation(nil, value: documentManager.viewMode)
         }
         .navigationViewStyle(.automatic)
         .toolbar {
@@ -68,6 +90,15 @@ struct ContentView: View {
             }
             
             ToolbarItemGroup(placement: .automatic) {
+                if let doc = documentManager.currentDocument, doc.url != nil {
+                    Button(action: {
+                        documentManager.toggleFavoriteForActiveDocument()
+                    }) {
+                        Image(systemName: documentManager.isFavorite(path: doc.url!.path) ? "star.fill" : "star")
+                    }
+                    .help("Add to favorites")
+                }
+
                 ShowShortcutsButton()
                 // View mode toggle
                 Picker("", selection: $documentManager.viewMode) {
@@ -82,6 +113,7 @@ struct ContentView: View {
                 }
                 .pickerStyle(.segmented)
                 .help("View Mode")
+                .animation(nil, value: documentManager.viewMode)
 
 
                 // Theme toggle
@@ -134,4 +166,13 @@ enum ViewMode: String, CaseIterable {
     case preview = "Preview"
     case split = "Split"
     case live = "Live"
+}
+
+private struct ThemedDivider: View {
+    @EnvironmentObject private var themeService: ThemeService
+
+    var body: some View {
+        Divider()
+            .overlay(themeService.currentTheme.colors.border)
+    }
 }

@@ -22,11 +22,10 @@ struct SettingsView: View {
     @AppStorage("highlightCurrentLine") private var highlightCurrentLine: Bool = true
     @AppStorage("indentSize") private var indentSize: Int = 4
     @AppStorage("useSpacesForTabs") private var useSpacesForTabs: Bool = true
-    @AppStorage("previewTheme") private var previewTheme: String = "GitHub"
-    @AppStorage("previewSyncScroll") private var previewSyncScroll: Bool = true
-    @AppStorage("codeBlockTheme") private var codeBlockTheme: String = "github-dark"
+    @AppStorage(AppConstants.Keys.previewSyncScroll) private var previewSyncScroll: Bool = true
     @AppStorage("exportImageFormat") private var exportImageFormat: String = "png"
     @AppStorage("exportPDFMargins") private var exportPDFMargins: Double = 72
+    @AppStorage(ImageInsertionHelper.copyImagesToDocumentFolderKey) private var copyImagesToDocumentFolder: Bool = true
     
     @State private var selectedTab: SettingsTab = .general
     
@@ -48,7 +47,8 @@ struct SettingsView: View {
                 showLineNumbers: $showLineNumbers,
                 highlightCurrentLine: $highlightCurrentLine,
                 indentSize: $indentSize,
-                useSpacesForTabs: $useSpacesForTabs
+                useSpacesForTabs: $useSpacesForTabs,
+                copyImagesToDocumentFolder: $copyImagesToDocumentFolder
             )
             .tabItem {
                 Label("Editor", systemImage: "doc.text")
@@ -67,11 +67,7 @@ struct SettingsView: View {
             }
             .tag(SettingsTab.typing)
             
-            AppearanceSettingsView(
-                previewTheme: $previewTheme,
-                previewSyncScroll: $previewSyncScroll,
-                codeBlockTheme: $codeBlockTheme
-            )
+            AppearanceSettingsView(previewSyncScroll: $previewSyncScroll)
             .tabItem {
                 Label("Appearance", systemImage: "paintbrush")
             }
@@ -79,7 +75,8 @@ struct SettingsView: View {
             
             ExportSettingsView(
                 imageFormat: $exportImageFormat,
-                pdfMargins: $exportPDFMargins
+                pdfMargins: $exportPDFMargins,
+                copyImagesToDocumentFolder: $copyImagesToDocumentFolder
             )
             .tabItem {
                 Label("Export", systemImage: "square.and.arrow.up")
@@ -172,6 +169,7 @@ struct EditorSettingsView: View {
     @Binding var highlightCurrentLine: Bool
     @Binding var indentSize: Int
     @Binding var useSpacesForTabs: Bool
+    @Binding var copyImagesToDocumentFolder: Bool
     
     let availableFonts = ["SF Mono", "Menlo", "Monaco", "Courier New", "Source Code Pro", "Fira Code"]
     
@@ -249,6 +247,19 @@ struct EditorSettingsView: View {
                             Stepper("\(indentSize) spaces", value: $indentSize, in: 2...8)
                                 .frame(width: 150)
                         }
+                    }
+                    
+                    Divider()
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Images")
+                            .font(.headline)
+                        
+                        Toggle("Copy images to document folder", isOn: $copyImagesToDocumentFolder)
+                        Text("Like Typora: optionally copy images next to the .md file for portability.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .padding()
@@ -331,15 +342,13 @@ struct TypingSettingsView: View {
 
 // MARK: - Appearance Settings
 struct AppearanceSettingsView: View {
-    @Binding var previewTheme: String
+    @ObservedObject private var themeService = ThemeService.shared
     @Binding var previewSyncScroll: Bool
-    @Binding var codeBlockTheme: String
-    
-    @AppStorage("showCodeLineNumbers") private var showCodeLineNumbers: Bool = false
-    
-    let themes = ["GitHub", "GitHub Dark", "Minimal", "Solarized Light", "Solarized Dark"]
-    let codeThemes = ["github", "github-dark", "monokai", "dracula", "atom-one-dark", "vs", "xcode", "nord", "tokyo-night-dark"]
-    
+
+    @AppStorage(AppConstants.Keys.showCodeLineNumbers) private var showCodeLineNumbers: Bool = false
+    @AppStorage(AppConstants.Keys.focusDimInactiveLines) private var focusDimInactiveLines: Bool = false
+    @AppStorage(AppConstants.Keys.focusHideToolbar) private var focusHideToolbar: Bool = false
+
     var body: some View {
         Form {
             Section {
@@ -347,63 +356,94 @@ struct AppearanceSettingsView: View {
                     Text("Appearance")
                         .font(.title2)
                         .fontWeight(.bold)
-                    
-                    Divider()
-                    
-                    ThemePickerView(themeService: ThemeService.shared)
 
                     Divider()
-                    
-                    // Preview
+
+                    ThemePickerView(themeService: themeService)
+
+                    Toggle("Follow system light/dark appearance", isOn: Binding(
+                        get: { themeService.followSystemAppearance },
+                        set: { themeService.setFollowSystemAppearance($0) }
+                    ))
+
+                    Divider()
+
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Preview")
                             .font(.headline)
-                        
-                        HStack {
-                            Text("Preview theme:")
-                            Spacer()
-                            Picker("", selection: $previewTheme) {
-                                ForEach(themes, id: \.self) { theme in
-                                    Text(theme).tag(theme)
-                                }
-                            }
-                            .frame(width: 200)
-                        }
-                        
+
                         Toggle("Sync scroll between editor and preview", isOn: $previewSyncScroll)
+                            .onChange(of: previewSyncScroll) { _, enabled in
+                                NotificationCenter.default.post(
+                                    name: .editorExecJS,
+                                    object: "window.cmEditor?.setSyncScroll(\(enabled));"
+                                )
+                            }
                     }
-                    
+
                     Divider()
-                    
-                    // Code Blocks
+
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Code Blocks")
                             .font(.headline)
-                        
+
+                        Toggle("Match code blocks to editor theme", isOn: Binding(
+                            get: { themeService.isCodeThemeAutomatic },
+                            set: { automatic in
+                                if automatic {
+                                    themeService.selectCodeTheme(
+                                        themeService.themeFamily.pairedCodeTheme(isDark: themeService.isDarkMode),
+                                        automatic: true
+                                    )
+                                } else {
+                                    themeService.selectCodeTheme(themeService.currentCodeTheme, automatic: false)
+                                }
+                            }
+                        ))
+
                         HStack {
                             Text("Syntax highlighting:")
                             Spacer()
-                            Picker("", selection: $codeBlockTheme) {
-                                ForEach(codeThemes, id: \.self) { theme in
-                                    Text(theme.capitalized).tag(theme)
+                            Picker("", selection: Binding(
+                                get: { themeService.currentCodeTheme },
+                                set: { themeService.selectCodeTheme($0, automatic: false) }
+                            )) {
+                                ForEach(CodeTheme.allCases) { theme in
+                                    Text(theme.displayName).tag(theme)
                                 }
                             }
                             .frame(width: 200)
+                            .disabled(themeService.isCodeThemeAutomatic)
                         }
-                        
+
+                        if themeService.isCodeThemeAutomatic {
+                            Text("Using \(themeService.currentCodeTheme.displayName) — paired with \(themeService.themeFamily.displayName).")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+
                         Toggle("Show line numbers in code blocks", isOn: $showCodeLineNumbers)
-//                        Toggle("Enable code folding", isOn: .constant(true))
+                            .onChange(of: showCodeLineNumbers) { _, _ in
+                                EditorAppearanceSync.pushLineNumbers()
+                            }
                     }
-                    
+
                     Divider()
-                    
-                    // Focus Mode
+
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Focus Mode")
                             .font(.headline)
-                        
-                        Toggle("Dim inactive lines", isOn: .constant(true))
-                        Toggle("Hide toolbar in focus mode", isOn: .constant(false))
+
+                        Toggle("Dim editor chrome in focus mode", isOn: $focusDimInactiveLines)
+                            .onChange(of: focusDimInactiveLines) { _, _ in
+                                EditorAppearanceSync.pushFocusMode()
+                            }
+
+                        Toggle("Hide formatting toolbar in focus mode", isOn: $focusHideToolbar)
+
+                        Text("Enable Focus Mode with ⇧⌘F. Toolbar hiding applies while focus mode is active.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                 }
                 .padding()
@@ -417,6 +457,7 @@ struct AppearanceSettingsView: View {
 struct ExportSettingsView: View {
     @Binding var imageFormat: String
     @Binding var pdfMargins: Double
+    @Binding var copyImagesToDocumentFolder: Bool
     
     let imageFormats = ["PNG", "JPEG", "SVG", "WebP"]
     
@@ -468,7 +509,7 @@ struct ExportSettingsView: View {
                             .font(.headline)
                         
                         Toggle("Include CSS styles", isOn: .constant(true))
-                        Toggle("Embed images as base64", isOn: .constant(false))
+                        Toggle("Embed images beside document", isOn: $copyImagesToDocumentFolder)
                         Toggle("Generate standalone HTML", isOn: .constant(true))
                     }
                     
@@ -524,5 +565,7 @@ struct ExportSettingsView: View {
 struct SettingsView_Previews: PreviewProvider {
     static var previews: some View {
         SettingsView()
+            .environmentObject(DocumentManager())
+            .environmentObject(ThemeService.shared)
     }
 }

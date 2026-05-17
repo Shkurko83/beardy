@@ -9,49 +9,16 @@ import WebKit
 
 class ImageSchemeHandler: NSObject, WKURLSchemeHandler {
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
-        guard let url = urlSchemeTask.request.url,
-              var filePath = url.absoluteString
-                .replacingOccurrences(of: "beardy://localhost", with: "")
-                .removingPercentEncoding else {
+        guard let requestURL = urlSchemeTask.request.url,
+              let filePath = ImageInsertionHelper.localPath(fromBeardyURL: requestURL) else {
             urlSchemeTask.didFailWithError(NSError(domain: "ImageSchemeHandler", code: 404))
             return
         }
 
         let fileURL = URL(fileURLWithPath: filePath)
+        let imageData = loadImageData(from: fileURL)
 
-        // Пробуем получить доступ через сохранённый bookmark
-        let bookmarkKey = "bookmark_\(fileURL.path)"
-        var data: Data?
-
-        if let bookmarkData = UserDefaults.standard.data(forKey: bookmarkKey) {
-            var isStale = false
-            if let resolvedURL = try? URL(
-                resolvingBookmarkData: bookmarkData,
-                options: .withSecurityScope,
-                relativeTo: nil,
-                bookmarkDataIsStale: &isStale
-            ) {
-                _ = resolvedURL.startAccessingSecurityScopedResource()
-                data = try? Data(contentsOf: resolvedURL)
-                resolvedURL.stopAccessingSecurityScopedResource()
-
-                // Обновляем stale bookmark
-                if isStale, let newBookmark = try? resolvedURL.bookmarkData(
-                    options: .withSecurityScope,
-                    includingResourceValuesForKeys: nil,
-                    relativeTo: nil
-                ) {
-                    UserDefaults.standard.set(newBookmark, forKey: bookmarkKey)
-                }
-            }
-        }
-
-        // Fallback — прямое чтение (работает если файл ещё в памяти)
-        if data == nil {
-            data = try? Data(contentsOf: fileURL)
-        }
-
-        guard let imageData = data else {
+        guard let imageData else {
             urlSchemeTask.didFailWithError(NSError(domain: "ImageSchemeHandler", code: 404))
             return
         }
@@ -68,7 +35,7 @@ class ImageSchemeHandler: NSObject, WKURLSchemeHandler {
         }
 
         let response = URLResponse(
-            url: url,
+            url: requestURL,
             mimeType: mimeType,
             expectedContentLength: imageData.count,
             textEncodingName: nil
@@ -79,4 +46,38 @@ class ImageSchemeHandler: NSObject, WKURLSchemeHandler {
     }
 
     func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {}
+
+    private func loadImageData(from fileURL: URL) -> Data? {
+        let bookmarkKey = "bookmark_\(fileURL.path)"
+        if let bookmarkData = UserDefaults.standard.data(forKey: bookmarkKey) {
+            var isStale = false
+            if let resolvedURL = try? URL(
+                resolvingBookmarkData: bookmarkData,
+                options: .withSecurityScope,
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            ) {
+                let accessed = resolvedURL.startAccessingSecurityScopedResource()
+                defer {
+                    if accessed { resolvedURL.stopAccessingSecurityScopedResource() }
+                }
+                if let data = try? Data(contentsOf: resolvedURL) {
+                    if isStale, let newBookmark = try? resolvedURL.bookmarkData(
+                        options: .withSecurityScope,
+                        includingResourceValuesForKeys: nil,
+                        relativeTo: nil
+                    ) {
+                        UserDefaults.standard.set(newBookmark, forKey: bookmarkKey)
+                    }
+                    return data
+                }
+            }
+        }
+
+        let accessed = ImageInsertionHelper.startAccessing(url: fileURL)
+        defer {
+            if accessed { fileURL.stopAccessingSecurityScopedResource() }
+        }
+        return try? Data(contentsOf: fileURL)
+    }
 }
