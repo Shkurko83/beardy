@@ -115,8 +115,10 @@ struct CodeMirrorWebView: NSViewRepresentable {
 
         let showLineNumbers = UserDefaults.standard.bool(forKey: AppConstants.Keys.showCodeLineNumbers)
         let focusActive = UserDefaults.standard.bool(forKey: AppConstants.Keys.focusMode)
+        let viewRaw = UserDefaults.standard.string(forKey: "selectedViewMode") ?? ViewMode.edit.rawValue
+        let readingChrome = focusActive || viewRaw == ViewMode.preview.rawValue
         let focusDim = UserDefaults.standard.bool(forKey: AppConstants.Keys.focusDimInactiveLines)
-        let focusHide = UserDefaults.standard.bool(forKey: AppConstants.Keys.focusHideToolbar)
+        let focusHide = readingChrome
         let theme = ThemeService.shared
         let escapedURL = escapeForJS(codeBlockTheme.cdnURL)
         let escapedName = escapeForJS(codeBlockTheme.rawValue)
@@ -135,7 +137,7 @@ struct CodeMirrorWebView: NSViewRepresentable {
                 codeBlockBg: `\(escapedBg)`,
                 codeBlockBorder: `\(escapedBorder)`,
                 showLineNumbers: \(showLineNumbers),
-                focusActive: \(focusActive),
+                focusActive: \(readingChrome),
                 focusDimLines: \(focusDim),
                 focusHideToolbar: \(focusHide)
             });

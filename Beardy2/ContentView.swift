@@ -12,25 +12,26 @@ struct ContentView: View {
     @EnvironmentObject var themeService: ThemeService
     @Environment(\.openWindow) private var openWindow
     @State private var showSidebar = true
+    @State private var sidebarBeforeReadingChrome: Bool?
+    @State private var wasReadingChrome = false
     @State private var sidebarWidth: CGFloat = 250
     @State private var selectedSidebarItem: SidebarItem? = .recentFiles
     @State private var editorScrollPosition: CGFloat = 0
-    @AppStorage(AppConstants.Keys.focusHideToolbar) private var focusHideToolbar = false
+    @AppStorage(AppConstants.Keys.focusHideSidebar) private var focusHideSidebar = true
 
     private var showsEditorToolbar: Bool {
-        !(documentManager.focusMode && focusHideToolbar)
+        !documentManager.isReadingChromeMode
     }
 
     var body: some View {
-        NavigationView {
-            // Sidebar
+        HStack(spacing: 0) {
             if showSidebar {
                 SidebarView(selectedItem: $selectedSidebarItem)
                     .frame(minWidth: 200, idealWidth: sidebarWidth, maxWidth: 400)
-                    .layoutPriority(1)
+
+                ThemedDivider()
             }
-            
-            // Main Editor Area
+
             VStack(spacing: 0) {
                 if documentManager.hasOpenTabs {
                     if showsEditorToolbar {
@@ -57,7 +58,6 @@ struct ContentView: View {
             .animation(nil, value: themeService.appearanceToken)
             .animation(nil, value: documentManager.viewMode)
         }
-        .navigationViewStyle(.automatic)
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 Button(action: {
@@ -136,11 +136,62 @@ struct ContentView: View {
         }
         .onAppear {
             documentManager.showSidebarBinding = $showSidebar
+            wasReadingChrome = documentManager.isReadingChromeMode
+            if wasReadingChrome {
+                enterReadingChromeSidebar()
+            }
         }
         .onChange(of: documentManager.sidebarToggleSignal) { _, _ in
             withAnimation {
                 showSidebar.toggle()
             }
+        }
+        .onChange(of: documentManager.focusMode) { _, _ in
+            handleReadingChromeSidebarTransition()
+        }
+        .onChange(of: documentManager.viewMode) { _, _ in
+            handleReadingChromeSidebarTransition()
+        }
+        .onChange(of: focusHideSidebar) { _, _ in
+            applyReadingChromeSidebarDefaultsIfActive()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .readingChromeSettingsChanged)) { _ in
+            applyReadingChromeSidebarDefaultsIfActive()
+        }
+    }
+
+    private func handleReadingChromeSidebarTransition() {
+        let active = documentManager.isReadingChromeMode
+        if active && !wasReadingChrome {
+            enterReadingChromeSidebar()
+        } else if !active && wasReadingChrome {
+            exitReadingChromeSidebar()
+        }
+        wasReadingChrome = active
+    }
+
+    /// Applies Appearance defaults when entering preview/focus. Manual toggles do not affect the next entry.
+    private func enterReadingChromeSidebar() {
+        if sidebarBeforeReadingChrome == nil {
+            sidebarBeforeReadingChrome = showSidebar
+        }
+        withAnimation {
+            showSidebar = !focusHideSidebar
+        }
+    }
+
+    private func exitReadingChromeSidebar() {
+        guard let saved = sidebarBeforeReadingChrome else { return }
+        withAnimation {
+            showSidebar = saved
+        }
+        sidebarBeforeReadingChrome = nil
+    }
+
+    private func applyReadingChromeSidebarDefaultsIfActive() {
+        guard documentManager.isReadingChromeMode else { return }
+        withAnimation {
+            showSidebar = !focusHideSidebar
         }
     }
 }

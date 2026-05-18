@@ -92,6 +92,8 @@ struct AppConstants {
         static let showCodeLineNumbers = "showCodeLineNumbers"
         static let focusDimInactiveLines = "focusDimInactiveLines"
         static let focusHideToolbar = "focusHideToolbar"
+        static let focusHideSidebar = "focusHideSidebar"
+        static let focusHideOutline = "focusHideOutline"
         static let followSystemAppearance = "followSystemAppearance"
         
         // Export

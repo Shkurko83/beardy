@@ -347,7 +347,8 @@ struct AppearanceSettingsView: View {
 
     @AppStorage(AppConstants.Keys.showCodeLineNumbers) private var showCodeLineNumbers: Bool = false
     @AppStorage(AppConstants.Keys.focusDimInactiveLines) private var focusDimInactiveLines: Bool = false
-    @AppStorage(AppConstants.Keys.focusHideToolbar) private var focusHideToolbar: Bool = false
+    @AppStorage(AppConstants.Keys.focusHideSidebar) private var focusHideSidebar: Bool = true
+    @AppStorage(AppConstants.Keys.focusHideOutline) private var focusHideOutline: Bool = true
 
     var body: some View {
         Form {
@@ -439,9 +440,17 @@ struct AppearanceSettingsView: View {
                                 EditorAppearanceSync.pushFocusMode()
                             }
 
-                        Toggle("Hide formatting toolbar in focus mode", isOn: $focusHideToolbar)
+                        Toggle("Hide left sidebar in focus mode", isOn: $focusHideSidebar)
+                            .onChange(of: focusHideSidebar) { _, _ in
+                                NotificationCenter.default.post(name: .readingChromeSettingsChanged, object: nil)
+                            }
 
-                        Text("Enable Focus Mode with ⇧⌘F. Toolbar hiding applies while focus mode is active.")
+                        Toggle("Hide outline panel in focus mode", isOn: $focusHideOutline)
+                            .onChange(of: focusHideOutline) { _, _ in
+                                NotificationCenter.default.post(name: .readingChromeSettingsChanged, object: nil)
+                            }
+
+                        Text("Applies in Preview (eye) and Focus Mode (⇧⌘F). Panels follow these defaults each time you enter; you can still toggle them while viewing. The formatting toolbar is always hidden in both modes.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }

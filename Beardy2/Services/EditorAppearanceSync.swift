@@ -16,7 +16,7 @@ enum EditorAppearanceSync {
             codeBlockBorder: theme.codeBlockBorderHex,
             showLineNumbers: UserDefaults.standard.bool(forKey: AppConstants.Keys.showCodeLineNumbers),
             focusDimLines: UserDefaults.standard.bool(forKey: AppConstants.Keys.focusDimInactiveLines),
-            focusHideToolbar: UserDefaults.standard.bool(forKey: AppConstants.Keys.focusHideToolbar)
+            focusHideToolbar: readingChromeActive()
         )
         NotificationCenter.default.post(name: .editorExecJS, object: js)
     }
@@ -31,12 +31,17 @@ enum EditorAppearanceSync {
 
     static func pushFocusMode() {
         let dim = UserDefaults.standard.bool(forKey: AppConstants.Keys.focusDimInactiveLines)
-        let hide = UserDefaults.standard.bool(forKey: AppConstants.Keys.focusHideToolbar)
-        let active = UserDefaults.standard.bool(forKey: AppConstants.Keys.focusMode)
+        let active = readingChromeActive()
         NotificationCenter.default.post(
             name: .editorExecJS,
-            object: "window.cmEditor?.setFocusMode(\(active), \(dim), \(hide));"
+            object: "window.cmEditor?.setFocusMode(\(active), \(dim), \(active));"
         )
+    }
+
+    private static func readingChromeActive() -> Bool {
+        let focus = UserDefaults.standard.bool(forKey: AppConstants.Keys.focusMode)
+        let viewRaw = UserDefaults.standard.string(forKey: "selectedViewMode") ?? ViewMode.edit.rawValue
+        return focus || viewRaw == ViewMode.preview.rawValue
     }
 
     private static func buildApplyScript(
@@ -57,7 +62,7 @@ enum EditorAppearanceSync {
         let escapedName = escapeForJS(codeThemeName)
         let escapedBg = escapeForJS(codeBlockBg)
         let escapedBorder = escapeForJS(codeBlockBorder)
-        let focusActive = UserDefaults.standard.bool(forKey: AppConstants.Keys.focusMode)
+        let focusActive = readingChromeActive()
 
         return """
         (function() {

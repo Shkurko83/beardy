@@ -15,7 +15,18 @@ class DocumentManager: ObservableObject {
     @Published var typewriterMode: Bool = false
     @Published var sidebarToggleSignal: Bool = false
     @Published var sourceMode: Bool = false
-    @AppStorage("selectedViewMode") var viewMode: ViewMode = .edit
+    @Published var viewMode: ViewMode = .edit {
+        didSet {
+            UserDefaults.standard.set(viewMode.rawValue, forKey: Self.viewModeDefaultsKey)
+        }
+    }
+
+    private static let viewModeDefaultsKey = "selectedViewMode"
+
+    /// Preview (eye) or Focus Mode (⇧⌘F) — read-only chrome with hidden panels/toolbar.
+    var isReadingChromeMode: Bool {
+        focusMode || viewMode == .preview
+    }
     
     // MARK: - Private Properties
     private var recentDocuments: [RecentDocument] = []
@@ -56,6 +67,10 @@ class DocumentManager: ObservableObject {
         loadRecentDocuments()
         loadFavorites()
         loadFolders()
+        if let raw = UserDefaults.standard.string(forKey: Self.viewModeDefaultsKey),
+           let stored = ViewMode(rawValue: raw) {
+            viewMode = stored
+        }
         focusMode = UserDefaults.standard.bool(forKey: AppConstants.Keys.focusMode)
         setupAutoSave()
         setupImagePasteObserver()
@@ -1027,4 +1042,5 @@ extension Notification.Name {
     static let showReplacePanel = Notification.Name("showReplacePanel")
     static let editorExecJS = Notification.Name("editorExecJS")
     static let processImageFile = Notification.Name("processImageFile")
+    static let readingChromeSettingsChanged = Notification.Name("readingChromeSettingsChanged")
 }

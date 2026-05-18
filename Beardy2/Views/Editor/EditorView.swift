@@ -4,9 +4,12 @@ struct EditorView: View {
     @EnvironmentObject var documentManager: DocumentManager
     @EnvironmentObject var themeService: ThemeService
     @State private var showOutline = false
+    @State private var outlineBeforeReadingChrome: Bool?
+    @State private var wasReadingChrome = false
     @State private var outlineWidth: CGFloat = 200
     @State private var showStatisticsPanel = false
     @State private var showFindPanel = false
+    @AppStorage(AppConstants.Keys.focusHideOutline) private var focusHideOutline = true
     @Binding var scrollPosition: CGFloat
     
     var body: some View {
@@ -54,6 +57,58 @@ struct EditorView: View {
                 )
                 .padding(.top, 60)
             }
+        }
+        .onAppear {
+            wasReadingChrome = documentManager.isReadingChromeMode
+            if wasReadingChrome {
+                enterReadingChromeOutline()
+            }
+        }
+        .onChange(of: documentManager.focusMode) { _, _ in
+            handleReadingChromeOutlineTransition()
+        }
+        .onChange(of: documentManager.viewMode) { _, _ in
+            handleReadingChromeOutlineTransition()
+        }
+        .onChange(of: focusHideOutline) { _, _ in
+            applyReadingChromeOutlineDefaultsIfActive()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .readingChromeSettingsChanged)) { _ in
+            applyReadingChromeOutlineDefaultsIfActive()
+        }
+    }
+
+    private func handleReadingChromeOutlineTransition() {
+        let active = documentManager.isReadingChromeMode
+        if active && !wasReadingChrome {
+            enterReadingChromeOutline()
+        } else if !active && wasReadingChrome {
+            exitReadingChromeOutline()
+        }
+        wasReadingChrome = active
+    }
+
+    private func enterReadingChromeOutline() {
+        if outlineBeforeReadingChrome == nil {
+            outlineBeforeReadingChrome = showOutline
+        }
+        withAnimation {
+            showOutline = !focusHideOutline
+        }
+    }
+
+    private func exitReadingChromeOutline() {
+        guard let saved = outlineBeforeReadingChrome else { return }
+        withAnimation {
+            showOutline = saved
+        }
+        outlineBeforeReadingChrome = nil
+    }
+
+    private func applyReadingChromeOutlineDefaultsIfActive() {
+        guard documentManager.isReadingChromeMode else { return }
+        withAnimation {
+            showOutline = !focusHideOutline
         }
     }
 }
@@ -109,6 +164,9 @@ struct MarkdownEditorArea: View {
             )
         }
         .onChange(of: documentManager.focusMode) { _, _ in
+            EditorAppearanceSync.pushFocusMode()
+        }
+        .onChange(of: documentManager.viewMode) { _, _ in
             EditorAppearanceSync.pushFocusMode()
         }
         .findReplacePanel(
