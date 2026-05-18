@@ -23,10 +23,12 @@ struct SidebarView: View {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
                     .font(.system(size: 14))
-                
+
                 TextField("Search files...", text: $searchText)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
+                    .lineLimit(1)
+                    .frame(minWidth: 0, maxWidth: .infinity)
                 
                 if !searchText.isEmpty {
                     Button(action: {
@@ -39,6 +41,7 @@ struct SidebarView: View {
                     .buttonStyle(.plain)
                 }
             }
+            .frame(minWidth: 0, maxWidth: .infinity)
             .padding(10)
             .background(Color(NSColor.controlBackgroundColor))
             .cornerRadius(8)
@@ -116,6 +119,8 @@ struct SidebarView: View {
             .padding(12)
             .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .clipped()
         .background(themeService.currentTheme.colors.background.opacity(0.5))
         .onAppear {
             loadSidebarData()
@@ -318,15 +323,18 @@ struct SidebarFileRow: View {
                     Text(name)
                         .font(.system(size: 12, weight: .medium))
                         .lineLimit(1)
+                        .truncationMode(.tail)
                         .foregroundColor(.primary)
-                    
+
                     Text(subtitle)
                         .font(.system(size: 10))
                         .foregroundColor(.secondary)
                         .lineLimit(1)
+                        .truncationMode(.tail)
                 }
-                
-                Spacer()
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+
+                Spacer(minLength: 0)
                 
                 if isHovered {
                     Button(action: onFavorite) {
@@ -339,6 +347,7 @@ struct SidebarFileRow: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(isHovered ? Color(NSColor.controlBackgroundColor) : Color.clear)
             .cornerRadius(6)
         }
@@ -374,16 +383,19 @@ struct FolderRowView: View {
                     
                     Text(folder.name)
                         .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                         .foregroundColor(.primary)
-                    
-                    Spacer()
-                    
+                        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+
                     Text("\(folder.fileCount)")
                         .font(.system(size: 10))
                         .foregroundColor(.secondary)
+                        .layoutPriority(1)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(isHovered ? Color(NSColor.controlBackgroundColor) : Color.clear)
                 .cornerRadius(6)
             }
@@ -391,25 +403,27 @@ struct FolderRowView: View {
             .onHover { hovering in
                 isHovered = hovering
             }
-            
+
             if isExpanded {
                 ForEach(folder.files) { file in
                     HStack(spacing: 10) {
                         Spacer()
                             .frame(width: 22)
-                        
+
                         Image(systemName: "doc.text")
                             .font(.system(size: 12))
                             .foregroundColor(.secondary)
-                        
+
                         Text(file.name)
                             .font(.system(size: 11))
                             .foregroundColor(.primary)
-                        
-                        Spacer()
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         onOpenFile(file)

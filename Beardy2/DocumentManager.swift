@@ -15,8 +15,13 @@ class DocumentManager: ObservableObject {
     @Published var typewriterMode: Bool = false
     @Published var sidebarToggleSignal: Bool = false
     @Published var sourceMode: Bool = false
+    @Published var showSidebar: Bool = true
+    @Published var showOutline: Bool = false
+    /// Published so SwiftUI reliably refreshes chrome when Preview / Focus Mode changes.
+    @Published private(set) var isReadingChromeActive: Bool = false
     @Published var viewMode: ViewMode = .edit {
         didSet {
+            guard oldValue != viewMode else { return }
             UserDefaults.standard.set(viewMode.rawValue, forKey: Self.viewModeDefaultsKey)
         }
     }
@@ -25,17 +30,17 @@ class DocumentManager: ObservableObject {
 
     /// Preview (eye) or Focus Mode (⇧⌘F) — read-only chrome with hidden panels/toolbar.
     var isReadingChromeMode: Bool {
-        focusMode || viewMode == .preview
+        isReadingChromeActive
     }
-    
+
     // MARK: - Private Properties
     private var recentDocuments: [RecentDocument] = []
     private var favorites: [FavoriteDocument] = []
     private var folders: [FolderItem] = []
     private var cancellables = Set<AnyCancellable>()
-    
-    // Binding for sidebar
-    var showSidebarBinding: Binding<Bool>?
+    private var sidebarBeforeReadingChrome: Bool?
+    private var outlineBeforeReadingChrome: Bool?
+    private var wasReadingChrome = false
 
     var currentDocument: MarkdownDocument? {
         get {
@@ -72,9 +77,53 @@ class DocumentManager: ObservableObject {
             viewMode = stored
         }
         focusMode = UserDefaults.standard.bool(forKey: AppConstants.Keys.focusMode)
+        syncReadingChromePanels()
         setupAutoSave()
         setupImagePasteObserver()
 
+    }
+
+    // MARK: - Reading chrome (Preview / Focus Mode) panel layout
+
+    func syncReadingChromePanels() {
+        let active = focusMode || viewMode == .preview
+
+        if active && !wasReadingChrome {
+            if sidebarBeforeReadingChrome == nil {
+                sidebarBeforeReadingChrome = showSidebar
+            }
+            if outlineBeforeReadingChrome == nil {
+                outlineBeforeReadingChrome = showOutline
+            }
+            showSidebar = !Self.focusHideSidebarDefault
+            showOutline = !Self.focusHideOutlineDefault
+        } else if !active && wasReadingChrome {
+            if let saved = sidebarBeforeReadingChrome {
+                showSidebar = saved
+            }
+            if let saved = outlineBeforeReadingChrome {
+                showOutline = saved
+            }
+            sidebarBeforeReadingChrome = nil
+            outlineBeforeReadingChrome = nil
+        }
+
+        wasReadingChrome = active
+        isReadingChromeActive = active
+    }
+
+    func applyReadingChromePanelDefaultsIfActive() {
+        guard isReadingChromeActive else { return }
+        showSidebar = !Self.focusHideSidebarDefault
+        showOutline = !Self.focusHideOutlineDefault
+    }
+
+    private static var focusHideSidebarDefault: Bool {
+        UserDefaults.standard.object(forKey: AppConstants.Keys.focusHideSidebar) as? Bool ?? true
+    }
+
+    private static var focusHideOutlineDefault: Bool {
+        UserDefaults.standard.object(forKey: AppConstants.Keys.focusHideOutline) as? Bool ?? true
     }
 
     private func setupImagePasteObserver() {

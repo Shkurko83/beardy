@@ -11,74 +11,89 @@ struct ContentView: View {
     @EnvironmentObject var documentManager: DocumentManager
     @EnvironmentObject var themeService: ThemeService
     @Environment(\.openWindow) private var openWindow
-    @State private var showSidebar = true
-    @State private var sidebarBeforeReadingChrome: Bool?
-    @State private var wasReadingChrome = false
-    @State private var sidebarWidth: CGFloat = 250
+    @AppStorage(AppConstants.Keys.sidebarPanelWidth) private var sidebarPanelWidth: Double = AppConstants.Defaults.sidebarWidth
+    @AppStorage(AppConstants.Keys.outlinePanelWidth) private var outlinePanelWidth: Double = AppConstants.Defaults.outlineWidth
+    @State private var sidebarWidthDuringDrag: CGFloat?
+    @State private var outlineWidthDuringDrag: CGFloat?
     @State private var selectedSidebarItem: SidebarItem? = .recentFiles
     @State private var editorScrollPosition: CGFloat = 0
-    @AppStorage(AppConstants.Keys.focusHideSidebar) private var focusHideSidebar = true
-
-    private var showsEditorToolbar: Bool {
-        !documentManager.isReadingChromeMode
-    }
 
     var body: some View {
-        HStack(spacing: 0) {
-            if showSidebar {
-                SidebarView(selectedItem: $selectedSidebarItem)
-                    .frame(minWidth: 200, idealWidth: sidebarWidth, maxWidth: 400)
+        GeometryReader { geometry in
+            let windowWidth = geometry.size.width
+            let layout = panelLayout(for: windowWidth)
 
-                ThemedDivider()
-            }
+            HStack(spacing: 0) {
+                if documentManager.showSidebar {
+                    HStack(spacing: 0) {
+                        SidebarView(selectedItem: $selectedSidebarItem)
+                            .frame(width: layout.sidebarWidth)
+                            .frame(maxHeight: .infinity)
+                            .clipped()
 
-            VStack(spacing: 0) {
-                if documentManager.hasOpenTabs {
-                    if showsEditorToolbar {
-                        EditorToolbar()
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 8)
-                            .background(themeService.currentTheme.colors.code)
-
-                        ThemedDivider()
+                        PanelResizeHandle(
+                            width: layout.sidebarWidth,
+                            windowWidth: windowWidth,
+                            sidebarVisible: documentManager.showSidebar,
+                            outlineVisible: documentManager.showOutline,
+                            sidebarPreferred: sidebarWidthDuringDrag ?? CGFloat(sidebarPanelWidth),
+                            outlinePreferred: outlineWidthDuringDrag ?? CGFloat(outlinePanelWidth),
+                            edge: .leadingPanel,
+                            onWidthChange: { sidebarWidthDuringDrag = $0 },
+                            onDragEnded: {
+                                let width = sidebarWidthDuringDrag ?? layout.sidebarWidth
+                                sidebarPanelWidth = Double(
+                                    PanelWidthConstraints.sanitizedStoredWidth(
+                                        width,
+                                        defaultWidth: AppConstants.Defaults.sidebarWidth
+                                    )
+                                )
+                                sidebarWidthDuringDrag = nil
+                            }
+                        )
+                        .environmentObject(themeService)
                     }
-
-                    DocumentTabBar()
-                        .layoutPriority(0)
-
-                    ThemedDivider()
-
-                    EditorView(scrollPosition: $editorScrollPosition)
-                        .layoutPriority(1)
-                } else {
-                    WelcomeView()
+                    .transition(PanelLayoutAnimation.leadingPanel)
                 }
+
+                mainEditorColumn(windowWidth: windowWidth, layout: layout)
+                    .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .animation(nil, value: themeService.appearanceToken)
-            .animation(nil, value: documentManager.viewMode)
+            .animation(PanelLayoutAnimation.slide, value: documentManager.showSidebar)
+            .animation(PanelLayoutAnimation.slide, value: documentManager.showOutline)
+            .frame(width: windowWidth, height: geometry.size.height)
+            .onAppear {
+                repairStoredPanelWidthsIfNeeded()
+                clampStoredWidthsForWindowResize(windowWidth)
+            }
+            .onChange(of: windowWidth) { _, newWidth in
+                clampStoredWidthsForWindowResize(newWidth)
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 Button(action: {
-                    withAnimation {
-                        showSidebar.toggle()
+                    withAnimation(PanelLayoutAnimation.slide) {
+                        documentManager.showSidebar.toggle()
                     }
                 }) {
                     Image(systemName: "sidebar.left")
                 }
                 .help("Toggle Sidebar")
             }
-            
+
             ToolbarItemGroup(placement: .principal) {
                 if let doc = documentManager.currentDocument {
                     HStack(spacing: 8) {
                         Image(systemName: "doc.text")
                             .foregroundColor(.secondary)
-                        
+
                         Text(doc.fileName)
                             .font(.headline)
-                        
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+
                         if doc.hasUnsavedChanges {
                             Circle()
                                 .fill(Color.orange)
@@ -88,7 +103,7 @@ struct ContentView: View {
                     .padding(.horizontal)
                 }
             }
-            
+
             ToolbarItemGroup(placement: .automatic) {
                 if let doc = documentManager.currentDocument, doc.url != nil {
                     Button(action: {
@@ -100,7 +115,6 @@ struct ContentView: View {
                 }
 
                 ShowShortcutsButton()
-                // View mode toggle
                 Picker("", selection: $documentManager.viewMode) {
                     Label("Edit", systemImage: "pencil")
                         .tag(ViewMode.edit)
@@ -113,10 +127,7 @@ struct ContentView: View {
                 }
                 .pickerStyle(.segmented)
                 .help("View Mode")
-                .animation(nil, value: documentManager.viewMode)
 
-
-                // Theme toggle
                 Button(action: {
                     themeService.toggleDarkMode()
                 }) {
@@ -124,8 +135,6 @@ struct ContentView: View {
                 }
                 .help("Toggle Theme")
 
-                
-                // Settings
                 Button(action: {
                     openWindow(id: "custom_settings")
                 }) {
@@ -135,64 +144,116 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            documentManager.showSidebarBinding = $showSidebar
-            wasReadingChrome = documentManager.isReadingChromeMode
-            if wasReadingChrome {
-                enterReadingChromeSidebar()
-            }
+            documentManager.syncReadingChromePanels()
         }
         .onChange(of: documentManager.sidebarToggleSignal) { _, _ in
-            withAnimation {
-                showSidebar.toggle()
+            withAnimation(PanelLayoutAnimation.slide) {
+                documentManager.showSidebar.toggle()
             }
         }
         .onChange(of: documentManager.focusMode) { _, _ in
-            handleReadingChromeSidebarTransition()
+            withAnimation(PanelLayoutAnimation.slide) {
+                documentManager.syncReadingChromePanels()
+            }
+            EditorAppearanceSync.pushFocusMode()
         }
         .onChange(of: documentManager.viewMode) { _, _ in
-            handleReadingChromeSidebarTransition()
-        }
-        .onChange(of: focusHideSidebar) { _, _ in
-            applyReadingChromeSidebarDefaultsIfActive()
+            withAnimation(PanelLayoutAnimation.slide) {
+                documentManager.syncReadingChromePanels()
+            }
+            EditorAppearanceSync.pushFocusMode()
         }
         .onReceive(NotificationCenter.default.publisher(for: .readingChromeSettingsChanged)) { _ in
-            applyReadingChromeSidebarDefaultsIfActive()
+            withAnimation(PanelLayoutAnimation.slide) {
+                documentManager.applyReadingChromePanelDefaultsIfActive()
+            }
         }
     }
 
-    private func handleReadingChromeSidebarTransition() {
-        let active = documentManager.isReadingChromeMode
-        if active && !wasReadingChrome {
-            enterReadingChromeSidebar()
-        } else if !active && wasReadingChrome {
-            exitReadingChromeSidebar()
-        }
-        wasReadingChrome = active
+    private func panelLayout(for windowWidth: CGFloat) -> PanelLayoutMetrics {
+        PanelWidthConstraints.resolve(
+            windowWidth: windowWidth,
+            sidebarVisible: documentManager.showSidebar,
+            outlineVisible: documentManager.showOutline,
+            sidebarPreferred: sidebarWidthDuringDrag ?? CGFloat(sidebarPanelWidth),
+            outlinePreferred: outlineWidthDuringDrag ?? CGFloat(outlinePanelWidth)
+        )
     }
 
-    /// Applies Appearance defaults when entering preview/focus. Manual toggles do not affect the next entry.
-    private func enterReadingChromeSidebar() {
-        if sidebarBeforeReadingChrome == nil {
-            sidebarBeforeReadingChrome = showSidebar
+    /// Fixes widths corrupted when panels were hidden (e.g. saved as 0).
+    private func repairStoredPanelWidthsIfNeeded() {
+        let sidebar = PanelWidthConstraints.sanitizedStoredWidth(
+            CGFloat(sidebarPanelWidth),
+            defaultWidth: AppConstants.Defaults.sidebarWidth
+        )
+        let outline = PanelWidthConstraints.sanitizedStoredWidth(
+            CGFloat(outlinePanelWidth),
+            defaultWidth: AppConstants.Defaults.outlineWidth
+        )
+        if sidebar != CGFloat(sidebarPanelWidth) {
+            sidebarPanelWidth = Double(sidebar)
         }
-        withAnimation {
-            showSidebar = !focusHideSidebar
+        if outline != CGFloat(outlinePanelWidth) {
+            outlinePanelWidth = Double(outline)
         }
     }
 
-    private func exitReadingChromeSidebar() {
-        guard let saved = sidebarBeforeReadingChrome else { return }
-        withAnimation {
-            showSidebar = saved
-        }
-        sidebarBeforeReadingChrome = nil
+    private func clampStoredWidthsForWindowResize(_ windowWidth: CGFloat) {
+        guard sidebarWidthDuringDrag == nil, outlineWidthDuringDrag == nil else { return }
+        var sidebar = sidebarPanelWidth
+        var outline = outlinePanelWidth
+        PanelWidthConstraints.clampStored(
+            sidebar: &sidebar,
+            outline: &outline,
+            windowWidth: windowWidth,
+            sidebarVisible: documentManager.showSidebar,
+            outlineVisible: documentManager.showOutline
+        )
+        sidebarPanelWidth = sidebar
+        outlinePanelWidth = outline
     }
 
-    private func applyReadingChromeSidebarDefaultsIfActive() {
-        guard documentManager.isReadingChromeMode else { return }
-        withAnimation {
-            showSidebar = !focusHideSidebar
+    @ViewBuilder
+    private func mainEditorColumn(windowWidth: CGFloat, layout: PanelLayoutMetrics) -> some View {
+        VStack(spacing: 0) {
+            if documentManager.hasOpenTabs {
+                if !documentManager.isReadingChromeActive {
+                    EditorToolbar()
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 8)
+                        .background(themeService.currentTheme.colors.code)
+
+                    ThemedDivider()
+                }
+
+                DocumentTabBar()
+                    .layoutPriority(0)
+
+                ThemedDivider()
+
+                EditorView(
+                    scrollPosition: $editorScrollPosition,
+                    windowWidth: windowWidth,
+                    resolvedOutlineWidth: layout.outlineWidth,
+                    outlineWidthDuringDrag: $outlineWidthDuringDrag,
+                    onOutlineDragEnded: { width in
+                        outlinePanelWidth = Double(
+                            PanelWidthConstraints.sanitizedStoredWidth(
+                                width,
+                                defaultWidth: AppConstants.Defaults.outlineWidth
+                            )
+                        )
+                        outlineWidthDuringDrag = nil
+                    }
+                )
+                .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+                .layoutPriority(1)
+            } else {
+                WelcomeView()
+            }
         }
+        .animation(nil, value: themeService.appearanceToken)
+        .animation(nil, value: documentManager.viewMode)
     }
 }
 
@@ -200,9 +261,9 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     case recentFiles = "Recent Files"
     case favorites = "Favorites"
     case folders = "Folders"
-    
+
     var id: String { rawValue }
-    
+
     var icon: String {
         switch self {
         case .recentFiles: return "clock"

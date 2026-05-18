@@ -3,38 +3,69 @@ import SwiftUI
 struct EditorView: View {
     @EnvironmentObject var documentManager: DocumentManager
     @EnvironmentObject var themeService: ThemeService
-    @State private var showOutline = false
-    @State private var outlineBeforeReadingChrome: Bool?
-    @State private var wasReadingChrome = false
-    @State private var outlineWidth: CGFloat = 200
+    @AppStorage(AppConstants.Keys.outlinePanelWidth) private var outlinePanelWidth: Double = AppConstants.Defaults.outlineWidth
+    @AppStorage(AppConstants.Keys.sidebarPanelWidth) private var sidebarPanelWidth: Double = AppConstants.Defaults.sidebarWidth
     @State private var showStatisticsPanel = false
     @State private var showFindPanel = false
-    @AppStorage(AppConstants.Keys.focusHideOutline) private var focusHideOutline = true
     @Binding var scrollPosition: CGFloat
-    
+    let windowWidth: CGFloat
+    let resolvedOutlineWidth: CGFloat
+    @Binding var outlineWidthDuringDrag: CGFloat?
+    let onOutlineDragEnded: (CGFloat) -> Void
+
+    private var displayOutlineWidth: CGFloat {
+        outlineWidthDuringDrag ?? resolvedOutlineWidth
+    }
+
     var body: some View {
         GeometryReader { geometry in
             HStack(spacing: 0) {
                 MarkdownEditorArea(scrollPosition: $scrollPosition)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+                    .layoutPriority(1)
 
-                if showOutline {
-                        Divider()
+                if documentManager.showOutline {
+                    HStack(spacing: 0) {
+                        PanelResizeHandle(
+                            width: displayOutlineWidth,
+                            windowWidth: windowWidth,
+                            sidebarVisible: documentManager.showSidebar,
+                            outlineVisible: documentManager.showOutline,
+                            sidebarPreferred: CGFloat(sidebarPanelWidth),
+                            outlinePreferred: outlineWidthDuringDrag ?? CGFloat(outlinePanelWidth),
+                            edge: .trailingPanel,
+                            onWidthChange: { outlineWidthDuringDrag = $0 },
+                            onDragEnded: {
+                                onOutlineDragEnded(outlineWidthDuringDrag ?? displayOutlineWidth)
+                            }
+                        )
+                        .environmentObject(themeService)
 
                         OutlineView()
-                            .frame(width: outlineWidth)
+                            .frame(width: displayOutlineWidth)
                             .frame(maxHeight: .infinity)
+                            .clipped()
                     }
+                    .transition(PanelLayoutAnimation.trailingPanel)
+                }
             }
+            .animation(PanelLayoutAnimation.slide, value: documentManager.showOutline)
             .frame(width: geometry.size.width, height: geometry.size.height)
+            .animation(nil, value: outlineWidthDuringDrag)
+            .transaction { transaction in
+                if outlineWidthDuringDrag != nil {
+                    transaction.animation = nil
+                }
+            }
         }
+        .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
         .animation(nil, value: documentManager.viewMode)
         .animation(nil, value: themeService.appearanceToken)
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
                 Button(action: {
-                    withAnimation {
-                        showOutline.toggle()
+                    withAnimation(PanelLayoutAnimation.slide) {
+                        documentManager.showOutline.toggle()
                     }
                 }) {
                     Image(systemName: "list.bullet.indent")
@@ -47,7 +78,6 @@ struct EditorView: View {
                 FullStatisticsPanel(statistics: DocumentStatistics(from: doc.content))
             }
         }
-        // ← Добавьте overlay для Find & Replace
         .overlay(alignment: .top) {
             if showFindPanel, let doc = documentManager.currentDocument {
                 FindReplacePanel(
@@ -57,58 +87,6 @@ struct EditorView: View {
                 )
                 .padding(.top, 60)
             }
-        }
-        .onAppear {
-            wasReadingChrome = documentManager.isReadingChromeMode
-            if wasReadingChrome {
-                enterReadingChromeOutline()
-            }
-        }
-        .onChange(of: documentManager.focusMode) { _, _ in
-            handleReadingChromeOutlineTransition()
-        }
-        .onChange(of: documentManager.viewMode) { _, _ in
-            handleReadingChromeOutlineTransition()
-        }
-        .onChange(of: focusHideOutline) { _, _ in
-            applyReadingChromeOutlineDefaultsIfActive()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .readingChromeSettingsChanged)) { _ in
-            applyReadingChromeOutlineDefaultsIfActive()
-        }
-    }
-
-    private func handleReadingChromeOutlineTransition() {
-        let active = documentManager.isReadingChromeMode
-        if active && !wasReadingChrome {
-            enterReadingChromeOutline()
-        } else if !active && wasReadingChrome {
-            exitReadingChromeOutline()
-        }
-        wasReadingChrome = active
-    }
-
-    private func enterReadingChromeOutline() {
-        if outlineBeforeReadingChrome == nil {
-            outlineBeforeReadingChrome = showOutline
-        }
-        withAnimation {
-            showOutline = !focusHideOutline
-        }
-    }
-
-    private func exitReadingChromeOutline() {
-        guard let saved = outlineBeforeReadingChrome else { return }
-        withAnimation {
-            showOutline = saved
-        }
-        outlineBeforeReadingChrome = nil
-    }
-
-    private func applyReadingChromeOutlineDefaultsIfActive() {
-        guard documentManager.isReadingChromeMode else { return }
-        withAnimation {
-            showOutline = !focusHideOutline
         }
     }
 }
@@ -617,6 +595,8 @@ struct OutlineView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
         .background(themeService.currentTheme.colors.background)
         .foregroundStyle(themeService.currentTheme.colors.text)
         .onChange(of: documentManager.currentDocument?.content) { _, _ in
@@ -702,11 +682,12 @@ struct OutlineHeadingRow: View {
                     .font(.system(size: 11))
                     .foregroundColor(.primary)
                     .lineLimit(1)
-                
-                Spacer()
+                    .truncationMode(.tail)
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(isHovered ? Color(NSColor.controlBackgroundColor) : Color.clear)
             .cornerRadius(4)
         }

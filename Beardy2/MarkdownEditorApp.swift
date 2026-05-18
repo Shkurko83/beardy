@@ -14,7 +14,10 @@ struct MarkdownEditorApp: App {
     @StateObject private var themeService = ThemeService.shared
     
     init() {
-        // Инициализируем keyboard shortcuts manager
+        UserDefaults.standard.register(defaults: [
+            AppConstants.Keys.focusHideSidebar: true,
+            AppConstants.Keys.focusHideOutline: true,
+        ])
         _ = KeyboardShortcutsManager.shared
     }
     

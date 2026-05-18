@@ -102,7 +102,9 @@ struct AppConstants {
         
         // View State
         static let sidebarVisible = "sidebarVisible"
+        static let sidebarPanelWidth = "sidebarPanelWidth"
         static let outlineVisible = "outlineVisible"
+        static let outlinePanelWidth = "outlinePanelWidth"
         static let viewMode = "viewMode"
         static let focusMode = "focusMode"
         static let typewriterMode = "typewriterMode"
