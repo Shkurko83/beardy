@@ -871,37 +871,16 @@ class DocumentManager: ObservableObject {
         }
     }
 
-    /// Вставляет Markdown в активную вкладку и синхронизирует редактор.
+    /// Вставляет Markdown в позицию курсора в WebView-редакторе.
     func insertMarkdownSnippet(_ markdown: String) {
-        guard let id = selectedTabID,
-              let index = tabs.firstIndex(where: { $0.id == id }) else { return }
-        var doc = tabs[index].document
-        let snippet = doc.content.isEmpty ? markdown : "\n\n\(markdown)\n\n"
-        doc.content += snippet
-        doc.hasUnsavedChanges = true
-        doc.updateStatistics()
-        tabs[index].document = doc
-        let fullContent = doc.content
-        updateContent(fullContent)
+        guard selectedTabID != nil else { return }
 
-        if let docURL = doc.url {
+        if let docURL = currentDocument?.url {
             let folderPath = docURL.deletingLastPathComponent().path
-                .replacingOccurrences(of: "\\", with: "\\\\")
-                .replacingOccurrences(of: "`", with: "\\`")
-            execEditorJS("window.cmEditor?.setDocumentPath(`\(folderPath)`);")
+            execEditorJS("window.cmEditor?.setDocumentPath(`\(escapeForJS(folderPath))`);")
         }
 
-        guard viewMode != .preview else { return }
-
-        let escaped = doc.content
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "`", with: "\\`")
-            .replacingOccurrences(of: "$", with: "\\$")
-            .replacingOccurrences(of: "\n", with: "\\n")
-            .replacingOccurrences(of: "\r", with: "\\r")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-
-        execEditorJS("window.cmEditor?.updateContent(`\(escaped)`);")
+        insertText(markdown)
     }
 
     private func execEditorJS(_ js: String) {
@@ -910,15 +889,54 @@ class DocumentManager: ObservableObject {
 
     
     func insertTable() {
-        let tableText = """
-        
-        | Column 1 | Column 2 | Column 3 |
-        |----------|----------|----------|
-        | Cell 1   | Cell 2   | Cell 3   |
-        | Cell 4   | Cell 5   | Cell 6   |
-        
-        """
-        insertText(tableText)
+        let alert = NSAlert()
+        alert.messageText = "Insert Table"
+        alert.informativeText = "Choose the number of rows and columns."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Insert")
+        alert.addButton(withTitle: "Cancel")
+
+        let accessory = NSView(frame: NSRect(x: 0, y: 0, width: 260, height: 72))
+
+        let rowsLabel = NSTextField(labelWithString: "Rows:")
+        rowsLabel.frame = NSRect(x: 16, y: 44, width: 72, height: 20)
+        rowsLabel.alignment = .right
+
+        let rowsField = NSTextField(frame: NSRect(x: 100, y: 40, width: 64, height: 24))
+        rowsField.stringValue = "3"
+        rowsField.alignment = .right
+
+        let colsLabel = NSTextField(labelWithString: "Columns:")
+        colsLabel.frame = NSRect(x: 16, y: 12, width: 72, height: 20)
+        colsLabel.alignment = .right
+
+        let colsField = NSTextField(frame: NSRect(x: 100, y: 8, width: 64, height: 24))
+        colsField.stringValue = "3"
+        colsField.alignment = .right
+
+        accessory.addSubview(rowsLabel)
+        accessory.addSubview(rowsField)
+        accessory.addSubview(colsLabel)
+        accessory.addSubview(colsField)
+        alert.accessoryView = accessory
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        let rows = max(2, Int(rowsField.stringValue) ?? 3)
+        let cols = max(1, Int(colsField.stringValue) ?? 3)
+        insertText(buildGFMTable(rows: rows, columns: cols))
+    }
+
+    private func buildGFMTable(rows: Int, columns: Int) -> String {
+        let header = (1...columns).map { "Column \($0)" }
+        var lines: [String] = []
+        lines.append("| " + header.joined(separator: " | ") + " |")
+        lines.append("| " + header.map { _ in "---" }.joined(separator: " | ") + " |")
+        for _ in 1..<rows {
+            let cells = (1...columns).map { _ in " " }
+            lines.append("| " + cells.joined(separator: " | ") + " |")
+        }
+        return "\n" + lines.joined(separator: "\n") + "\n"
     }
     
     private func insertFormatting(prefix: String, suffix: String) {

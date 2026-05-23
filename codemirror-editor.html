@@ -142,9 +142,78 @@
 
                     /* Стили превью */
                     #preview-content {
-                        line-height: 1.6;
+                        line-height: 1.7;
                         font-size: 16px;
-                        padding: 40px 20px;
+                        padding: 40px 80px;
+                        box-sizing: border-box;
+                    }
+                    #preview-content .live-block-table { cursor: default; }
+                    .live-block.live-block-table {
+                        white-space: normal;
+                        max-width: 100%;
+                    }
+                    .md-table-scroll {
+                        display: block;
+                        max-width: 100%;
+                        overflow-x: auto;
+                        overflow-y: hidden;
+                        margin: 0.5em 0;
+                        -webkit-overflow-scrolling: touch;
+                        scrollbar-width: thin;
+                    }
+                    body.dark .md-table-scroll {
+                        scrollbar-color: #484f58 transparent;
+                    }
+                    .md-table {
+                        border-collapse: collapse;
+                        width: max-content;
+                        min-width: max(
+                            100%,
+                            calc(var(--md-table-columns, 1) * var(--md-table-cell-min, 88px))
+                        );
+                        margin: 0;
+                        table-layout: auto;
+                    }
+                    .md-table th,
+                    .md-table td {
+                        border: 1px solid #8b949e;
+                        padding: 8px 12px;
+                        min-width: var(--md-table-cell-min, 88px);
+                        max-width: 360px;
+                        min-height: 2.25em;
+                        vertical-align: top;
+                        box-sizing: border-box;
+                        line-height: 1.5;
+                        word-wrap: break-word;
+                        overflow-wrap: anywhere;
+                    }
+                    body.dark .md-table th,
+                    body.dark .md-table td {
+                        border-color: #6e7681;
+                    }
+                    .md-table th {
+                        background: #f0f3f6;
+                        font-weight: 600;
+                    }
+                    .md-table td {
+                        background: #ffffff;
+                    }
+                    body.dark .md-table th {
+                        background: #21262d;
+                    }
+                    body.dark .md-table td {
+                        background: #161b22;
+                    }
+                    .live-block-table [contenteditable="true"] {
+                        cursor: text;
+                        outline: none;
+                        display: table-cell;
+                    }
+                    .live-block-table [contenteditable="true"]:focus {
+                        box-shadow: inset 0 0 0 2px rgba(9, 105, 218, 0.45);
+                    }
+                    body.dark .live-block-table [contenteditable="true"]:focus {
+                        box-shadow: inset 0 0 0 2px rgba(56, 139, 253, 0.55);
                     }
                     #preview-content h1 { font-size: 2em; margin: 0.67em 0; }
                     #preview-content h2 { font-size: 1.6em; margin: 0.75em 0; }
@@ -224,24 +293,24 @@
                     #live-editor .hljs-ln td.hljs-ln-code {
                         padding-left: 12px !important;
                     }
-                    #preview-content table {
+                    #preview-content table:not(.md-table) {
                         border-collapse: collapse;
                         margin: 1em 0;
                         width: 100%;
                     }
-                    #preview-content th,
-                    #preview-content td {
+                    #preview-content table:not(.md-table) th,
+                    #preview-content table:not(.md-table) td {
                         padding: 6px 13px;
-                        border: 1px solid #d0d7de;
+                        border: 1px solid #8b949e;
                     }
-                    body.dark #preview-content th,
-                    body.dark #preview-content td {
-                        border-color: #30363d;
+                    body.dark #preview-content table:not(.md-table) th,
+                    body.dark #preview-content table:not(.md-table) td {
+                        border-color: #6e7681;
                     }
-                    #preview-content thead {
+                    #preview-content table:not(.md-table) thead {
                         background: #f6f8fa;
                     }
-                    body.dark #preview-content thead {
+                    body.dark #preview-content table:not(.md-table) thead {
                         background: #161b22;
                     }
                     #preview-content blockquote {
@@ -640,9 +709,35 @@
                 return 'beardy://localhost' + encoded;
             }
 
+            function unwrapMarkdownURL(src) {
+                let s = (src || '').trim();
+                s = s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+                if (s.startsWith('<') && s.endsWith('>')) {
+                    s = s.slice(1, -1).trim();
+                }
+                return s;
+            }
+
+            function buildResolvedImageTag(alt, src) {
+                const resolved = resolveImageSrc(unwrapMarkdownURL(src.trim()));
+                const safeAlt = (alt || '').replace(/"/g, '&quot;');
+                return `<img src="${resolved}" alt="${safeAlt}" style="max-width:100%;height:auto;">`;
+            }
+
+            function normalizeMarkdownImages(text) {
+                return (text || '').replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, url) => {
+                    const trimmed = url.trim();
+                    if (trimmed.startsWith('<') && trimmed.endsWith('>')) return match;
+                    if (trimmed.includes(' ') || /[^\x00-\x7F]/.test(trimmed)) {
+                        return `![${alt}](<${trimmed}>)`;
+                    }
+                    return match;
+                });
+            }
+
             function resolveImageSrc(src) {
                 if (!src) return src;
-                src = src.trim();
+                src = unwrapMarkdownURL(src);
                 if (/^(https?:|data:|beardy:)/i.test(src)) return src;
 
                 let absolutePath;
@@ -691,6 +786,8 @@
                 }
             }
 
+            let lastTextareaSelection = { start: 0, end: 0 };
+
             const textarea = document.getElementById('markdown-textarea');
             const preview = document.getElementById('preview-content');
             const markdownPane = document.getElementById('markdown-pane');
@@ -735,34 +832,25 @@
             function renderPreview(text, options = {}) {
                 const scroll = options.preserveScroll ? captureScrollState() : null;
                 try {
-                    const html = marked.parse(text || '');
-                    preview.innerHTML = html;
-                    rewriteImagesInContainer(preview);
-
-                    const lines = (text || '').split('\n');
-                    const blocks = Array.from(preview.children);
-                    let lineIndex = 0;
-
-                    for (let block of blocks) {
-                        let linesCount = 1;
-                        const tag = block.tagName.toLowerCase();
-
-                        if (tag === 'pre') {
-                            const codeLines = block.textContent.split('\n').length;
-                            linesCount = codeLines + 2;
-                        }
-
-                        block.dataset.sourceLineStart = lineIndex;
-                        block.dataset.sourceLineEnd = lineIndex + linesCount - 1;
-                        lineIndex += linesCount;
-                    }
-
-                    highlightCodeBlocks(preview);
+                    mountDocumentBlocks(preview, text || '', { readOnly: true });
                 } catch (e) {
-                    console.error('Preview parse error:', e);
+                    console.error('Preview render error:', e);
                     preview.textContent = text;
                 }
                 if (scroll) restoreScrollState(scroll);
+            }
+
+            function mountDocumentBlocks(container, text, options = {}) {
+                const readOnly = !!options.readOnly;
+                const normalized = normalizeMarkdownImages(text);
+                container.innerHTML = '';
+                const blocks = parseMarkdownBlocks(normalized);
+                blocks.forEach((block, index) => {
+                    const el = createBlockEl(block, index, { readOnly });
+                    container.appendChild(el);
+                });
+                highlightCodeBlocks(container);
+                rewriteImagesInContainer(container);
             }
             
             window.cmEditor = {
@@ -815,6 +903,7 @@
                     flushPendingEditorUpdates();
                     if (mode === 'live') {
                         initLiveEditor(currentContent);
+                        attachLiveCaretTracking();
                     } else if (mode === 'preview' || mode === 'split') {
                         renderPreview(currentContent);
                     }
@@ -962,7 +1051,7 @@
                 },
                 
                 insertFormatting(prefix, suffix) {
-                    if (isLiveMode) syncLiveToTextarea();
+                    if (isLiveActive()) syncLiveCaretToTextarea();
                     const ta = textarea;
                     const start = ta.selectionStart;
                     const end = ta.selectionEnd;
@@ -980,7 +1069,7 @@
                 },
 
                 insertAtLineStart(prefix) {
-                    if (isLiveMode) syncLiveToTextarea();
+                    if (isLiveActive()) syncLiveCaretToTextarea();
                     const ta = textarea;
                     const start = ta.selectionStart;
                     const lineStart = ta.value.lastIndexOf('\n', start - 1) + 1;
@@ -991,21 +1080,28 @@
                 },
 
                 insertText(text) {
-                    if (isLiveMode) syncLiveToTextarea();
+                    if (isLiveActive()) syncLiveCaretToTextarea();
                     const ta = textarea;
+                    ta.focus();
                     let start = ta.selectionStart;
                     let end = ta.selectionEnd;
-                    if (isLiveMode && start === 0 && end === 0 && ta.value.length > 0) {
-                        start = end = ta.value.length;
+                    if (start === 0 && end === 0 && ta.value.length > 0
+                        && (lastTextareaSelection.start > 0 || lastTextareaSelection.end > 0)) {
+                        start = lastTextareaSelection.start;
+                        end = lastTextareaSelection.end;
                     }
                     ta.setRangeText(text, start, end, 'end');
+                    lastTextareaSelection = {
+                        start: start + text.length,
+                        end: start + text.length
+                    };
                     ta.dispatchEvent(new Event('input'));
                     if (isLiveMode) initLiveEditor(ta.value);
                     ta.focus();
                 },
                 
                 insertLink(clipboardUrl) {
-                    if (isLiveMode) syncLiveToTextarea();
+                    if (isLiveActive()) syncLiveCaretToTextarea();
                     const ta = textarea;
                     const start = ta.selectionStart;
                     const end = ta.selectionEnd;
@@ -1056,11 +1152,19 @@
                 textarea.value = initialText;
                 renderPreview(initialText);
 
+                function rememberTextareaSelection() {
+                    lastTextareaSelection = {
+                        start: textarea.selectionStart,
+                        end: textarea.selectionEnd
+                    };
+                }
+
                 if (!isInitialized) {
                     textarea.addEventListener('input', () => {
                         if (isSyncing) return;
                         const text = textarea.value;
                         currentContent = text;
+                        rememberTextareaSelection();
                         schedulePreviewRender(text);
                         scheduleContentSync(text);
                         if (isLiveActive()) {
@@ -1068,8 +1172,17 @@
                         }
                     });
 
+                    ['keyup', 'mouseup', 'select', 'click'].forEach((eventName) => {
+                        textarea.addEventListener(eventName, rememberTextareaSelection);
+                    });
+
                     textarea.addEventListener('blur', () => {
+                        rememberTextareaSelection();
                         flushPendingEditorUpdates();
+                    });
+
+                    textarea.addEventListener('keydown', (e) => {
+                        handleEditModeTableKeydown(e);
                     });
 
                     swapButton.addEventListener('click', () => {
@@ -1182,7 +1295,484 @@
             let liveBlocks = [];
             let activeBlockIndex = -1;
             let liveContent = '';
+            let lastLiveInteraction = { blockIndex: 0, offsetInBlock: null };
+            let liveCaretTrackingAttached = false;
             // isLiveMode уже объявлена глобально
+
+            function computeTextareaOffsetForLiveBlock(blockIndex, offsetInBlock) {
+                let offset = 0;
+                for (let i = 0; i < blockIndex; i++) {
+                    offset += (liveBlocks[i]?.source || '').length + 1;
+                }
+                const source = liveBlocks[blockIndex]?.source || '';
+                const safeOffset = offsetInBlock === null
+                    ? source.length
+                    : Math.max(0, Math.min(offsetInBlock, source.length));
+                return offset + safeOffset;
+            }
+
+            function syncLiveCaretToTextarea() {
+                if (!isLiveActive()) {
+                    syncLiveToTextarea();
+                    return;
+                }
+
+                if (activeBlockIndex >= 0) {
+                    deactivateCurrentBlock();
+                }
+
+                syncLiveToTextarea();
+
+                const blockIndex = Math.min(
+                    Math.max(lastLiveInteraction.blockIndex, 0),
+                    Math.max(liveBlocks.length - 1, 0)
+                );
+                const pos = computeTextareaOffsetForLiveBlock(
+                    blockIndex,
+                    lastLiveInteraction.offsetInBlock
+                );
+
+                textarea.setSelectionRange(pos, pos);
+                lastTextareaSelection = { start: pos, end: pos };
+            }
+
+            function attachLiveCaretTracking() {
+                if (!liveEditor || liveCaretTrackingAttached) return;
+                liveCaretTrackingAttached = true;
+
+                liveEditor.addEventListener('mousedown', (e) => {
+                    if (!isLiveActive()) return;
+                    const blockEl = e.target.closest('.live-block');
+                    if (!blockEl) return;
+
+                    const blockIndex = parseInt(blockEl.getAttribute('data-index'), 10);
+                    if (Number.isNaN(blockIndex)) return;
+
+                    const cell = e.target.closest('td, th');
+                    if (cell) {
+                        lastLiveInteraction = { blockIndex, offsetInBlock: null };
+                        return;
+                    }
+
+                    let offsetInBlock = null;
+                    if (blockEl.classList.contains('is-source')) {
+                        offsetInBlock = getTextOffsetFromPoint(blockEl, e.clientX, e.clientY);
+                    } else {
+                        const pointOffset = getTextOffsetFromPoint(blockEl, e.clientX, e.clientY);
+                        offsetInBlock = pointOffset === null ? null : pointOffset;
+                    }
+
+                    lastLiveInteraction = { blockIndex, offsetInBlock };
+                }, true);
+
+                liveEditor.addEventListener('focusin', (e) => {
+                    if (!isLiveActive()) return;
+                    const blockEl = e.target.closest('.live-block');
+                    if (!blockEl) return;
+                    const blockIndex = parseInt(blockEl.getAttribute('data-index'), 10);
+                    if (Number.isNaN(blockIndex)) return;
+                    lastLiveInteraction = { blockIndex, offsetInBlock: null };
+                }, true);
+            }
+
+            function isGFMTableRow(line) {
+                const t = (line || '').trim();
+                return t.startsWith('|') && t.includes('|', 1);
+            }
+
+            function isGFMTableSeparator(line) {
+                const t = (line || '').trim();
+                if (!t.startsWith('|')) return false;
+                // Строки вида "| | |" без дефисов — это пустые ячейки, не разделитель.
+                if (!/-/.test(t)) return false;
+
+                let inner = t;
+                if (inner.startsWith('|')) inner = inner.slice(1);
+                if (inner.endsWith('|')) inner = inner.slice(0, -1);
+
+                const cells = inner.split('|').map((cell) => cell.trim());
+                if (!cells.length) return false;
+
+                return cells.every((cell) => cell === '' || /^:?-{1,}:?$/.test(cell));
+            }
+
+            function lineStartOffsetInText(text, lineIndex) {
+                const lines = text.split('\n');
+                let offset = 0;
+                for (let i = 0; i < lineIndex; i++) {
+                    offset += lines[i].length + 1;
+                }
+                return offset;
+            }
+
+            function findTableContextAtOffset(text, offset) {
+                const lines = text.split('\n');
+                let char = 0;
+                let currentLineIndex = -1;
+
+                for (let i = 0; i < lines.length; i++) {
+                    const lineEnd = char + lines[i].length;
+                    if (offset >= char && offset <= lineEnd) {
+                        currentLineIndex = i;
+                        break;
+                    }
+                    char = lineEnd + 1;
+                }
+
+                if (currentLineIndex < 0 || !isGFMTableRow(lines[currentLineIndex])) {
+                    return null;
+                }
+
+                let tableStartLine = currentLineIndex;
+                let tableEndLine = currentLineIndex;
+                while (tableStartLine > 0 && isGFMTableRow(lines[tableStartLine - 1])) {
+                    tableStartLine--;
+                }
+                while (tableEndLine < lines.length - 1 && isGFMTableRow(lines[tableEndLine + 1])) {
+                    tableEndLine++;
+                }
+
+                const tableLines = lines.slice(tableStartLine, tableEndLine + 1);
+                const tableStart = lineStartOffsetInText(text, tableStartLine);
+                const lineStart = lineStartOffsetInText(text, currentLineIndex);
+
+                return {
+                    lines,
+                    tableStartLine,
+                    tableEndLine,
+                    tableLines,
+                    tableStart,
+                    currentLineIndex,
+                    line: lines[currentLineIndex],
+                    lineStart,
+                };
+            }
+
+            function cellRangesInTableLine(line, lineStartOffset) {
+                const ranges = [];
+                let pipe = line.indexOf('|');
+                while (pipe !== -1) {
+                    const nextPipe = line.indexOf('|', pipe + 1);
+                    if (nextPipe === -1) break;
+                    let innerStart = pipe + 1;
+                    let innerEnd = nextPipe;
+                    while (innerStart < innerEnd && /\s/.test(line[innerStart])) innerStart++;
+                    while (innerEnd > innerStart && /\s/.test(line[innerEnd - 1])) innerEnd--;
+                    ranges.push({
+                        start: lineStartOffset + innerStart,
+                        end: lineStartOffset + innerEnd,
+                    });
+                    pipe = nextPipe;
+                }
+                return ranges;
+            }
+
+            function currentCellIndexForOffset(cells, offset) {
+                for (let i = 0; i < cells.length; i++) {
+                    if (offset >= cells[i].start && offset <= cells[i].end) return i;
+                }
+                for (let i = cells.length - 1; i >= 0; i--) {
+                    if (offset > cells[i].start) return i;
+                }
+                return 0;
+            }
+
+            function moveTextareaTableCell(textarea, forward) {
+                const text = textarea.value;
+                const offset = textarea.selectionStart;
+                const ctx = findTableContextAtOffset(text, offset);
+                if (!ctx) return false;
+
+                const cells = cellRangesInTableLine(ctx.line, ctx.lineStart);
+                if (!cells.length) return false;
+
+                let cellIndex = currentCellIndexForOffset(cells, offset);
+                cellIndex += forward ? 1 : -1;
+
+                if (cellIndex >= 0 && cellIndex < cells.length) {
+                    textarea.setSelectionRange(cells[cellIndex].start, cells[cellIndex].end);
+                    return true;
+                }
+
+                const deltaLine = forward ? 1 : -1;
+                let nextLine = ctx.currentLineIndex + deltaLine;
+                while (nextLine >= ctx.tableStartLine && nextLine <= ctx.tableEndLine) {
+                    const nextLineText = ctx.lines[nextLine];
+                    if (isGFMTableSeparator(nextLineText)) {
+                        nextLine += deltaLine;
+                        continue;
+                    }
+                    const nextLineStart = lineStartOffsetInText(text, nextLine);
+                    const nextCells = cellRangesInTableLine(nextLineText, nextLineStart);
+                    if (!nextCells.length) {
+                        nextLine += deltaLine;
+                        continue;
+                    }
+                    const targetIndex = forward ? 0 : nextCells.length - 1;
+                    const target = nextCells[targetIndex];
+                    textarea.setSelectionRange(target.start, target.end);
+                    return true;
+                }
+
+                return false;
+            }
+
+            function moveTextareaTableRow(textarea, down) {
+                const text = textarea.value;
+                const offset = textarea.selectionStart;
+                const ctx = findTableContextAtOffset(text, offset);
+                if (!ctx) return false;
+
+                const cells = cellRangesInTableLine(ctx.line, ctx.lineStart);
+                if (!cells.length) return false;
+
+                const cellIndex = currentCellIndexForOffset(cells, offset);
+                const deltaLine = down ? 1 : -1;
+                let nextLine = ctx.currentLineIndex + deltaLine;
+
+                while (nextLine >= ctx.tableStartLine && nextLine <= ctx.tableEndLine) {
+                    const nextLineText = ctx.lines[nextLine];
+                    if (isGFMTableSeparator(nextLineText)) {
+                        nextLine += deltaLine;
+                        continue;
+                    }
+                    const nextLineStart = lineStartOffsetInText(text, nextLine);
+                    const nextCells = cellRangesInTableLine(nextLineText, nextLineStart);
+                    if (nextCells.length) {
+                        const target = nextCells[Math.min(cellIndex, nextCells.length - 1)];
+                        textarea.setSelectionRange(target.start, target.end);
+                        return true;
+                    }
+                    nextLine += deltaLine;
+                }
+
+                return false;
+            }
+
+            function handleEditModeTableKeydown(e) {
+                if (isLiveActive()) return false;
+
+                const offset = textarea.selectionStart;
+                const ctx = findTableContextAtOffset(textarea.value, offset);
+                if (!ctx) return false;
+
+                if (e.key === 'Tab') {
+                    e.preventDefault();
+                    moveTextareaTableCell(textarea, !e.shiftKey);
+                    return true;
+                }
+
+                if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+                    e.preventDefault();
+                    moveTextareaTableRow(textarea, true);
+                    return true;
+                }
+
+                if (e.key === 'ArrowUp' && e.altKey) {
+                    e.preventDefault();
+                    moveTextareaTableRow(textarea, false);
+                    return true;
+                }
+
+                if (e.key === 'ArrowDown' && e.altKey) {
+                    e.preventDefault();
+                    moveTextareaTableRow(textarea, true);
+                    return true;
+                }
+
+                return false;
+            }
+
+            function parseGFMTableSource(source) {
+                const rows = [];
+                for (const line of (source || '').split('\n')) {
+                    const trimmed = line.trim();
+                    if (!trimmed || isGFMTableSeparator(trimmed)) continue;
+                    let inner = trimmed;
+                    if (inner.startsWith('|')) inner = inner.slice(1);
+                    if (inner.endsWith('|')) inner = inner.slice(0, -1);
+                    rows.push(inner.split('|').map(cell => cell.trim()));
+                }
+                return rows;
+            }
+
+            function tableRowsToMarkdown(rows) {
+                if (!rows.length) return '';
+                const colCount = Math.max(1, ...rows.map(row => row.length));
+                const normalize = (row) => {
+                    const copy = [...row];
+                    while (copy.length < colCount) copy.push('');
+                    return copy;
+                };
+                let md = `| ${normalize(rows[0]).join(' | ')} |\n`;
+                md += `| ${Array(colCount).fill('---').join(' | ')} |\n`;
+                for (let i = 1; i < rows.length; i++) {
+                    md += `| ${normalize(rows[i]).join(' | ')} |\n`;
+                }
+                return md.trimEnd();
+            }
+
+            function escapeTableCellHTML(cell) {
+                const trimmed = (cell || '').trim();
+                if (!trimmed) return '&nbsp;';
+                return trimmed
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+            }
+
+            function applyTableColumnCount(table, rows) {
+                const colCount = Math.max(1, rows[0]?.length || 1);
+                table.style.setProperty('--md-table-columns', String(colCount));
+                table.dataset.columns = String(colCount);
+            }
+
+            function renderTableHTMLFromRows(rows) {
+                if (!rows.length) return '';
+
+                const colCount = Math.max(1, rows[0]?.length || 1);
+
+                let html = `<div class="md-table-scroll"><table class="md-table" data-columns="${colCount}" style="--md-table-columns:${colCount}"><thead><tr>`;
+                rows[0].forEach((cell) => {
+                    html += `<th>${escapeTableCellHTML(cell)}</th>`;
+                });
+                html += '</tr></thead>';
+
+                if (rows.length > 1) {
+                    html += '<tbody>';
+                    for (let i = 1; i < rows.length; i++) {
+                        html += '<tr>';
+                        rows[i].forEach((cell) => {
+                            html += `<td>${escapeTableCellHTML(cell)}</td>`;
+                        });
+                        html += '</tr>';
+                    }
+                    html += '</tbody>';
+                }
+
+                html += '</table></div>';
+                return html;
+            }
+
+            function readTableCellText(cell) {
+                const text = (cell.textContent || '')
+                    .replace(/\u00a0/g, ' ')
+                    .replace(/\u200b/g, '');
+                return text.trim();
+            }
+
+            function setTableCellContent(cell, cellText) {
+                if (!cellText || !cellText.trim()) {
+                    cell.textContent = '\u00a0';
+                } else {
+                    cell.textContent = cellText;
+                }
+            }
+
+            function isTableCellVisuallyEmpty(cell) {
+                return readTableCellText(cell) === '';
+            }
+
+            function syncTableBlockFromDOM(index) {
+                const block = liveBlocks[index];
+                if (!block || block.type !== 'table') return;
+                const table = block.el.querySelector('table.md-table');
+                if (!table) return;
+                const rows = [];
+                table.querySelectorAll('tr').forEach((tr) => {
+                    const cells = [];
+                    tr.querySelectorAll('th, td').forEach((cell) => {
+                        cells.push(readTableCellText(cell));
+                    });
+                    if (cells.length) rows.push(cells);
+                });
+                block.source = tableRowsToMarkdown(rows);
+                syncLiveContentToModel();
+            }
+
+            const scheduleTableSync = debounce((index) => {
+                syncTableBlockFromDOM(index);
+            }, 200);
+
+            function setupTableBlock(el, block, index, readOnly) {
+                const rows = parseGFMTableSource(block.source);
+                const table = document.createElement('table');
+                table.className = 'md-table';
+                const thead = document.createElement('thead');
+                const tbody = document.createElement('tbody');
+
+                rows.forEach((row, rowIndex) => {
+                    const tr = document.createElement('tr');
+                    row.forEach((cellText) => {
+                        const cell = document.createElement(rowIndex === 0 ? 'th' : 'td');
+                        setTableCellContent(cell, cellText);
+                        if (!readOnly) {
+                            cell.contentEditable = 'true';
+                            cell.addEventListener('focus', () => {
+                                lastLiveInteraction = { blockIndex: index, offsetInBlock: null };
+                                if (isTableCellVisuallyEmpty(cell)) {
+                                    cell.textContent = '';
+                                }
+                            });
+                            cell.addEventListener('blur', () => {
+                                if (isTableCellVisuallyEmpty(cell)) {
+                                    setTableCellContent(cell, '');
+                                }
+                            });
+                        }
+                        tr.appendChild(cell);
+                    });
+                    if (rowIndex === 0) {
+                        thead.appendChild(tr);
+                    } else {
+                        tbody.appendChild(tr);
+                    }
+                });
+
+                if (thead.childElementCount) table.appendChild(thead);
+                if (tbody.childElementCount) table.appendChild(tbody);
+
+                applyTableColumnCount(table, rows);
+
+                el.innerHTML = '';
+                const scroll = document.createElement('div');
+                scroll.className = 'md-table-scroll';
+                scroll.appendChild(table);
+                el.appendChild(scroll);
+                el.classList.add('live-block-table');
+
+                if (readOnly) return;
+
+                table.addEventListener('mousedown', (e) => e.stopPropagation());
+                table.addEventListener('input', () => scheduleTableSync(index));
+
+                table.addEventListener('keydown', (e) => {
+                    const cell = e.target.closest('th, td');
+                    if (!cell) return;
+                    const allCells = [...table.querySelectorAll('th, td')];
+                    const cellIndex = allCells.indexOf(cell);
+                    const colCount = table.rows[0]?.cells.length || 1;
+
+                    if (e.key === 'Tab') {
+                        e.preventDefault();
+                        const nextIndex = e.shiftKey ? cellIndex - 1 : cellIndex + 1;
+                        if (allCells[nextIndex]) {
+                            allCells[nextIndex].focus();
+                        }
+                        return;
+                    }
+
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        const rowIndex = Math.floor(cellIndex / colCount);
+                        const colIndex = cellIndex % colCount;
+                        const nextRow = table.rows[rowIndex + 1];
+                        if (nextRow?.cells[colIndex]) {
+                            nextRow.cells[colIndex].focus();
+                        }
+                    }
+                });
+            }
 
             function parseMarkdownBlocks(text) {
                 const rawLines = (text || '').split('\n');
@@ -1232,6 +1822,16 @@
                         continue;
                     }
 
+                    if (isGFMTableRow(line)) {
+                        const tableLines = [];
+                        while (i < rawLines.length && isGFMTableRow(rawLines[i])) {
+                            tableLines.push(rawLines[i]);
+                            i++;
+                        }
+                        blocks.push({ type: 'table', source: tableLines.join('\n') });
+                        continue;
+                    }
+
                     const trimmed = line.trim();
                     if (/^<img\s/i.test(trimmed) || /^!\[[^\]]*\]\([^)]+\)/.test(trimmed)) {
                         blocks.push({ type: 'image', source: line });
@@ -1270,12 +1870,29 @@
                     return { type: 'blockquote', source: text };
                 }
 
+                const firstLine = text.split('\n')[0] || '';
+                if (isGFMTableRow(firstLine)) {
+                    return { type: 'table', source: text };
+                }
+
+                const trimmed = text.trim();
+                if (/^<img\s/i.test(trimmed) || /^!\[[^\]]*\]\([^)]+\)/.test(trimmed)) {
+                    return { type: 'image', source: text };
+                }
+
                 return { type: 'p', source: text };
             }
 
             function renderInline(text) {
                 const imgPlaceholders = [];
-                let s = (text || '').replace(/<img\s[^>]*>/gi, (match) => {
+                const mdImgPlaceholders = [];
+
+                let s = (text || '').replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, src) => {
+                    mdImgPlaceholders.push(buildResolvedImageTag(alt, src));
+                    return `\x00MDIMG${mdImgPlaceholders.length - 1}\x00`;
+                });
+
+                s = s.replace(/<img\s[^>]*>/gi, (match) => {
                     const resolved = match.replace(/\ssrc=(["'])(.*?)\1/i, (_, quote, src) => {
                         return ` src=${quote}${resolveImageSrc(src)}${quote}`;
                     });
@@ -1294,12 +1911,9 @@
                 s = s.replace(/_(?!_)(.+?)_(?!_)/g, '<em>$1</em>');
                 s = s.replace(/~~(.+?)~~/g, '<del>$1</del>');
                 s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-                s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, src) => {
-                    return `<img src="${resolveImageSrc(src)}" alt="${alt}" style="max-width:100%;height:auto;">`;
-                });
                 s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
 
-                // Восстанавливаем img теги
+                s = s.replace(/\x00MDIMG(\d+)\x00/g, (_, i) => mdImgPlaceholders[+i]);
                 s = s.replace(/\x00IMG(\d+)\x00/g, (_, i) => imgPlaceholders[+i]);
 
                 return s;
@@ -1322,11 +1936,20 @@
 
                 if (block.type === 'code-fence') {
                     const lines = block.source.split('\n');
+                    const langMatch = lines[0].match(/^```(\w*)/);
+                    const lang = langMatch ? langMatch[1] : '';
                     const inner = lines.slice(1, lines.length - 1).join('\n');
-                    return inner
+                    const escaped = inner
                         .replace(/&/g, '&amp;')
                         .replace(/</g, '&lt;')
                         .replace(/>/g, '&gt;');
+                    const langClass = lang ? ` class="language-${lang}"` : '';
+                    return `<pre class="hljs"><code${langClass}>${escaped}</code></pre>`;
+                }
+
+                if (block.type === 'table') {
+                    const rows = parseGFMTableSource(block.source);
+                    return renderTableHTMLFromRows(rows);
                 }
 
                 if (block.type.startsWith('h')) {
@@ -1342,7 +1965,8 @@
                 return renderInline(block.source);
             }
 
-            function createBlockEl(block, index) {
+            function createBlockEl(block, index, options = {}) {
+                const readOnly = !!options.readOnly;
                 const el = document.createElement('div');
                 el.className = 'live-block is-rendered';
                 el.setAttribute('data-type', block.type);
@@ -1353,17 +1977,21 @@
                     el.style.minHeight = '1.2em';
                 } else if (block.type === 'hr') {
                     el.innerHTML = '';
+                } else if (block.type === 'table') {
+                    setupTableBlock(el, block, index, readOnly);
                 } else {
                     el.innerHTML = renderBlock(block);
                 }
 
-                el.addEventListener('mousedown', (e) => {
-                    if (activeBlockIndex === index) return;
+                if (!readOnly && block.type !== 'table') {
+                    el.addEventListener('mousedown', (e) => {
+                        if (activeBlockIndex === index) return;
 
-                    const textOffset = getTextOffsetFromPoint(el, e.clientX, e.clientY);
-                    e.preventDefault();
-                    activateBlock(index, textOffset);
-                });
+                        const textOffset = getTextOffsetFromPoint(el, e.clientX, e.clientY);
+                        e.preventDefault();
+                        activateBlock(index, textOffset);
+                    });
+                }
 
                 return el;
             }
@@ -1372,12 +2000,12 @@
                 liveEditor.innerHTML = '';
                 liveBlocks = [];
                 activeBlockIndex = -1;
-                liveContent = text || '';
+                liveContent = normalizeMarkdownImages(text || '');
 
                 const blocks = parseMarkdownBlocks(liveContent);
 
                 blocks.forEach((block, index) => {
-                    const el = createBlockEl(block, index);
+                    const el = createBlockEl(block, index, { readOnly: false });
                     const item = {
                         type: block.type,
                         source: block.source,
@@ -1386,6 +2014,15 @@
                     liveBlocks.push(item);
                     liveEditor.appendChild(el);
                 });
+
+                highlightCodeBlocks(liveEditor);
+                rewriteImagesInContainer(liveEditor);
+
+                lastLiveInteraction = {
+                    blockIndex: Math.max(liveBlocks.length - 1, 0),
+                    offsetInBlock: null
+                };
+                attachLiveCaretTracking();
             }
 
             function placeCaretAtEnd(el) {
@@ -1554,12 +2191,16 @@
                     block.el.style.minHeight = '1.2em';
                 } else if (block.type === 'hr') {
                     block.el.innerHTML = '';
+                } else if (block.type === 'table') {
+                    setupTableBlock(block.el, block, activeBlockIndex, false);
                 } else {
                     block.el.innerHTML = renderBlock(block);
                 }
 
                 activeBlockIndex = -1;
                 syncLiveContentToModel();
+                highlightCodeBlocks(liveEditor);
+                rewriteImagesInContainer(liveEditor);
             }
 
             function syncLiveContentToModel() {

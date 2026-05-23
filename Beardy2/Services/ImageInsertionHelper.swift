@@ -193,7 +193,8 @@ enum ImageInsertionHelper {
         let titleAttr = title.isEmpty ? "" : " \"\(escapedTitle)\""
 
         if widthPercent == 100 && alignment == .none {
-            return "![\(safeAlt)](\(imagePath)\(titleAttr))"
+            let linkPath = markdownLinkPath(for: imagePath)
+            return "![\(safeAlt)](\(linkPath)\(titleAttr))"
         }
 
         let alignStyle: String
@@ -211,6 +212,14 @@ enum ImageInsertionHelper {
         let style = "width:\(widthPercent)%; \(alignStyle)".trimmingCharacters(in: .whitespaces)
         let titleHtml = title.isEmpty ? "" : " title=\"\(title.replacingOccurrences(of: "\"", with: "&quot;"))\""
         return "<img src=\"\(imagePath)\" alt=\"\(safeAlt)\"\(titleHtml) style=\"\(style)\">"
+    }
+
+    /// Wraps paths with spaces or non-ASCII in angle brackets for CommonMark.
+    private static func markdownLinkPath(for path: String) -> String {
+        if path.hasPrefix("<") && path.hasSuffix(">") { return path }
+        let needsBrackets = path.contains(" ")
+            || path.unicodeScalars.contains(where: { $0.value > 127 })
+        return needsBrackets ? "<\(path)>" : path
     }
 
     static func beardyURL(forLocalPath path: String) -> String {
