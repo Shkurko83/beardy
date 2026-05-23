@@ -176,75 +176,63 @@ struct EditorToolbar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             WrappingToolbarLayout(horizontalSpacing: 8, verticalSpacing: 8) {
-                ToolbarButton(icon: "bold", tooltip: "Bold (⌘B)") {
+                ToolbarButton(icon: "bold", tooltip: "Bold — wrap selection with ** (⌘B)") {
                     documentManager.toggleBold()
                 }
                 
-                ToolbarButton(icon: "italic", tooltip: "Italic (⌘I)") {
+                ToolbarButton(icon: "italic", tooltip: "Italic — wrap selection with * (⌘I)") {
                     documentManager.toggleItalic()
                 }
                 
-                ToolbarButton(icon: "strikethrough", tooltip: "Strikethrough") {
+                ToolbarButton(icon: "strikethrough", tooltip: "Strikethrough — wrap selection with ~~ (⌘⇧S)") {
                     documentManager.toggleStrikethrough()
                 }
                 
                 ToolbarDivider()
                 
-                Menu {
-                    ForEach(1...6, id: \.self) { level in
-                        Button("Heading \(level)") {
-                            documentManager.insertHeading(level: level)
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "textformat.size")
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 8))
-                    }
+                ToolbarHeadingMenu {
+                    documentManager.insertHeading(level: $0)
                 }
-                .menuStyle(.borderlessButton)
-                .frame(height: 24)
                 
                 ToolbarDivider()
                 
-                ToolbarButton(icon: "list.bullet", tooltip: "Bullet List") {
+                ToolbarButton(icon: "list.bullet", tooltip: "Bullet list — insert “- ” at line start") {
                     documentManager.insertBulletList()
                 }
                 
-                ToolbarButton(icon: "list.number", tooltip: "Numbered List") {
+                ToolbarButton(icon: "list.number", tooltip: "Numbered list — insert “1. ” at line start") {
                     documentManager.insertNumberedList()
                 }
                 
-                ToolbarButton(icon: "checklist", tooltip: "Task List") {
+                ToolbarButton(icon: "checklist", tooltip: "Task list — insert “- [ ] ” at line start") {
                     documentManager.insertTaskList()
                 }
                 
                 ToolbarDivider()
                 
-                ToolbarButton(icon: "link", tooltip: "Insert Link (⌘K)") {
+                ToolbarButton(icon: "link", tooltip: "Insert link — [text](url) (⌘K)") {
                     documentManager.insertLink()
                 }
                 
-                ToolbarButton(icon: "photo", tooltip: "Insert Image") {
+                ToolbarButton(icon: "photo", tooltip: "Insert image from file or clipboard") {
                     documentManager.insertImage()
                 }
                 
-                ToolbarButton(icon: "tablecells", tooltip: "Insert Table") {
+                ToolbarButton(icon: "tablecells", tooltip: "Insert GFM table — choose rows and columns") {
                     documentManager.insertTable()
                 }
                 
-                ToolbarButton(icon: "chevron.left.forwardslash.chevron.right", tooltip: "Code Block") {
+                ToolbarButton(icon: "chevron.left.forwardslash.chevron.right", tooltip: "Insert fenced code block (⌘⇧`)") {
                     documentManager.insertCodeBlock()
                 }
                 
                 ToolbarDivider()
                 
-                ToolbarButton(icon: "quote.opening", tooltip: "Blockquote") {
+                ToolbarButton(icon: "quote.opening", tooltip: "Blockquote — insert “> ” at line start") {
                     documentManager.insertBlockquote()
                 }
                 
-                ToolbarButton(icon: "minus.forwardslash.plus", tooltip: "Horizontal Rule") {
+                ToolbarButton(icon: "minus.forwardslash.plus", tooltip: "Horizontal rule — insert “---”") {
                     documentManager.insertHorizontalRule()
                 }
             }
@@ -328,6 +316,33 @@ private struct WrappingToolbarLayout: Layout {
     }
 }
 
+// MARK: - Toolbar Heading Menu
+private struct ToolbarHeadingMenu: View {
+    let onSelect: (Int) -> Void
+
+    var body: some View {
+        Menu {
+            ForEach(1...6, id: \.self) { level in
+                Button("Heading \(level)") {
+                    onSelect(level)
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "textformat.size")
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8))
+            }
+            .frame(height: 24)
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .frame(height: 24)
+        .help("Heading — insert # … ###### at line start (H1–H6)")
+        .background(ToolbarTooltipHost(message: "Heading — insert # … ###### at line start (H1–H6)"))
+    }
+}
+
 // MARK: - Toolbar Button
 struct ToolbarButton: View {
     let icon: String
@@ -343,13 +358,35 @@ struct ToolbarButton: View {
                 .frame(width: 24, height: 24)
                 .background(isHovered ? Color(NSColor.controlBackgroundColor) : Color.clear)
                 .cornerRadius(4)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(tooltip)
+        .accessibilityLabel(tooltip)
+        .background(ToolbarTooltipHost(message: tooltip))
         .onHover { hovering in
             isHovered = hovering
         }
     }
+}
+
+/// Native AppKit tooltip — надёжнее `.help` внутри custom Layout на macOS.
+private struct ToolbarTooltipHost: NSViewRepresentable {
+    let message: String
+
+    func makeNSView(context: Context) -> TooltipHostView {
+        let view = TooltipHostView()
+        view.toolTip = message
+        return view
+    }
+
+    func updateNSView(_ nsView: TooltipHostView, context: Context) {
+        nsView.toolTip = message
+    }
+}
+
+private final class TooltipHostView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 // MARK: - Markdown Text Editor (NSViewRepresentable)

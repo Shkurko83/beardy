@@ -256,7 +256,7 @@ struct EditorSettingsView: View {
                             .font(.headline)
                         
                         Toggle("Copy images to document folder", isOn: $copyImagesToDocumentFolder)
-                        Text("Like Typora: optionally copy images next to the .md file for portability.")
+                        Text("Optionally copy images next to the .md file for portability.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .fixedSize(horizontal: false, vertical: true)

@@ -105,35 +105,33 @@ struct ContentView: View {
             }
 
             ToolbarItemGroup(placement: .automatic) {
-                if let doc = documentManager.currentDocument, doc.url != nil {
+                HStack {
+                    ViewModeSegmentedPicker(selection: $documentManager.viewMode)
+                    Divider()
+                        .frame(height: 18)
+                }
+
+                HStack {
                     Button(action: {
-                        documentManager.toggleFavoriteForActiveDocument()
+                        themeService.toggleDarkMode()
                     }) {
-                        Image(systemName: documentManager.isFavorite(path: doc.url!.path) ? "star.fill" : "star")
+                        Image(systemName: themeService.isDarkMode ? "moon.fill" : "sun.max.fill")
                     }
-                    .help("Add to favorites")
+                    .help("Toggle Theme")
+                    
+                    if let doc = documentManager.currentDocument, doc.url != nil {
+                        Button(action: {
+                            documentManager.toggleFavoriteForActiveDocument()
+                        }) {
+                            Image(systemName: documentManager.isFavorite(path: doc.url!.path) ? "star.fill" : "star")
+                        }
+                        .help("Add to favorites")
+                    }
+                    
+                    ShowShortcutsButton()
+                    Divider()
+                        .frame(height: 18)
                 }
-
-                ShowShortcutsButton()
-                Picker("", selection: $documentManager.viewMode) {
-                    Label("Edit", systemImage: "pencil")
-                        .tag(ViewMode.edit)
-                    Label("Live", systemImage: "doc.richtext")
-                        .tag(ViewMode.live)
-                    Label("Preview", systemImage: "eye")
-                        .tag(ViewMode.preview)
-                    Label("Split", systemImage: "rectangle.split.2x1")
-                        .tag(ViewMode.split)
-                }
-                .pickerStyle(.segmented)
-                .help("View Mode")
-
-                Button(action: {
-                    themeService.toggleDarkMode()
-                }) {
-                    Image(systemName: themeService.isDarkMode ? "moon.fill" : "sun.max.fill")
-                }
-                .help("Toggle Theme")
 
                 Button(action: {
                     openWindow(id: "custom_settings")
@@ -142,6 +140,8 @@ struct ContentView: View {
                 }
                 .help("Settings")
             }
+           
+
         }
         .onAppear {
             documentManager.syncReadingChromePanels()
