@@ -2383,37 +2383,8 @@
                 });
             }
 
-            function focusLiveEmptyBlockAfterRebuild(preferredIndex) {
-                const placeCaret = () => {
-                    const tryIndex = (idx) => {
-                        const block = liveBlocks[idx];
-                        if (!block?.el || block.type !== 'empty') return false;
-                        activateBlock(idx, 0);
-                        lastLiveInteraction = { blockIndex: idx, offsetInBlock: 0 };
-                        return true;
-                    };
-
-                    if (tryIndex(preferredIndex)) return true;
-                    for (let i = 0; i < liveBlocks.length; i++) {
-                        if (i !== preferredIndex && tryIndex(i)) return true;
-                    }
-                    return false;
-                };
-
-                requestAnimationFrame(() => {
-                    if (placeCaret()) return;
-                    requestAnimationFrame(placeCaret);
-                });
-            }
-
             function rebuildLiveDocumentAndFocus(parts, focusBlockIndex) {
-                const newText = parts.join('\n');
-                currentContent = newText;
-                textarea.value = newText;
-                scheduleLiveRebuild.cancel();
-                initLiveEditor(newText);
-                scheduleContentSync(newText);
-                focusLiveEmptyBlockAfterRebuild(focusBlockIndex);
+                applyLiveDocumentParts(parts, focusBlockIndex, 0);
             }
 
             function handleLiveListItemKeydown(e, blockIndex, itemIndex, bodyEl) {
@@ -2615,8 +2586,13 @@
                     }
 
                     if (line.startsWith('>')) {
-                        blocks.push({ type: 'blockquote', source: line });
+                        const quoteLines = [line];
                         i++;
+                        while (i < rawLines.length && rawLines[i].startsWith('>')) {
+                            quoteLines.push(rawLines[i]);
+                            i++;
+                        }
+                        blocks.push({ type: 'blockquote', source: quoteLines.join('\n') });
                         continue;
                     }
 
@@ -2757,8 +2733,10 @@
                 }
 
                 if (block.type === 'blockquote') {
-                    const inner = block.source.replace(/^>\s?/, '');
-                    return renderInline(inner);
+                    return block.source.split('\n').map((line) => {
+                        const inner = line.replace(/^>\s?/, '');
+                        return renderInline(inner);
+                    }).join('<br>');
                 }
 
                 return renderInline(block.source);
@@ -2903,17 +2881,163 @@
             }
 
             function getCaretOffsetWithin(element) {
+                return getCaretOffsetInEditable(element);
+            }
+
+            function getTextFromContentEditable(el) {
+                if (!el) return '';
+                const text = el.innerText ?? el.textContent ?? '';
+                return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+            }
+
+            function getCaretOffsetInEditable(el) {
                 const sel = window.getSelection();
                 if (!sel || sel.rangeCount === 0) return 0;
 
                 const range = sel.getRangeAt(0);
-                if (!element.contains(range.startContainer)) return 0;
+                if (!el.contains(range.startContainer)) return 0;
 
-                const preRange = document.createRange();
-                preRange.selectNodeContents(element);
-                preRange.setEnd(range.startContainer, range.startOffset);
+                const pre = document.createRange();
+                pre.selectNodeContents(el);
+                pre.setEnd(range.startContainer, range.startOffset);
+                const temp = document.createElement('div');
+                temp.appendChild(pre.cloneContents());
+                return getTextFromContentEditable(temp).length;
+            }
 
-                return preRange.toString().length;
+            function canSplitBlockOnEnter(type) {
+                return type === 'p'
+                    || type === 'empty'
+                    || /^h[1-6]$/.test(type);
+            }
+
+            function isLiveTextBlockType(type) {
+                return canSplitBlockOnEnter(type) || type === 'blockquote';
+            }
+
+            function normalizeBlockquoteSource(text) {
+                return (text || '').split('\n').map((line) => {
+                    if (/^>\s?/.test(line)) return line;
+                    if (line.trim() === '') return '>';
+                    return `> ${line}`;
+                }).join('\n');
+            }
+
+            function removeLiveBlockAt(blockIndex, focusBlockIndex, focusOffset) {
+                const parts = [];
+                for (let i = 0; i < liveBlocks.length; i++) {
+                    if (i !== blockIndex) parts.push(liveBlocks[i].source);
+                }
+                if (!parts.length) parts.push('');
+                applyLiveDocumentParts(parts, focusBlockIndex, focusOffset);
+            }
+
+            function applyLiveDocumentParts(parts, focusBlockIndex, focusOffset = 0) {
+                activeBlockIndex = -1;
+                const newText = parts.join('\n');
+                currentContent = newText;
+                textarea.value = newText;
+                scheduleLiveRebuild.cancel();
+                initLiveEditor(newText);
+                scheduleContentSync(newText);
+
+                let resolvedOffset = focusOffset;
+                if (focusOffset === 'end') {
+                    const idx = Math.min(Math.max(focusBlockIndex, 0), parts.length - 1);
+                    resolvedOffset = (parts[idx] ?? '').length;
+                }
+
+                const focus = () => {
+                    const block = liveBlocks[focusBlockIndex];
+                    if (!block?.el) return false;
+                    if (block.type === 'empty' || isLiveTextBlockType(block.type)) {
+                        activateBlock(focusBlockIndex, resolvedOffset);
+                        lastLiveInteraction = { blockIndex: focusBlockIndex, offsetInBlock: resolvedOffset };
+                        return true;
+                    }
+                    return false;
+                };
+
+                requestAnimationFrame(() => {
+                    if (focus()) return;
+                    requestAnimationFrame(focus);
+                });
+            }
+
+            function handleLiveBlockEnter(e, blockIndex) {
+                if (e.key !== 'Enter' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return false;
+
+                const block = liveBlocks[blockIndex];
+                if (!block?.el || !canSplitBlockOnEnter(block.type)) return false;
+
+                e.preventDefault();
+
+                const text = getTextFromContentEditable(block.el);
+                const offset = getCaretOffsetInEditable(block.el);
+                const before = text.slice(0, offset);
+                const after = text.slice(offset);
+
+                const parts = [];
+                for (let i = 0; i < liveBlocks.length; i++) {
+                    if (i !== blockIndex) {
+                        parts.push(liveBlocks[i].source);
+                        continue;
+                    }
+                    parts.push(before);
+                    parts.push(after);
+                }
+
+                applyLiveDocumentParts(parts, blockIndex + 1, 0);
+                return true;
+            }
+
+            function handleLiveBlockquoteEnter(e, blockIndex) {
+                if (e.key !== 'Enter' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return false;
+
+                const block = liveBlocks[blockIndex];
+                if (!block?.el || block.type !== 'blockquote') return false;
+
+                e.preventDefault();
+
+                const text = getTextFromContentEditable(block.el);
+                const offset = getCaretOffsetInEditable(block.el);
+                const insert = '\n> ';
+                const newText = text.slice(0, offset) + insert + text.slice(offset);
+                block.el.textContent = newText;
+                block.source = newText;
+                placeCaretAtTextOffset(block.el, offset + insert.length);
+                return true;
+            }
+
+            function handleLiveBlockBackspaceDelete(e, blockIndex) {
+                if (e.key !== 'Backspace' && e.key !== 'Delete') return false;
+                if (e.metaKey || e.ctrlKey || e.altKey) return false;
+
+                const block = liveBlocks[blockIndex];
+                if (!block?.el || !canSplitBlockOnEnter(block.type)) return false;
+
+                const text = getTextFromContentEditable(block.el);
+                const isBlank = text.trim() === '' || block.type === 'empty';
+
+                if (e.key === 'Backspace' && isBlank) {
+                    if (blockIndex === 0) {
+                        e.preventDefault();
+                        return true;
+                    }
+                    e.preventDefault();
+                    removeLiveBlockAt(blockIndex, blockIndex - 1, 'end');
+                    return true;
+                }
+
+                if (e.key === 'Delete' && isBlank) {
+                    e.preventDefault();
+                    if (liveBlocks.length <= 1) return true;
+                    const focusIndex = blockIndex < liveBlocks.length - 1 ? blockIndex : blockIndex - 1;
+                    removeLiveBlockAt(blockIndex, focusIndex, 0);
+                    return true;
+                }
+
+                return false;
             }
 
             function activateBlockAtOffset(index, offset) {
@@ -2956,8 +3080,12 @@
                     }
                 };
                 block.el.onkeydown = (e) => {
+                    if (handleLiveBlockquoteEnter(e, index)) return;
+                    if (handleLiveBlockEnter(e, index)) return;
+                    if (handleLiveBlockBackspaceDelete(e, index)) return;
+
                     const currentOffset = getCaretOffsetWithin(block.el);
-                    const textLength = block.el.textContent.length;
+                    const textLength = getTextFromContentEditable(block.el).length;
 
                     if (e.key === 'ArrowUp' && currentOffset === 0 && index > 0) {
                         e.preventDefault();
@@ -2979,10 +3107,39 @@
                 if (activeBlockIndex < 0 || activeBlockIndex >= liveBlocks.length) return;
 
                 const block = liveBlocks[activeBlockIndex];
-                const updatedSource = block.el.textContent || '';
+                let updatedSource = getTextFromContentEditable(block.el);
+
+                if (block.type === 'blockquote') {
+                    updatedSource = normalizeBlockquoteSource(updatedSource);
+                }
+
+                if (updatedSource.includes('\n') && canSplitBlockOnEnter(block.type)) {
+                    const lines = updatedSource.split('\n');
+                    const parts = [];
+                    for (let i = 0; i < liveBlocks.length; i++) {
+                        if (i !== activeBlockIndex) {
+                            parts.push(liveBlocks[i].source);
+                        } else {
+                            lines.forEach((line) => parts.push(line));
+                        }
+                    }
+                    const newText = parts.join('\n');
+                    currentContent = newText;
+                    textarea.value = newText;
+                    scheduleLiveRebuild.cancel();
+                    initLiveEditor(newText);
+                    scheduleContentSync(newText);
+                    activeBlockIndex = -1;
+                    highlightCodeBlocks(liveEditor);
+                    rewriteImagesInContainer(liveEditor);
+                    return;
+                }
+
                 const updatedBlock = detectBlockFromSource(updatedSource);
 
-                block.source = updatedBlock.source;
+                block.source = block.type === 'blockquote'
+                    ? normalizeBlockquoteSource(updatedBlock.source)
+                    : updatedBlock.source;
                 block.type = updatedBlock.type;
                 block.el.setAttribute('data-type', block.type);
 
