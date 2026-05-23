@@ -523,6 +523,42 @@
                         background: transparent !important;
                     }
                     
+                    /* Списки */
+                    .live-block[data-type="list"] ul,
+                    .live-block[data-type="list"] ol,
+                    #preview-content .live-block[data-type="list"] ul,
+                    #preview-content .live-block[data-type="list"] ol {
+                        margin: 0.35em 0;
+                        padding-left: 1.6em;
+                    }
+                    .live-block[data-type="list"] .task-list,
+                    #preview-content .live-block[data-type="list"] .task-list {
+                        list-style: none;
+                        padding-left: 0.35em;
+                    }
+                    .live-block[data-type="list"] .task-list li,
+                    #preview-content .live-block[data-type="list"] .task-list li {
+                        display: flex;
+                        align-items: flex-start;
+                        gap: 8px;
+                        margin: 0.2em 0;
+                    }
+                    .live-block[data-type="list"] .task-list input[type="checkbox"],
+                    #preview-content .live-block[data-type="list"] .task-list input[type="checkbox"] {
+                        margin-top: 0.35em;
+                        flex-shrink: 0;
+                        cursor: pointer;
+                    }
+                    .live-block[data-type="list"] .list-item-body,
+                    #preview-content .live-block[data-type="list"] .list-item-body {
+                        flex: 1;
+                        min-width: 0;
+                        outline: none;
+                    }
+                    .live-block[data-type="list"] .list-item-body[contenteditable="true"]:focus {
+                        outline: none;
+                    }
+
                     /* Параграф */
                     .live-block[data-type="p"] { margin: 0.1em 0; }
                     
@@ -693,7 +729,11 @@
             function flushPendingEditorUpdates() {
                 const text = textarea.value;
                 schedulePreviewRender.flush(text);
-                scheduleLiveRebuild.flush(text);
+                if (isLiveActive()) {
+                    scheduleLiveRebuild.cancel();
+                } else {
+                    scheduleLiveRebuild.flush(text);
+                }
                 scheduleContentSync.flush(text);
             }
 
@@ -898,6 +938,13 @@
             }
 
             let lastTextareaSelection = { start: 0, end: 0 };
+
+            function rememberTextareaSelection() {
+                lastTextareaSelection = {
+                    start: textarea.selectionStart,
+                    end: textarea.selectionEnd
+                };
+            }
 
             const textarea = document.getElementById('markdown-textarea');
             const preview = document.getElementById('preview-content');
@@ -1190,6 +1237,10 @@
                     ta.focus();
                 },
 
+                toggleList(kind) {
+                    toggleMarkdownList(kind);
+                },
+
                 insertText(text) {
                     if (isLiveActive()) syncLiveCaretToTextarea();
                     const ta = textarea;
@@ -1268,13 +1319,6 @@
                 textarea.value = initialText;
                 renderPreview(initialText);
 
-                function rememberTextareaSelection() {
-                    lastTextareaSelection = {
-                        start: textarea.selectionStart,
-                        end: textarea.selectionEnd
-                    };
-                }
-
                 if (!isInitialized) {
                     textarea.addEventListener('input', () => {
                         if (isSyncing) return;
@@ -1294,10 +1338,18 @@
 
                     textarea.addEventListener('blur', () => {
                         rememberTextareaSelection();
+                        if (isLiveActive()) {
+                            scheduleLiveRebuild.cancel();
+                            const text = textarea.value;
+                            schedulePreviewRender.flush(text);
+                            scheduleContentSync.flush(text);
+                            return;
+                        }
                         flushPendingEditorUpdates();
                     });
 
                     textarea.addEventListener('keydown', (e) => {
+                        if (handleListKeydown(e)) return;
                         handleEditModeTableKeydown(e);
                     });
 
@@ -2065,6 +2117,442 @@
                 });
             }
 
+            // ============================================================
+            // MARKDOWN LISTS (Typora-like)
+            // ============================================================
+
+            function parseListLine(line) {
+                const task = (line || '').match(/^(\s*)[-*+]\s+\[([ xX])\]\s*(.*)$/);
+                if (task) {
+                    return {
+                        kind: 'task',
+                        indent: task[1],
+                        checked: task[2].toLowerCase() === 'x',
+                        content: task[3],
+                    };
+                }
+                const ordered = (line || '').match(/^(\s*)(\d+)\.\s+(.*)$/);
+                if (ordered) {
+                    return {
+                        kind: 'ordered',
+                        indent: ordered[1],
+                        number: parseInt(ordered[2], 10),
+                        content: ordered[3],
+                    };
+                }
+                const bullet = (line || '').match(/^(\s*)[-*+]\s+(.*)$/);
+                if (bullet) {
+                    return {
+                        kind: 'bullet',
+                        indent: bullet[1],
+                        content: bullet[2],
+                    };
+                }
+                return null;
+            }
+
+            function formatListLine(item, lineIndex) {
+                const indent = item.indent || '';
+                if (item.kind === 'task') {
+                    const mark = item.checked ? 'x' : ' ';
+                    return `${indent}- [${mark}] ${item.content || ''}`;
+                }
+                if (item.kind === 'ordered') {
+                    const n = item.number ?? (lineIndex + 1);
+                    return `${indent}${n}. ${item.content || ''}`;
+                }
+                return `${indent}- ${item.content || ''}`;
+            }
+
+            function markerLength(item, lineIndex) {
+                return formatListLine({ ...item, content: '' }, lineIndex).length;
+            }
+
+            function getLineRangeForSelection(ta) {
+                const start = ta.selectionStart;
+                const end = ta.selectionEnd;
+                const rangeStart = ta.value.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+                let rangeEnd;
+                if (start === end) {
+                    const lineEnd = ta.value.indexOf('\n', start);
+                    rangeEnd = lineEnd === -1 ? ta.value.length : lineEnd;
+                } else {
+                    rangeEnd = ta.value.indexOf('\n', end);
+                    if (rangeEnd === -1) rangeEnd = ta.value.length;
+                }
+                return { rangeStart, rangeEnd };
+            }
+
+            function toggleMarkdownList(kind) {
+                const live = isLiveActive();
+                if (live) syncLiveCaretToTextarea();
+                const ta = textarea;
+                if (!live) ta.focus();
+
+                const { rangeStart, rangeEnd } = getLineRangeForSelection(ta);
+                const selectedText = ta.value.slice(rangeStart, rangeEnd);
+                const lines = selectedText.split('\n');
+
+                const parsedLines = lines.map((line) => ({ line, parsed: parseListLine(line) }));
+                const allMatchKind = parsedLines.length > 0
+                    && parsedLines.every(({ parsed }) => parsed && parsed.kind === kind);
+
+                const hasNonEmptyLine = parsedLines.some(({ line }) => line.trim() !== '');
+                let orderedIndex = 0;
+                const newLines = parsedLines.map(({ line, parsed }) => {
+                    if (allMatchKind && parsed) {
+                        return parsed.indent + parsed.content;
+                    }
+                    // Пустая строка: только разделитель между абзацами в многострочном выделении
+                    if (line.trim() === '' && !parsed && parsedLines.length > 1 && hasNonEmptyLine) {
+                        return line;
+                    }
+                    const indent = parsed?.indent || '';
+                    const content = parsed ? parsed.content : line.trim();
+                    const number = kind === 'ordered' ? (++orderedIndex) : 1;
+                    return formatListLine({
+                        kind,
+                        indent,
+                        content,
+                        checked: false,
+                        number,
+                    }, number - 1);
+                });
+
+                const replacement = newLines.join('\n');
+                ta.setRangeText(replacement, rangeStart, rangeEnd, 'end');
+
+                if (ta.selectionStart === ta.selectionEnd) {
+                    const first = parseListLine(newLines[0]);
+                    if (first) {
+                        const pos = rangeStart + markerLength(first, 0);
+                        ta.setSelectionRange(pos, pos);
+                    }
+                }
+
+                rememberTextareaSelection();
+
+                const caretPos = ta.selectionStart;
+                if (live) {
+                    currentContent = ta.value;
+                    scheduleLiveRebuild.cancel();
+                    initLiveEditor(ta.value);
+                    scheduleContentSync(ta.value);
+                    const blockIdx = blockIndexAtTextareaOffset(caretPos);
+                    if (liveBlocks[blockIdx]?.type === 'list') {
+                        focusLiveListItemAfterRebuild(blockIdx, 0, 0);
+                    }
+                } else {
+                    ta.dispatchEvent(new Event('input'));
+                }
+            }
+
+            function handleListKeydown(e) {
+                if (e.key !== 'Enter' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return false;
+
+                const ta = textarea;
+                const pos = ta.selectionStart;
+                if (pos !== ta.selectionEnd) return false;
+
+                const lineStart = ta.value.lastIndexOf('\n', pos - 1) + 1;
+                const lineEnd = ta.value.indexOf('\n', pos);
+                const lineEndPos = lineEnd === -1 ? ta.value.length : lineEnd;
+                const line = ta.value.slice(lineStart, lineEndPos);
+                const parsed = parseListLine(line);
+                if (!parsed) return false;
+
+                const prefixLen = markerLength(parsed, 0);
+                const cursorInLine = pos - lineStart;
+                const contentStart = prefixLen;
+                const textBefore = line.slice(contentStart, cursorInLine);
+                const textAfter = line.slice(cursorInLine);
+
+                if (parsed.content.trim() === '' && cursorInLine >= contentStart) {
+                    e.preventDefault();
+                    const emptyLine = parsed.indent;
+                    ta.setRangeText(emptyLine + '\n', lineStart, lineEndPos, 'end');
+                    const newPos = lineStart + emptyLine.length + 1;
+                    ta.setSelectionRange(newPos, newPos);
+                    rememberTextareaSelection();
+                    ta.dispatchEvent(new Event('input'));
+                    if (isLiveActive()) initLiveEditor(ta.value);
+                    return true;
+                }
+
+                e.preventDefault();
+                const currentLine = formatListLine({ ...parsed, content: textBefore }, parsed.number);
+                const nextNumber = parsed.kind === 'ordered'
+                    ? (parsed.number || 1) + 1
+                    : 1;
+                const nextLine = formatListLine({
+                    kind: parsed.kind,
+                    indent: parsed.indent,
+                    content: textAfter,
+                    checked: false,
+                    number: nextNumber,
+                }, nextNumber - 1);
+
+                ta.setRangeText(currentLine + '\n' + nextLine, lineStart, lineEndPos, 'end');
+                const newPos = lineStart + currentLine.length + 1 + markerLength({
+                    kind: parsed.kind,
+                    indent: parsed.indent,
+                    checked: false,
+                    number: nextNumber,
+                }, nextNumber - 1);
+                ta.setSelectionRange(newPos, newPos);
+                rememberTextareaSelection();
+                ta.dispatchEvent(new Event('input'));
+                if (isLiveActive()) initLiveEditor(ta.value);
+                return true;
+            }
+
+            function syncListBlockFromDOM(index) {
+                const block = liveBlocks[index];
+                if (!block || block.type !== 'list') return;
+
+                const lines = block.source.split('\n');
+                const listEl = block.el.querySelector('ul, ol');
+                if (!listEl) return;
+
+                const lis = [...listEl.querySelectorAll(':scope > li')];
+                const newLines = lis.map((li, itemIndex) => {
+                    const base = parseListLine(lines[itemIndex]) || {
+                        kind: block.listKind,
+                        indent: '',
+                        checked: false,
+                        number: itemIndex + 1,
+                    };
+                    const body = li.querySelector('.list-item-body');
+                    const content = (body?.textContent || '').replace(/\u00a0/g, ' ');
+                    const checkbox = li.querySelector('input[type="checkbox"]');
+                    return formatListLine({
+                        kind: base.kind,
+                        indent: base.indent,
+                        content,
+                        checked: checkbox ? checkbox.checked : base.checked,
+                        number: base.number,
+                    }, itemIndex);
+                });
+
+                block.source = newLines.join('\n');
+                syncLiveContentToModel();
+            }
+
+            const scheduleListSync = debounce((index) => {
+                syncListBlockFromDOM(index);
+            }, 200);
+
+            function blockIndexAtTextareaOffset(offset) {
+                let cursor = 0;
+                for (let i = 0; i < liveBlocks.length; i++) {
+                    const source = liveBlocks[i]?.source ?? '';
+                    const blockEnd = cursor + source.length;
+                    if (offset <= blockEnd) return i;
+                    cursor = blockEnd + 1;
+                }
+                return Math.max(liveBlocks.length - 1, 0);
+            }
+
+            function focusLiveListItemAfterRebuild(blockIndex, itemIndex, caretOffset) {
+                const placeCaret = () => {
+                    const block = liveBlocks[blockIndex];
+                    if (!block?.el || block.type !== 'list') return false;
+
+                    const listRoot = block.el.querySelector('ul, ol');
+                    if (!listRoot) return false;
+
+                    const li = listRoot.querySelectorAll(':scope > li')[itemIndex];
+                    if (!li) return false;
+
+                    const body = li.querySelector('.list-item-body');
+                    if (!body) return false;
+
+                    if (body.innerHTML === '<br>' || body.textContent === '\u00a0') {
+                        body.textContent = '';
+                    }
+
+                    body.focus();
+                    placeCaretAtTextOffset(body, caretOffset ?? 0);
+                    lastLiveInteraction = { blockIndex, offsetInBlock: null };
+                    return true;
+                };
+
+                requestAnimationFrame(() => {
+                    if (placeCaret()) return;
+                    requestAnimationFrame(placeCaret);
+                });
+            }
+
+            function focusLiveEmptyBlockAfterRebuild(preferredIndex) {
+                const placeCaret = () => {
+                    const tryIndex = (idx) => {
+                        const block = liveBlocks[idx];
+                        if (!block?.el || block.type !== 'empty') return false;
+                        activateBlock(idx, 0);
+                        lastLiveInteraction = { blockIndex: idx, offsetInBlock: 0 };
+                        return true;
+                    };
+
+                    if (tryIndex(preferredIndex)) return true;
+                    for (let i = 0; i < liveBlocks.length; i++) {
+                        if (i !== preferredIndex && tryIndex(i)) return true;
+                    }
+                    return false;
+                };
+
+                requestAnimationFrame(() => {
+                    if (placeCaret()) return;
+                    requestAnimationFrame(placeCaret);
+                });
+            }
+
+            function rebuildLiveDocumentAndFocus(parts, focusBlockIndex) {
+                const newText = parts.join('\n');
+                currentContent = newText;
+                textarea.value = newText;
+                scheduleLiveRebuild.cancel();
+                initLiveEditor(newText);
+                scheduleContentSync(newText);
+                focusLiveEmptyBlockAfterRebuild(focusBlockIndex);
+            }
+
+            function handleLiveListItemKeydown(e, blockIndex, itemIndex, bodyEl) {
+                if (e.key !== 'Enter' || e.shiftKey) return;
+                e.preventDefault();
+
+                const block = liveBlocks[blockIndex];
+                if (!block || block.type !== 'list') return;
+
+                const lines = block.source.split('\n');
+                const parsed = parseListLine(lines[itemIndex]);
+                if (!parsed) return;
+
+                const text = (bodyEl.textContent || '').replace(/\u00a0/g, ' ');
+                const sel = window.getSelection();
+                if (!sel || sel.rangeCount === 0) return;
+
+                const range = sel.getRangeAt(0);
+                const pre = document.createRange();
+                pre.selectNodeContents(bodyEl);
+                pre.setEnd(range.endContainer, range.endOffset);
+                const offset = pre.toString().length;
+
+                if (text.trim() === '') {
+                    lines.splice(itemIndex, 1);
+                    block.source = lines.join('\n');
+
+                    const parts = [];
+                    let focusBlockIndex = blockIndex;
+
+                    for (let i = 0; i < liveBlocks.length; i++) {
+                        if (i !== blockIndex) {
+                            parts.push(liveBlocks[i].source);
+                            continue;
+                        }
+                        if (block.source.trim() === '') {
+                            parts.push('');
+                            focusBlockIndex = parts.length - 1;
+                        } else {
+                            parts.push(block.source);
+                            parts.push('');
+                            focusBlockIndex = blockIndex + 1;
+                        }
+                    }
+
+                    rebuildLiveDocumentAndFocus(parts, focusBlockIndex);
+                    return;
+                }
+
+                const before = text.slice(0, offset);
+                const after = text.slice(offset);
+                const newItemIndex = itemIndex + 1;
+
+                lines[itemIndex] = formatListLine({ ...parsed, content: before }, parsed.number);
+                const nextNumber = parsed.kind === 'ordered'
+                    ? (parsed.number || itemIndex + 1) + 1
+                    : itemIndex + 2;
+                lines.splice(newItemIndex, 0, formatListLine({
+                    kind: parsed.kind,
+                    indent: parsed.indent,
+                    content: after,
+                    checked: false,
+                    number: nextNumber,
+                }, newItemIndex));
+
+                block.source = lines.join('\n');
+                const parts = liveBlocks.map((b, i) => (i === blockIndex ? block.source : b.source));
+                const newText = parts.join('\n');
+                currentContent = newText;
+                textarea.value = newText;
+                scheduleLiveRebuild.cancel();
+                initLiveEditor(newText);
+                scheduleContentSync(newText);
+                focusLiveListItemAfterRebuild(blockIndex, newItemIndex, 0);
+            }
+
+            function setupListBlock(el, block, index, readOnly) {
+                const lines = block.source.split('\n');
+                const items = lines.map((line, i) => parseListLine(line)).filter(Boolean);
+                if (!items.length) {
+                    el.innerHTML = '<br>';
+                    return;
+                }
+
+                const listKind = block.listKind || items[0].kind;
+                const isOrdered = listKind === 'ordered';
+                const isTask = listKind === 'task';
+                const list = document.createElement(isOrdered ? 'ol' : 'ul');
+                if (isTask) list.className = 'task-list';
+
+                items.forEach((item, itemIndex) => {
+                    const li = document.createElement('li');
+
+                    if (isTask) {
+                        const cb = document.createElement('input');
+                        cb.type = 'checkbox';
+                        cb.checked = !!item.checked;
+                        if (!readOnly) {
+                            cb.addEventListener('mousedown', (ev) => ev.stopPropagation());
+                            cb.addEventListener('change', () => {
+                                const srcLines = block.source.split('\n');
+                                const p = parseListLine(srcLines[itemIndex]);
+                                if (!p) return;
+                                p.checked = cb.checked;
+                                srcLines[itemIndex] = formatListLine(p, itemIndex);
+                                block.source = srcLines.join('\n');
+                                syncLiveContentToModel();
+                            });
+                        } else {
+                            cb.disabled = true;
+                        }
+                        li.appendChild(cb);
+                    }
+
+                    const body = document.createElement('span');
+                    body.className = 'list-item-body';
+                    if (item.content.trim()) {
+                        body.innerHTML = renderInline(item.content);
+                    } else if (!readOnly) {
+                        body.innerHTML = '<br>';
+                    }
+
+                    if (!readOnly) {
+                        body.contentEditable = 'true';
+                        body.addEventListener('mousedown', (ev) => ev.stopPropagation());
+                        body.addEventListener('input', () => scheduleListSync(index));
+                        body.addEventListener('keydown', (ev) => {
+                            handleLiveListItemKeydown(ev, index, itemIndex, body);
+                        });
+                    }
+
+                    li.appendChild(body);
+                    list.appendChild(li);
+                });
+
+                el.innerHTML = '';
+                el.appendChild(list);
+            }
+
             function parseMarkdownBlocks(text) {
                 const rawLines = (text || '').split('\n');
                 const blocks = [];
@@ -2076,6 +2564,25 @@
                     if (line.trim() === '') {
                         blocks.push({ type: 'empty', source: '' });
                         i++;
+                        continue;
+                    }
+
+                    const listParsed = parseListLine(line);
+                    if (listParsed) {
+                        const listLines = [line];
+                        const listKind = listParsed.kind;
+                        i++;
+                        while (i < rawLines.length) {
+                            const next = parseListLine(rawLines[i]);
+                            if (!next || next.kind !== listKind) break;
+                            listLines.push(rawLines[i]);
+                            i++;
+                        }
+                        blocks.push({
+                            type: 'list',
+                            listKind,
+                            source: listLines.join('\n'),
+                        });
                         continue;
                     }
 
@@ -2171,6 +2678,12 @@
                     return { type: 'image', source: text };
                 }
 
+                const firstListLine = text.split('\n')[0] || '';
+                const listInfo = parseListLine(firstListLine);
+                if (listInfo) {
+                    return { type: 'list', listKind: listInfo.kind, source: text };
+                }
+
                 return { type: 'p', source: text };
             }
 
@@ -2234,6 +2747,10 @@
                     return renderTableHTMLFromRows(rows);
                 }
 
+                if (block.type === 'list') {
+                    return '';
+                }
+
                 if (block.type.startsWith('h')) {
                     const textMatch = block.source.match(/^#{1,6}\s+(.+)/);
                     return textMatch ? renderInline(textMatch[1]) : renderInline(block.source);
@@ -2263,11 +2780,13 @@
                     setupTableBlock(el, block, index, readOnly);
                 } else if (block.type === 'code-fence') {
                     setupCodeFenceBlock(el, block, index, readOnly);
+                } else if (block.type === 'list') {
+                    setupListBlock(el, block, index, readOnly);
                 } else {
                     el.innerHTML = renderBlock(block);
                 }
 
-                if (!readOnly && block.type !== 'table' && block.type !== 'code-fence') {
+                if (!readOnly && block.type !== 'table' && block.type !== 'code-fence' && block.type !== 'list') {
                     el.addEventListener('mousedown', (e) => {
                         if (activeBlockIndex === index) return;
 
@@ -2479,6 +2998,8 @@
                     setupTableBlock(block.el, block, activeBlockIndex, false);
                 } else if (block.type === 'code-fence') {
                     setupCodeFenceBlock(block.el, block, activeBlockIndex, false);
+                } else if (block.type === 'list') {
+                    setupListBlock(block.el, block, activeBlockIndex, false);
                 } else {
                     block.el.innerHTML = renderBlock(block);
                 }

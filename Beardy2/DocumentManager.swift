@@ -701,15 +701,15 @@ class DocumentManager: ObservableObject {
     }
     
     func insertBulletList() {
-        insertAtCurrentLine(prefix: "- ")
+        execEditorJS("window.cmEditor?.toggleList('bullet');")
     }
     
     func insertNumberedList() {
-        insertAtCurrentLine(prefix: "1. ")
+        execEditorJS("window.cmEditor?.toggleList('ordered');")
     }
     
     func insertTaskList() {
-        insertAtCurrentLine(prefix: "- [ ] ")
+        execEditorJS("window.cmEditor?.toggleList('task');")
     }
     
     func insertCodeBlock() {
