@@ -174,9 +174,8 @@ struct EditorToolbar: View {
     @EnvironmentObject var documentManager: DocumentManager
     
     var body: some View {
-        HStack(spacing: 8) {
-            HStack(spacing: 16) {
-                // Text formatting
+        VStack(alignment: .leading, spacing: 8) {
+            WrappingToolbarLayout(horizontalSpacing: 8, verticalSpacing: 8) {
                 ToolbarButton(icon: "bold", tooltip: "Bold (⌘B)") {
                     documentManager.toggleBold()
                 }
@@ -189,10 +188,8 @@ struct EditorToolbar: View {
                     documentManager.toggleStrikethrough()
                 }
                 
-                Divider()
-                    .frame(height: 20)
+                ToolbarDivider()
                 
-                // Headings
                 Menu {
                     ForEach(1...6, id: \.self) { level in
                         Button("Heading \(level)") {
@@ -209,10 +206,8 @@ struct EditorToolbar: View {
                 .menuStyle(.borderlessButton)
                 .frame(height: 24)
                 
-                Divider()
-                    .frame(height: 20)
+                ToolbarDivider()
                 
-                // Lists
                 ToolbarButton(icon: "list.bullet", tooltip: "Bullet List") {
                     documentManager.insertBulletList()
                 }
@@ -225,10 +220,8 @@ struct EditorToolbar: View {
                     documentManager.insertTaskList()
                 }
                 
-                Divider()
-                    .frame(height: 20)
+                ToolbarDivider()
                 
-                // Insert elements
                 ToolbarButton(icon: "link", tooltip: "Insert Link (⌘K)") {
                     documentManager.insertLink()
                 }
@@ -245,10 +238,8 @@ struct EditorToolbar: View {
                     documentManager.insertCodeBlock()
                 }
                 
-                Divider()
-                    .frame(height: 20)
+                ToolbarDivider()
                 
-                // Special
                 ToolbarButton(icon: "quote.opening", tooltip: "Blockquote") {
                     documentManager.insertBlockquote()
                 }
@@ -256,39 +247,84 @@ struct EditorToolbar: View {
                 ToolbarButton(icon: "minus.forwardslash.plus", tooltip: "Horizontal Rule") {
                     documentManager.insertHorizontalRule()
                 }
-                
-                Spacer()
             }
             
-            // Line/Word count
             if let doc = documentManager.currentDocument {
-                HStack(spacing: 12) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "text.alignleft")
-                            .font(.system(size: 10))
-                        Text("\(doc.lineCount) lines")
-                            .font(.system(size: 11))
-                    }
-                    .foregroundColor(.secondary)
-                    
-                    HStack(spacing: 4) {
-                        Image(systemName: "text.alignleft")
-                            .font(.system(size: 10))
-                        Text("\(doc.wordCount) words")
-                            .font(.system(size: 11))
-                    }
-                    .foregroundColor(.secondary)
-                    
-                    HStack(spacing: 4) {
-                        Image(systemName: "character")
-                            .font(.system(size: 10))
-                        Text("\(doc.characterCount) chars")
-                            .font(.system(size: 11))
-                    }
-                    .foregroundColor(.secondary)
+                WrappingToolbarLayout(horizontalSpacing: 12, verticalSpacing: 6) {
+                    ToolbarStatLabel(icon: "text.alignleft", text: "\(doc.lineCount) lines")
+                    ToolbarStatLabel(icon: "text.alignleft", text: "\(doc.wordCount) words")
+                    ToolbarStatLabel(icon: "character", text: "\(doc.characterCount) chars")
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct ToolbarDivider: View {
+    var body: some View {
+        Divider()
+            .frame(width: 1, height: 20)
+    }
+}
+
+private struct ToolbarStatLabel: View {
+    let icon: String
+    let text: String
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 10))
+            Text(text)
+                .font(.system(size: 11))
+        }
+        .foregroundColor(.secondary)
+    }
+}
+
+/// Переносит элементы тулбара на следующую строку при нехватке ширины.
+private struct WrappingToolbarLayout: Layout {
+    var horizontalSpacing: CGFloat = 8
+    var verticalSpacing: CGFloat = 8
+    
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrange(proposal: proposal, subviews: subviews).size
+    }
+    
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = arrange(proposal: proposal, subviews: subviews)
+        for (index, subview) in subviews.enumerated() {
+            let point = result.positions[index]
+            subview.place(
+                at: CGPoint(x: bounds.minX + point.x, y: bounds.minY + point.y),
+                proposal: .unspecified
+            )
+        }
+    }
+    
+    private func arrange(proposal: ProposedViewSize, subviews: Subviews) -> (size: CGSize, positions: [CGPoint]) {
+        let maxWidth = proposal.width ?? .infinity
+        var positions: [CGPoint] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var usedWidth: CGFloat = 0
+        
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0 && x + size.width > maxWidth {
+                x = 0
+                y += rowHeight + verticalSpacing
+                rowHeight = 0
+            }
+            positions.append(CGPoint(x: x, y: y))
+            rowHeight = max(rowHeight, size.height)
+            x += size.width + horizontalSpacing
+            usedWidth = max(usedWidth, x - horizontalSpacing)
+        }
+        
+        return (CGSize(width: usedWidth, height: y + rowHeight), positions)
     }
 }
 

@@ -293,24 +293,24 @@
                     #live-editor .hljs-ln td.hljs-ln-code {
                         padding-left: 12px !important;
                     }
-                    #preview-content table:not(.md-table) {
+                    #preview-content table:not(.md-table):not(.hljs-ln) {
                         border-collapse: collapse;
                         margin: 1em 0;
                         width: 100%;
                     }
-                    #preview-content table:not(.md-table) th,
-                    #preview-content table:not(.md-table) td {
+                    #preview-content table:not(.md-table):not(.hljs-ln) th,
+                    #preview-content table:not(.md-table):not(.hljs-ln) td {
                         padding: 6px 13px;
                         border: 1px solid #8b949e;
                     }
-                    body.dark #preview-content table:not(.md-table) th,
-                    body.dark #preview-content table:not(.md-table) td {
+                    body.dark #preview-content table:not(.md-table):not(.hljs-ln) th,
+                    body.dark #preview-content table:not(.md-table):not(.hljs-ln) td {
                         border-color: #6e7681;
                     }
-                    #preview-content table:not(.md-table) thead {
+                    #preview-content table:not(.md-table):not(.hljs-ln) thead {
                         background: #f6f8fa;
                     }
-                    body.dark #preview-content table:not(.md-table) thead {
+                    body.dark #preview-content table:not(.md-table):not(.hljs-ln) thead {
                         background: #161b22;
                     }
                     #preview-content blockquote {
@@ -430,20 +430,97 @@
                     }
                     body.dark .live-block[data-type="hr"] { border-top-color: #30363d; }
                     
-                    /* Код блок */
+                    /* Код блок — одна рамка через .code-fence-wrap */
                     .live-block[data-type="code-fence"] {
-                        font-family: 'SF Mono', Monaco, Consolas, monospace;
-                        font-size: 13px;
-                        background: #f6f8fa;
-                        border-radius: 6px;
-                        padding: 12px 16px;
                         margin: 0.5em 0;
-                        color: #24292e;
-                        white-space: pre;
+                        padding: 0;
+                        background: transparent;
+                        white-space: normal;
                     }
-                    body.dark .live-block[data-type="code-fence"] {
-                        background: #161b22;
+                    .code-fence-wrap {
+                        border-radius: 8px;
+                        overflow: hidden;
+                        border: 1px solid var(--md-code-border, #d0d7de);
+                        background-color: var(--md-code-bg, #f6f8fa);
+                    }
+                    .code-fence-lang-bar {
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        padding: 5px 12px;
+                        border-bottom: 1px solid var(--md-code-border, #d0d7de);
+                        background: rgba(0, 0, 0, 0.04);
+                        font-size: 12px;
+                        line-height: 1.2;
+                    }
+                    body.dark .code-fence-lang-bar {
+                        background: rgba(255, 255, 255, 0.05);
+                    }
+                    .code-fence-lang-label {
+                        color: #57606a;
+                        font-weight: 500;
+                        white-space: nowrap;
+                    }
+                    body.dark .code-fence-lang-label {
+                        color: #8b949e;
+                    }
+                    .code-fence-lang-select {
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                        font-size: 12px;
+                        padding: 2px 6px;
+                        border: 1px solid #d0d7de;
+                        border-radius: 4px;
+                        background: #ffffff;
+                        color: inherit;
+                        cursor: pointer;
+                        min-width: 140px;
+                        max-width: 100%;
+                    }
+                    body.dark .code-fence-lang-select {
+                        background: #0d1117;
+                        border-color: #30363d;
                         color: #c9d1d9;
+                    }
+                    .code-fence-wrap pre.hljs {
+                        border: none !important;
+                        border-radius: 0 !important;
+                        margin: 0 !important;
+                        background-color: transparent !important;
+                        padding: 14px 16px !important;
+                        min-height: 4.5em;
+                        cursor: text;
+                    }
+                    .code-fence-wrap pre.hljs.is-empty {
+                        display: flex;
+                        align-items: flex-start;
+                    }
+                    .code-fence-placeholder {
+                        color: #6a737d;
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                        font-size: 13px;
+                        font-style: italic;
+                        line-height: 1.5;
+                        user-select: none;
+                        pointer-events: none;
+                    }
+                    body.dark .code-fence-placeholder {
+                        color: #8b949e;
+                    }
+                    /* Нумерация строк — не как markdown-таблица */
+                    #preview-content table.hljs-ln,
+                    #live-editor table.hljs-ln {
+                        border-collapse: collapse;
+                        width: 100%;
+                        margin: 0;
+                        border: none !important;
+                    }
+                    #preview-content table.hljs-ln td,
+                    #live-editor table.hljs-ln td,
+                    #preview-content table.hljs-ln th,
+                    #live-editor table.hljs-ln th {
+                        border: none !important;
+                        padding: 0 !important;
+                        background: transparent !important;
                     }
                     
                     /* Параграф */
@@ -575,9 +652,19 @@
 
             function applyCodeBlockChrome(container) {
                 if (!container) return;
+                container.querySelectorAll('.code-fence-wrap').forEach((wrap) => {
+                    wrap.style.setProperty('background-color', currentCodeBlockBg, 'important');
+                    wrap.style.setProperty('border-color', currentCodeBlockBorder, 'important');
+                });
                 container.querySelectorAll('pre.hljs').forEach((pre) => {
-                    pre.style.setProperty('background-color', currentCodeBlockBg, 'important');
-                    pre.style.setProperty('border-color', currentCodeBlockBorder, 'important');
+                    const wrap = pre.closest('.code-fence-wrap');
+                    if (wrap) {
+                        pre.style.setProperty('background-color', 'transparent', 'important');
+                        pre.style.setProperty('border-color', 'transparent', 'important');
+                    } else {
+                        pre.style.setProperty('background-color', currentCodeBlockBg, 'important');
+                        pre.style.setProperty('border-color', currentCodeBlockBorder, 'important');
+                    }
                     pre.querySelectorAll('code, .hljs, span').forEach((node) => {
                         node.style.setProperty('background', 'transparent', 'important');
                         node.style.setProperty('background-color', 'transparent', 'important');
@@ -670,25 +757,49 @@
             }
 
             function highlightCodeBlocks(container) {
-                if (!window.hljs || !container) return;
-                container.querySelectorAll('pre').forEach((pre) => {
-                    const code = restoreCodeBlock(pre);
-                    const text = (code.textContent || '').trimEnd();
+                if (!container) return;
+                container.querySelectorAll('.code-fence-wrap pre.hljs').forEach((pre) => {
+                    const placeholder = pre.querySelector('.code-fence-placeholder');
+                    const code = pre.querySelector('code');
+                    const raw = (code?.textContent || '')
+                        .replace(/\u00a0/g, ' ')
+                        .replace(/\u200b/g, '')
+                        .trimEnd();
+
+                    if (!raw) {
+                        pre.classList.add('is-empty');
+                        if (!placeholder) {
+                            const hint = document.createElement('div');
+                            hint.className = 'code-fence-placeholder';
+                            hint.textContent = 'Click to edit code…';
+                            pre.appendChild(hint);
+                        }
+                        if (code) code.textContent = '';
+                        return;
+                    }
+
+                    pre.classList.remove('is-empty');
+                    if (placeholder) placeholder.remove();
+
+                    if (!window.hljs || !code) return;
+
+                    const restored = restoreCodeBlock(pre);
+                    const text = (restored.textContent || '').trimEnd();
                     if (!text) return;
 
-                    code.removeAttribute('data-highlighted');
-                    code.classList.remove('hljs');
+                    restored.removeAttribute('data-highlighted');
+                    restored.classList.remove('hljs');
                     pre.classList.add('hljs');
 
                     try {
-                        hljs.highlightElement(code);
+                        hljs.highlightElement(restored);
                     } catch (e) {
                         console.warn('hljs.highlightElement failed', e);
                     }
 
                     if (showCodeLineNumbers && typeof hljs.lineNumbersBlock === 'function') {
                         try {
-                            hljs.lineNumbersBlock(code);
+                            hljs.lineNumbersBlock(restored);
                         } catch (e) {
                             console.warn('lineNumbersBlock failed', e);
                         }
@@ -1096,10 +1207,15 @@
                         end: start + text.length
                     };
                     ta.dispatchEvent(new Event('input'));
-                    if (isLiveMode) initLiveEditor(ta.value);
+                    if (isLiveActive()) {
+                        initLiveEditor(ta.value);
+                        if ((text || '').includes('```')) {
+                            requestAnimationFrame(() => activateCodeBlockAtCursor());
+                        }
+                    }
                     ta.focus();
                 },
-                
+
                 insertLink(clipboardUrl) {
                     if (isLiveActive()) syncLiveCaretToTextarea();
                     const ta = textarea;
@@ -1627,6 +1743,181 @@
                 table.dataset.columns = String(colCount);
             }
 
+            const CODE_LANG_FALLBACK = [
+                'plaintext', 'javascript', 'typescript', 'python', 'swift', 'bash', 'shell',
+                'json', 'html', 'xml', 'css', 'sql', 'rust', 'go', 'java', 'c', 'cpp',
+                'csharp', 'kotlin', 'ruby', 'php', 'yaml', 'markdown'
+            ];
+
+            function listHighlightLanguages() {
+                if (window.hljs && typeof hljs.listLanguages === 'function') {
+                    return hljs.listLanguages().sort();
+                }
+                return CODE_LANG_FALLBACK;
+            }
+
+            function parseCodeFenceSource(source) {
+                const lines = (source || '').split('\n');
+                const open = lines[0] || '```';
+                const langMatch = open.match(/^```([\w-]*)/);
+                const lang = langMatch ? (langMatch[1] || '').trim().toLowerCase() : '';
+                let inner = '';
+                if (lines.length > 2) {
+                    inner = lines.slice(1, lines.length - 1).join('\n');
+                } else if (lines.length === 2) {
+                    inner = lines[1] === '```' ? '' : lines[1];
+                }
+                return { lang, inner };
+            }
+
+            function buildCodeFenceSource(lang, inner) {
+                const fenceLang = (lang || '').trim().toLowerCase();
+                const open = fenceLang ? `\`\`\`${fenceLang}` : '```';
+                return `${open}\n${inner || ''}\n\`\`\``;
+            }
+
+            function detectCodeLanguage(code) {
+                const sample = (code || '').trim();
+                if (!sample || !window.hljs) return '';
+                if (typeof hljs.highlightAuto === 'function') {
+                    try {
+                        const result = hljs.highlightAuto(sample);
+                        if (result.language && result.relevance >= 4) {
+                            return result.language;
+                        }
+                    } catch (e) {
+                        console.warn('hljs.highlightAuto failed', e);
+                    }
+                }
+                return '';
+            }
+
+            function escapeCodeFenceHTML(text) {
+                return (text || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+            }
+
+            function setupCodeFenceBlock(el, block, index, readOnly) {
+                let { lang, inner } = parseCodeFenceSource(block.source);
+
+                if (!lang && inner.trim() && !readOnly) {
+                    const detected = detectCodeLanguage(inner);
+                    if (detected) {
+                        lang = detected;
+                        block.source = buildCodeFenceSource(lang, inner);
+                    }
+                }
+
+                const wrap = document.createElement('div');
+                wrap.className = 'code-fence-wrap';
+
+                const langBar = document.createElement('div');
+                langBar.className = 'code-fence-lang-bar';
+
+                const langLabel = document.createElement('span');
+                langLabel.className = 'code-fence-lang-label';
+                langLabel.textContent = 'Language:';
+                langBar.appendChild(langLabel);
+
+                const displayLang = lang || 'auto';
+
+                if (readOnly) {
+                    const langText = document.createElement('span');
+                    langText.textContent = displayLang === 'auto' ? 'auto' : displayLang;
+                    langBar.appendChild(langText);
+                } else {
+                    const select = document.createElement('select');
+                    select.className = 'code-fence-lang-select';
+                    select.title = 'Code language';
+
+                    const autoOpt = document.createElement('option');
+                    autoOpt.value = '';
+                    autoOpt.textContent = lang ? `auto (${lang})` : 'auto-detect';
+                    select.appendChild(autoOpt);
+
+                    const plainOpt = document.createElement('option');
+                    plainOpt.value = 'plaintext';
+                    plainOpt.textContent = 'Plain Text';
+                    select.appendChild(plainOpt);
+
+                    listHighlightLanguages().forEach((name) => {
+                        const opt = document.createElement('option');
+                        opt.value = name;
+                        opt.textContent = name;
+                        select.appendChild(opt);
+                    });
+
+                    select.value = lang || '';
+                    select.addEventListener('change', () => {
+                        const chosen = select.value;
+                        const parsed = parseCodeFenceSource(block.source);
+                        block.source = buildCodeFenceSource(chosen, parsed.inner);
+                        setupCodeFenceBlock(el, block, index, false);
+                        highlightCodeBlocks(el);
+                        syncLiveContentToModel();
+                    });
+                    langBar.appendChild(select);
+                }
+
+                wrap.appendChild(langBar);
+
+                const pre = document.createElement('pre');
+                pre.className = 'hljs';
+                const code = document.createElement('code');
+                if (lang) {
+                    code.className = `language-${lang}`;
+                    code.setAttribute('data-language', lang);
+                }
+
+                if (!inner.trim()) {
+                    pre.classList.add('is-empty');
+                    const hint = document.createElement('div');
+                    hint.className = 'code-fence-placeholder';
+                    hint.textContent = readOnly ? '' : 'Click to edit code…';
+                    pre.appendChild(hint);
+                } else {
+                    code.textContent = inner;
+                    pre.appendChild(code);
+                }
+
+                wrap.appendChild(pre);
+
+                el.innerHTML = '';
+                el.appendChild(wrap);
+
+                if (!readOnly) {
+                    langBar.addEventListener('mousedown', (e) => e.stopPropagation());
+                    const openForEdit = (e) => {
+                        if (e.target.closest('.code-fence-lang-bar')) return;
+                        if (activeBlockIndex === index) return;
+                        e.preventDefault();
+                        activateBlock(index, null);
+                    };
+                    wrap.addEventListener('mousedown', openForEdit);
+                    pre.addEventListener('mousedown', openForEdit);
+                }
+            }
+
+            function activateCodeBlockAtCursor() {
+                if (!isLiveActive() || !liveBlocks.length) return;
+
+                const pos = textarea.selectionStart;
+                let offset = 0;
+                for (let i = 0; i < liveBlocks.length; i++) {
+                    const source = liveBlocks[i].source || '';
+                    const blockEnd = offset + source.length;
+                    if (pos <= blockEnd) {
+                        if (liveBlocks[i].type === 'code-fence') {
+                            activateBlock(i, null);
+                        }
+                        return;
+                    }
+                    offset = blockEnd + 1;
+                }
+            }
+
             function renderTableHTMLFromRows(rows) {
                 if (!rows.length) return '';
 
@@ -1935,16 +2226,7 @@
                 }
 
                 if (block.type === 'code-fence') {
-                    const lines = block.source.split('\n');
-                    const langMatch = lines[0].match(/^```(\w*)/);
-                    const lang = langMatch ? langMatch[1] : '';
-                    const inner = lines.slice(1, lines.length - 1).join('\n');
-                    const escaped = inner
-                        .replace(/&/g, '&amp;')
-                        .replace(/</g, '&lt;')
-                        .replace(/>/g, '&gt;');
-                    const langClass = lang ? ` class="language-${lang}"` : '';
-                    return `<pre class="hljs"><code${langClass}>${escaped}</code></pre>`;
+                    return '';
                 }
 
                 if (block.type === 'table') {
@@ -1979,11 +2261,13 @@
                     el.innerHTML = '';
                 } else if (block.type === 'table') {
                     setupTableBlock(el, block, index, readOnly);
+                } else if (block.type === 'code-fence') {
+                    setupCodeFenceBlock(el, block, index, readOnly);
                 } else {
                     el.innerHTML = renderBlock(block);
                 }
 
-                if (!readOnly && block.type !== 'table') {
+                if (!readOnly && block.type !== 'table' && block.type !== 'code-fence') {
                     el.addEventListener('mousedown', (e) => {
                         if (activeBlockIndex === index) return;
 
@@ -2193,6 +2477,8 @@
                     block.el.innerHTML = '';
                 } else if (block.type === 'table') {
                     setupTableBlock(block.el, block, activeBlockIndex, false);
+                } else if (block.type === 'code-fence') {
+                    setupCodeFenceBlock(block.el, block, activeBlockIndex, false);
                 } else {
                     block.el.innerHTML = renderBlock(block);
                 }

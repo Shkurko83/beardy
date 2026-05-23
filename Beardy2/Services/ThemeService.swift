@@ -548,6 +548,30 @@ class ThemeService: NSObject, ObservableObject {
             margin: 1em 0;
         }
 
+        #preview-content .code-fence-wrap,
+        #live-editor .code-fence-wrap {
+            margin: 0.5em 0;
+        }
+
+        #preview-content .code-fence-wrap pre.hljs,
+        #live-editor .code-fence-wrap pre.hljs {
+            margin: 0 !important;
+            background-color: transparent !important;
+        }
+
+        #preview-content table.hljs-ln,
+        #live-editor table.hljs-ln {
+            border: none !important;
+        }
+
+        #preview-content table.hljs-ln td,
+        #live-editor table.hljs-ln td,
+        #preview-content table.hljs-ln th,
+        #live-editor table.hljs-ln th {
+            border: none !important;
+            padding: 0 !important;
+        }
+
         #preview-content pre.hljs code,
         #live-editor pre.hljs code,
         #preview-content pre.hljs code *,
@@ -609,28 +633,28 @@ class ThemeService: NSObject, ObservableObject {
             margin: 2em 0;
         }
 
-        #preview-content table {
+        #preview-content table.md-table {
             border-collapse: collapse;
             width: 100%;
             margin: 1em 0;
             font-size: 0.95em;
         }
 
-        #preview-content th,
-        #preview-content td {
+        #preview-content table.md-table th,
+        #preview-content table.md-table td {
             border: 1px solid var(--md-border);
             padding: 8px 12px;
             text-align: left;
         }
 
-        #preview-content thead,
-        #preview-content th {
+        #preview-content table.md-table thead,
+        #preview-content table.md-table th {
             background-color: var(--md-table-header) !important;
             color: var(--md-heading);
             font-weight: 600;
         }
 
-        #preview-content tbody tr:nth-child(even) {
+        #preview-content table.md-table tbody tr:nth-child(even) {
             background-color: var(--md-table-stripe);
         }
 
