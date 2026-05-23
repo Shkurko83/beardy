@@ -129,16 +129,16 @@ struct ContentView: View {
                     }
                     
                     ShowShortcutsButton()
+                    Button(action: {
+                        openWindow(id: "custom_settings")
+                    }) {
+                        Image(systemName: "gearshape")
+                    }
+                    .help("Settings")
+                    
                     Divider()
                         .frame(height: 18)
                 }
-
-                Button(action: {
-                    openWindow(id: "custom_settings")
-                }) {
-                    Image(systemName: "gearshape")
-                }
-                .help("Settings")
             }
            
 
