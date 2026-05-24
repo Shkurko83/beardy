@@ -297,8 +297,8 @@ struct AppConstants {
     
     // MARK: - URLs
     struct URLs {
-        static let highlightJS = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"
-        static let highlightCSS = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/"
+        // Подсветка кода — локально в бандле (HighlightJS/). CDN не используется.
+        static let highlightJSBundled = true
         
         static let documentation = "https://docs.markdowneditor.com"
         static let support = "https://support.markdowneditor.com"

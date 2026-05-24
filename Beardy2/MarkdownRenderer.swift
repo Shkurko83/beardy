@@ -99,9 +99,9 @@ struct MarkdownRenderer: NSViewRepresentable {
                 <html>
                 <head>
                     <meta charset="UTF-8">
-                    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/\(codeTheme).min.css">
-                    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-                    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlightjs-line-numbers.js/2.8.0/highlightjs-line-numbers.min.js"></script>
+                    <link rel="stylesheet" href="\(BundledHighlightJS.relativeThemeCSSPath(for: CodeTheme(rawValue: codeTheme) ?? .github))">
+                    <script src="\(BundledHighlightJS.relativeScriptPath())"></script>
+                    <script src="\(BundledHighlightJS.relativeLineNumbersPath())"></script>
                     
                     <style>
                         body { 
@@ -240,7 +240,7 @@ struct MarkdownRenderer: NSViewRepresentable {
                 </html>
                 """
             DispatchQueue.main.async {
-                let baseURL = self.documentURL?.deletingLastPathComponent()
+                let baseURL = Bundle.main.resourceURL ?? self.documentURL?.deletingLastPathComponent()
                 webView.loadHTMLString(html, baseURL: baseURL)
             }
         } else {

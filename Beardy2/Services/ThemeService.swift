@@ -31,9 +31,13 @@ enum CodeTheme: String, CaseIterable, Identifiable {
             .joined(separator: " ")
     }
 
-    var cdnURL: String {
-        "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/\(rawValue).min.css"
+    /// Локальный CSS в бандле (офлайн). Для WebView — `file://` URL.
+    var bundledThemeURL: String {
+        BundledHighlightJS.themeCSSFileURLString(for: self)
     }
+
+    /// Совместимость: URL темы подсветки (локальный файл).
+    var cdnURL: String { bundledThemeURL }
 
     var isDark: Bool {
         switch self {

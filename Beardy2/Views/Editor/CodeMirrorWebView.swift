@@ -34,10 +34,10 @@ struct CodeMirrorWebView: NSViewRepresentable {
         webView.configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
         #endif
 
-        if let htmlPath = Bundle.main.path(forResource: "codemirror-editor", ofType: "html") {
+        if let htmlPath = Bundle.main.path(forResource: "codemirror-editor", ofType: "html"),
+           let resourceURL = Bundle.main.resourceURL {
             let htmlURL = URL(fileURLWithPath: htmlPath)
-            let rootURL = URL(fileURLWithPath: "/")
-            webView.loadFileURL(htmlURL, allowingReadAccessTo: rootURL)
+            webView.loadFileURL(htmlURL, allowingReadAccessTo: resourceURL)
         }
 
         NotificationCenter.default.addObserver(

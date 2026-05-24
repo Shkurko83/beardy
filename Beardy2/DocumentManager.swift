@@ -359,6 +359,24 @@ class DocumentManager: ObservableObject {
             panel.allowedContentTypes = [.pdf]
         case .html, .htmlPlain:
             panel.allowedContentTypes = [.html]
+        case .docx:
+            if let type = UTType(filenameExtension: "docx") {
+                panel.allowedContentTypes = [type]
+            }
+        case .odt:
+            if let type = UTType(filenameExtension: "odt") {
+                panel.allowedContentTypes = [type]
+            }
+        case .rtf:
+            panel.allowedContentTypes = [.rtf]
+        case .epub:
+            if let type = UTType(filenameExtension: "epub") {
+                panel.allowedContentTypes = [type]
+            }
+        case .latex:
+            if let type = UTType(filenameExtension: "tex") {
+                panel.allowedContentTypes = [type]
+            }
         case .plainText:
             panel.allowedContentTypes = [.plainText]
         case .markdown:
@@ -385,8 +403,9 @@ class DocumentManager: ObservableObject {
     private func makeExportOptions(for format: ExportService.ExportFormat) -> ExportService.ExportOptions {
         var options = ExportService.ExportOptions()
         let margins = UserDefaults.standard.double(forKey: AppConstants.Keys.exportPDFMargins)
-        options.margins = margins > 0 ? CGFloat(margins) : 72
+        options.margins = margins >= 36 ? CGFloat(margins) : AppConstants.Export.defaultPDFMargins
         options.includeCSS = format.includesStyles
+        options.includePageNumbers = false
         options.paperSize = .a4
         return options
     }

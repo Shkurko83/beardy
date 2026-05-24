@@ -24,6 +24,11 @@ class ExportService {
         case pdf
         case html
         case htmlPlain
+        case docx
+        case odt
+        case rtf
+        case epub
+        case latex
         case plainText
         case markdown
         
@@ -31,6 +36,11 @@ class ExportService {
             switch self {
             case .pdf: return "pdf"
             case .html, .htmlPlain: return "html"
+            case .docx: return "docx"
+            case .odt: return "odt"
+            case .rtf: return "rtf"
+            case .epub: return "epub"
+            case .latex: return "tex"
             case .plainText: return "txt"
             case .markdown: return "md"
             }
@@ -41,6 +51,11 @@ class ExportService {
             case .pdf: return "PDF"
             case .html: return "HTML"
             case .htmlPlain: return "HTML (without styles)"
+            case .docx: return "Word (.docx)"
+            case .odt: return "OpenDocument (.odt)"
+            case .rtf: return "RTF"
+            case .epub: return "EPUB"
+            case .latex: return "LaTeX"
             case .plainText: return "Plain Text"
             case .markdown: return "Markdown"
             }
@@ -52,13 +67,29 @@ class ExportService {
             default: return true
             }
         }
+        
+        /// Uses macOS textutil (HTML → Office formats).
+        var usesTextUtil: Bool {
+            switch self {
+            case .docx, .odt, .rtf: return true
+            default: return false
+            }
+        }
+        
+        /// Uses Pandoc when installed.
+        var usesPandoc: Bool {
+            switch self {
+            case .epub, .latex: return true
+            default: return false
+            }
+        }
     }
     
     // MARK: - Export Options
     struct ExportOptions {
         var format: ExportFormat = .pdf
         var includeTOC: Bool = false
-        var includePageNumbers: Bool = true
+        var includePageNumbers: Bool = false
         var paperSize: PaperSize = .letter
         var margins: CGFloat = 72 // 1 inch in points
         var theme: String = "github"
@@ -78,6 +109,14 @@ class ExportService {
                     return CGSize(width: 595, height: 842) // points
                 case .legal:
                     return CGSize(width: 612, height: 1008) // points
+                }
+            }
+            
+            var pageSizeCSS: String {
+                switch self {
+                case .letter: return "letter"
+                case .a4: return "A4"
+                case .legal: return "legal"
                 }
             }
         }
@@ -101,6 +140,12 @@ class ExportService {
             exportToPDF(markdown: markdown, url: url, documentURL: documentURL, options: opts, completion: completion)
         case .html, .htmlPlain:
             exportToHTML(markdown: markdown, url: url, documentURL: documentURL, options: opts, completion: completion)
+        case .docx, .odt, .rtf:
+            exportViaTextUtil(markdown: markdown, url: url, documentURL: documentURL, options: opts, completion: completion)
+        case .epub:
+            exportToEPUB(markdown: markdown, url: url, completion: completion)
+        case .latex:
+            exportToLaTeX(markdown: markdown, url: url, completion: completion)
         case .plainText:
             exportToPlainText(markdown: markdown, url: url, completion: completion)
         case .markdown:
@@ -116,30 +161,37 @@ class ExportService {
         options: ExportOptions = ExportOptions(),
         completion: @escaping (Result<URL, Error>) -> Void
     ) {
-        let html = generateHTMLForExport(markdown: markdown, documentURL: documentURL, options: options)
-        let baseURL = documentURL?.deletingLastPathComponent()
-        
-        DispatchQueue.main.async { [weak self] in
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
-            let session = PDFExportSession(
-                html: html,
-                baseURL: baseURL,
-                paperSize: options.paperSize.size,
-                margins: options.margins
+            let html = self.buildPreparedHTML(
+                markdown: markdown,
+                documentURL: documentURL,
+                options: options,
+                forPDF: true
             )
-            self.activePDFSession = session
-            session.renderPDF { result in
-                self.activePDFSession = nil
-                switch result {
-                case .success(let data):
-                    do {
-                        try data.write(to: url)
-                        completion(.success(url))
-                    } catch {
+            let baseURL = documentURL?.deletingLastPathComponent()
+            
+            DispatchQueue.main.async {
+                let session = PDFExportSession(
+                    html: html,
+                    baseURL: baseURL,
+                    paperSize: options.paperSize.size,
+                    margins: options.margins
+                )
+                self.activePDFSession = session
+                session.renderPDF { result in
+                    self.activePDFSession = nil
+                    switch result {
+                    case .success(let data):
+                        do {
+                            try data.write(to: url)
+                            completion(.success(url))
+                        } catch {
+                            completion(.failure(error))
+                        }
+                    case .failure(let error):
                         completion(.failure(error))
                     }
-                case .failure(let error):
-                    completion(.failure(error))
                 }
             }
         }
@@ -153,13 +205,84 @@ class ExportService {
         options: ExportOptions = ExportOptions(),
         completion: @escaping (Result<URL, Error>) -> Void
     ) {
-        let html = generateHTMLForExport(markdown: markdown, documentURL: documentURL, options: options)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let html = self.buildPreparedHTML(
+                markdown: markdown,
+                documentURL: documentURL,
+                options: options,
+                forPDF: false
+            )
+            do {
+                try html.write(to: url, atomically: true, encoding: .utf8)
+                completion(.success(url))
+            } catch {
+                completion(.failure(error))
+            }
+        }
+    }
+    
+    func exportViaTextUtil(
+        markdown: String,
+        url: URL,
+        documentURL: URL?,
+        options: ExportOptions,
+        completion: @escaping (Result<URL, Error>) -> Void
+    ) {
+        let textUtilFormat: String
+        switch options.format {
+        case .docx: textUtilFormat = "docx"
+        case .odt: textUtilFormat = "odt"
+        case .rtf: textUtilFormat = "rtf"
+        default:
+            completion(.failure(ExportError.unsupportedFormat))
+            return
+        }
         
-        do {
-            try html.write(to: url, atomically: true, encoding: .utf8)
-            completion(.success(url))
-        } catch {
-            completion(.failure(error))
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let html = self.buildPreparedHTML(
+                markdown: markdown,
+                documentURL: documentURL,
+                options: options,
+                forPDF: false
+            )
+            do {
+                try TextUtilConverter.convert(html: html, to: url, format: textUtilFormat)
+                completion(.success(url))
+            } catch {
+                completion(.failure(error))
+            }
+        }
+    }
+    
+    func exportToEPUB(
+        markdown: String,
+        url: URL,
+        completion: @escaping (Result<URL, Error>) -> Void
+    ) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try PandocConverter.exportEPUB(markdown: markdown, to: url)
+                completion(.success(url))
+            } catch {
+                completion(.failure(error))
+            }
+        }
+    }
+    
+    func exportToLaTeX(
+        markdown: String,
+        url: URL,
+        completion: @escaping (Result<URL, Error>) -> Void
+    ) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try PandocConverter.convert(markdown: markdown, to: url, format: "latex")
+                completion(.success(url))
+            } catch {
+                completion(.failure(error))
+            }
         }
     }
     
@@ -193,28 +316,43 @@ class ExportService {
     }
     
     // MARK: - Generate HTML
+    
+    private func buildPreparedHTML(
+        markdown: String,
+        documentURL: URL?,
+        options: ExportOptions,
+        forPDF: Bool
+    ) -> String {
+        var html = generateHTMLForExport(
+            markdown: markdown,
+            documentURL: documentURL,
+            options: options,
+            forPDF: forPDF
+        )
+        html = embedLocalImages(in: html)
+        if options.includeCSS {
+            let theme = ThemeService.shared.currentCodeTheme
+            if let hljsCSS = BundledHighlightJS.loadThemeCSS(for: theme) {
+                html = injectCSS(hljsCSS, into: html)
+            }
+            if let hljsJS = BundledHighlightJS.loadScriptSource() {
+                html = injectScript(hljsJS, into: html, beforeClosingHead: true)
+            }
+        }
+        return html
+    }
+    
     func generateHTMLForExport(
         markdown: String,
         documentURL: URL?,
-        options: ExportOptions
+        options: ExportOptions,
+        forPDF: Bool = false
     ) -> String {
         let renderedMarkdown = renderMarkdownBody(markdown, documentURL: documentURL)
-        let codeTheme = ThemeService.shared.currentCodeTheme
-        let themedCSS = options.includeCSS ? getThemedExportCSS() : ""
+        let themedCSS = options.includeCSS ? getThemedExportCSS(forPDF: forPDF, options: options) : ""
         let toc = options.includeTOC ? generateTableOfContents(markdown: markdown) : ""
         let title = documentURL?.deletingPathExtension().lastPathComponent ?? "Exported Document"
-        
-        let hljsHead: String
-        if options.includeCSS {
-            hljsHead = """
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-            <link rel="stylesheet" href="\(codeTheme.cdnURL)">
-            """
-        } else {
-            hljsHead = ""
-        }
-        
-        let hljsScript = options.includeCSS ? "<script>hljs.highlightAll();</script>" : ""
+        let highlightScript = options.includeCSS ? exportCodeHighlightScript : ""
         
         return """
         <!DOCTYPE html>
@@ -224,18 +362,115 @@ class ExportService {
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>\(escapeHTML(title))</title>
             \(options.includeCSS ? "<style>\(themedCSS)</style>" : "")
-            \(hljsHead)
         </head>
         <body>
             \(toc)
             <article class="markdown-body" id="main-content">
                 \(renderedMarkdown)
             </article>
-            \(options.includePageNumbers ? getPageNumbersScript() : "")
-            \(hljsScript)
+            \(highlightScript)
         </body>
         </html>
         """
+    }
+    
+    /// Подсветка как в Preview/Live: без нумерации строк.
+    private var exportCodeHighlightScript: String {
+        """
+        <script>
+        (function() {
+            function applyExportHighlight() {
+                if (typeof hljs === 'undefined') return;
+                document.querySelectorAll('pre code').forEach(function(block) {
+                    if (block.closest('table.hljs-ln')) return;
+                    hljs.highlightElement(block);
+                    var pre = block.closest('pre');
+                    if (pre) pre.classList.add('hljs');
+                });
+                document.querySelectorAll('table.hljs-ln').forEach(function(t) { t.remove(); });
+            }
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', applyExportHighlight);
+            } else {
+                applyExportHighlight();
+            }
+        })();
+        </script>
+        """
+    }
+    
+    private func injectCSS(_ extraCSS: String, into html: String) -> String {
+        guard !extraCSS.isEmpty else { return html }
+        if html.contains("</style>") {
+            return html.replacingOccurrences(of: "</style>", with: "\n\(extraCSS)\n</style>")
+        }
+        return html.replacingOccurrences(
+            of: "</head>",
+            with: "<style>\(extraCSS)</style>\n</head>"
+        )
+    }
+    
+    private func injectScript(_ script: String, into html: String, beforeClosingHead: Bool) -> String {
+        guard !script.isEmpty else { return html }
+        let tag = "<script>\n\(script)\n</script>"
+        if beforeClosingHead, html.contains("</head>") {
+            return html.replacingOccurrences(of: "</head>", with: "\(tag)\n</head>")
+        }
+        if html.contains("</body>") {
+            return html.replacingOccurrences(of: "</body>", with: "\(tag)\n</body>")
+        }
+        return html + tag
+    }
+    
+    private func embedLocalImages(in html: String) -> String {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"(<img[^>]*\ssrc=)(["'])([^"']+)\2"#,
+            options: [.caseInsensitive]
+        ) else { return html }
+        
+        let nsHTML = html as NSString
+        var result = html
+        let matches = regex.matches(in: html, range: NSRange(location: 0, length: nsHTML.length)).reversed()
+        
+        for match in matches {
+            let prefix = nsHTML.substring(with: match.range(at: 1))
+            let quote = nsHTML.substring(with: match.range(at: 2))
+            let src = nsHTML.substring(with: match.range(at: 3))
+            
+            if src.hasPrefix("data:") { continue }
+            
+            guard let dataURL = imageDataURL(for: src) else { continue }
+            let replacement = "\(prefix)\(quote)\(dataURL)\(quote)"
+            result = (result as NSString).replacingCharacters(in: match.range, with: replacement)
+        }
+        
+        return result
+    }
+    
+    private func imageDataURL(for src: String) -> String? {
+        let filePath: String?
+        
+        if src.hasPrefix("beardy://"), let url = URL(string: src) {
+            filePath = ImageInsertionHelper.localPath(fromBeardyURL: url)
+        } else if src.hasPrefix("file://") {
+            filePath = URL(string: src)?.path
+        } else if src.hasPrefix("/") {
+            filePath = src
+        } else {
+            filePath = nil
+        }
+        
+        guard let filePath else { return nil }
+        let fileURL = URL(fileURLWithPath: filePath)
+        
+        let accessed = ImageInsertionHelper.startAccessing(url: fileURL)
+        defer {
+            if accessed { fileURL.stopAccessingSecurityScopedResource() }
+        }
+        
+        guard let data = try? Data(contentsOf: fileURL) else { return nil }
+        let mime = mimeType(for: fileURL.pathExtension)
+        return "data:\(mime);base64,\(data.base64EncodedString())"
     }
     
     private func renderMarkdownBody(_ markdown: String, documentURL: URL?) -> String {
@@ -248,7 +483,7 @@ class ExportService {
         return visitor.visit(document)
     }
     
-    private func getThemedExportCSS() -> String {
+    private func getThemedExportCSS(forPDF: Bool, options: ExportOptions) -> String {
         let colors = ThemeService.shared.currentTheme.colors
         let codeTheme = ThemeService.shared.currentCodeTheme
         let bg = colors.background.toHex()
@@ -260,20 +495,79 @@ class ExportService {
         let border = colors.border.toHex()
         let codeBlockBg = codeTheme.blockBackgroundHex
         let codeBlockBorder = border
+        let marginPt = max(Int(options.margins), 54)
+        let pageSize = options.paperSize.pageSizeCSS
+        
+        let bodyLayout: String
+        let pageRule: String
+        if forPDF {
+            // Размер страницы для печати; поля — через NSPrintInfo при экспорте PDF.
+            pageRule = "@page { size: \(pageSize); margin: \(marginPt)pt; }"
+            bodyLayout = """
+            html, body {
+                width: 100%;
+                margin: 0;
+                padding: 0;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+                font-size: 16px;
+                line-height: 1.65;
+                color: \(text);
+                background: \(bg);
+                max-width: none;
+                box-sizing: border-box;
+            }
+            .markdown-body {
+                max-width: none;
+                margin: 0;
+                padding: 0;
+            }
+            html, body, .markdown-body, article {
+                height: auto !important;
+                min-height: 0 !important;
+                max-height: none !important;
+                overflow: visible !important;
+            }
+            pre, pre.hljs {
+                max-height: none !important;
+                overflow: visible !important;
+                page-break-inside: avoid;
+            }
+            details {
+                display: block !important;
+                overflow: visible !important;
+            }
+            details > summary {
+                display: block !important;
+            }
+            details[open] > :not(summary),
+            details.export-open > :not(summary) {
+                display: block !important;
+            }
+            """
+        } else {
+            pageRule = ""
+            bodyLayout = """
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+                font-size: 16px;
+                line-height: 1.65;
+                color: \(text);
+                background: \(bg);
+                max-width: 820px;
+                margin: 0 auto;
+                padding: 48px 40px;
+            }
+            """
+        }
         
         return """
         * { box-sizing: border-box; }
-        @page { margin: 18mm; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-            font-size: 16px;
-            line-height: 1.65;
-            color: \(text);
-            background: \(bg);
-            max-width: 820px;
-            margin: 0 auto;
-            padding: 48px 40px;
-        }
+        \(pageRule)
+        \(bodyLayout)
         h1, h2, h3, h4, h5, h6 {
             color: \(heading);
             font-weight: 600;
@@ -305,21 +599,34 @@ class ExportService {
             padding: 0.15em 0.35em;
             border-radius: 4px;
         }
-        pre {
+        pre,
+        pre.hljs {
             background: \(codeBlockBg) !important;
             border: 1px solid \(codeBlockBorder);
             border-radius: 8px;
-            padding: 16px;
+            padding: 14px 16px !important;
             overflow-x: auto;
             margin: 1em 0;
         }
-        pre code {
-            font-family: "SF Mono", Menlo, monospace;
+        pre code,
+        pre code.hljs,
+        pre .hljs {
+            font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
             font-size: 13px;
             line-height: 1.5;
             white-space: pre;
+            display: block;
             background: transparent !important;
+            background-color: transparent !important;
             padding: 0 !important;
+        }
+        pre code.hljs *,
+        pre .hljs * {
+            background: transparent !important;
+            background-color: transparent !important;
+        }
+        table.hljs-ln {
+            display: none !important;
         }
         hr { border: none; border-top: 1px solid \(border); margin: 2em 0; }
         .toc {
@@ -332,9 +639,9 @@ class ExportService {
         .toc ul { list-style: none; padding-left: 0; }
         .toc a { color: \(link); }
         @media print {
-            body { padding: 0; max-width: none; }
             .toc { page-break-after: always; }
-            pre { page-break-inside: avoid; }
+            pre, pre.hljs { page-break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            img { page-break-inside: avoid; }
         }
         """
     }
@@ -642,27 +949,6 @@ class ExportService {
         """
     }
     
-    // MARK: - Page Numbers Script
-    private func getPageNumbersScript() -> String {
-        return """
-        <script>
-        window.addEventListener('load', function() {
-            const pages = document.querySelectorAll('body');
-            pages.forEach((page, index) => {
-                const pageNumber = document.createElement('div');
-                pageNumber.style.position = 'fixed';
-                pageNumber.style.bottom = '20px';
-                pageNumber.style.right = '20px';
-                pageNumber.style.fontSize = '12px';
-                pageNumber.style.color = '#666';
-                pageNumber.textContent = 'Page ' + (index + 1);
-                page.appendChild(pageNumber);
-            });
-        });
-        </script>
-        """
-    }
-    
     // MARK: - Embed Images
     private func embedImagesInHTML(at url: URL, markdown: String) {
         let images = markdown.extractImages()
@@ -672,7 +958,7 @@ class ExportService {
             if let imageURL = URL(string: image.url),
                let imageData = try? Data(contentsOf: imageURL) {
                 let base64 = imageData.base64EncodedString()
-                let mimeType = getMimeType(for: imageURL.pathExtension)
+                let mimeType = mimeType(for: imageURL.pathExtension)
                 let dataURL = "data:\(mimeType);base64,\(base64)"
                 
                 // Replace in HTML
@@ -691,7 +977,7 @@ class ExportService {
             .replacingOccurrences(of: "'", with: "&#39;")
     }
     
-    private func getMimeType(for fileExtension: String) -> String {
+    private func mimeType(for fileExtension: String) -> String {
         switch fileExtension.lowercased() {
         case "jpg", "jpeg": return "image/jpeg"
         case "png": return "image/png"
@@ -703,28 +989,56 @@ class ExportService {
     }
 }
 
-// MARK: - PDF export via WebKit
+// MARK: - PDF export via WebKit (NSPrintOperation modal — постраничная печать, без run())
 private final class PDFExportSession: NSObject, WKNavigationDelegate {
     private let webView: WKWebView
-    private let margins: CGFloat
+    private let hostWindow: NSWindow
     private let paperSize: CGSize
+    private let margins: CGFloat
     private var pdfCompletion: ((Result<Data, Error>) -> Void)?
-    private var didFinishLoad = false
+    private var savePDFURL: URL?
+    private var didStartRender = false
     
     init(html: String, baseURL: URL?, paperSize: CGSize, margins: CGFloat) {
-        self.margins = margins
         self.paperSize = paperSize
+        self.margins = margins
         
         let config = WKWebViewConfiguration()
         config.setURLSchemeHandler(ImageSchemeHandler(), forURLScheme: "beardy")
         webView = WKWebView(frame: CGRect(origin: .zero, size: paperSize), configuration: config)
         
+        let hostView = NSView(frame: CGRect(origin: .zero, size: paperSize))
+        hostView.addSubview(webView)
+        webView.autoresizingMask = [.width, .height]
+        webView.frame = hostView.bounds
+        
+        hostWindow = NSWindow(
+            contentRect: CGRect(origin: .zero, size: paperSize),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        hostWindow.contentView = hostView
+        hostWindow.isReleasedWhenClosed = false
+        hostWindow.setFrameOrigin(NSPoint(x: -paperSize.width - 100, y: -paperSize.height - 100))
+        hostWindow.orderBack(nil)
+        
         super.init()
         webView.navigationDelegate = self
-        webView.loadHTMLString(html, baseURL: baseURL)
+        webView.loadHTMLString(html, baseURL: baseURL ?? BundledHighlightJS.resourceBaseURL)
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
-            self?.finishLoadingIfNeeded()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 25) { [weak self] in
+            self?.beginPDFRenderIfNeeded()
+        }
+    }
+    
+    deinit {
+        if Thread.isMainThread {
+            hostWindow.orderOut(nil)
+        } else {
+            DispatchQueue.main.async { [hostWindow] in
+                hostWindow.orderOut(nil)
+            }
         }
     }
     
@@ -733,37 +1047,176 @@ private final class PDFExportSession: NSObject, WKNavigationDelegate {
     }
     
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        finishLoadingIfNeeded()
+        beginPDFRenderIfNeeded()
     }
     
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        guard let pdfCompletion else { return }
-        self.pdfCompletion = nil
-        pdfCompletion(.failure(error))
+        fail(with: error)
     }
     
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        guard let pdfCompletion else { return }
-        self.pdfCompletion = nil
-        pdfCompletion(.failure(error))
+        fail(with: error)
     }
     
-    private func finishLoadingIfNeeded() {
-        guard !didFinishLoad, pdfCompletion != nil else { return }
-        didFinishLoad = true
+    private func fail(with error: Error) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let pdfCompletion = self.pdfCompletion else { return }
+            self.pdfCompletion = nil
+            self.hostWindow.orderOut(nil)
+            pdfCompletion(.failure(error))
+        }
+    }
+    
+    private func beginPDFRenderIfNeeded() {
+        guard !didStartRender, pdfCompletion != nil else { return }
+        didStartRender = true
         
-        let config = WKPDFConfiguration()
-        config.rect = CGRect(
-            x: margins,
-            y: margins,
-            width: paperSize.width - margins * 2,
-            height: paperSize.height - margins * 2
+        let prepareForPDF = """
+        (async function() {
+            if (document.readyState !== 'complete') {
+                await new Promise(resolve => window.addEventListener('load', resolve, { once: true }));
+            }
+            const imgs = Array.from(document.images || []);
+            const pending = imgs.filter(i => !i.complete);
+            if (pending.length) {
+                await Promise.all(pending.map(img => new Promise(resolve => {
+                    img.addEventListener('load', resolve, { once: true });
+                    img.addEventListener('error', resolve, { once: true });
+                })));
+            }
+            document.querySelectorAll('details').forEach(d => {
+                d.open = true;
+                d.setAttribute('open', 'open');
+                d.classList.add('export-open');
+            });
+            if (typeof hljs !== 'undefined') {
+                document.querySelectorAll('pre code').forEach(block => {
+                    if (block.closest('table.hljs-ln')) return;
+                    hljs.highlightElement(block);
+                    const pre = block.closest('pre');
+                    if (pre) pre.classList.add('hljs');
+                });
+                document.querySelectorAll('table.hljs-ln').forEach(t => t.remove());
+            }
+            let lastHeight = 0;
+            let stablePasses = 0;
+            for (let i = 0; i < 30 && stablePasses < 4; i++) {
+                await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+                const h = Math.max(
+                    document.body.scrollHeight,
+                    document.documentElement.scrollHeight,
+                    document.body.offsetHeight
+                );
+                if (h === lastHeight) stablePasses++;
+                else { stablePasses = 0; lastHeight = h; }
+            }
+            return lastHeight;
+        })();
+        """
+        
+        webView.callAsyncJavaScript(prepareForPDF, arguments: [:], in: nil, in: .page) { @MainActor [weak self] (result: Result<Any, Error>) in
+            guard let self else { return }
+            let contentHeight: CGFloat
+            if case .success(let value) = result, let number = value as? NSNumber {
+                contentHeight = max(CGFloat(truncating: number), self.paperSize.height)
+            } else if case .success(let value) = result, let d = value as? Double {
+                contentHeight = max(CGFloat(d), self.paperSize.height)
+            } else {
+                contentHeight = self.paperSize.height
+            }
+            self.applyPrintLayout(contentHeight: contentHeight + 48)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                self.exportPaginatedPDF()
+            }
+        }
+    }
+    
+    private func applyPrintLayout(contentHeight: CGFloat) {
+        let size = CGSize(width: paperSize.width, height: contentHeight)
+        var frame = hostWindow.frame
+        frame.size = size
+        hostWindow.setFrame(frame, display: true)
+        if let hostView = hostWindow.contentView {
+            hostView.frame = CGRect(origin: .zero, size: size)
+            webView.frame = hostView.bounds
+        }
+        if let scrollView = webView.enclosingScrollView {
+            scrollView.documentView?.frame = CGRect(origin: .zero, size: size)
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+    }
+    
+    private func exportPaginatedPDF() {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in self?.exportPaginatedPDF() }
+            return
+        }
+        guard pdfCompletion != nil else { return }
+        
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("beardy-export-\(UUID().uuidString).pdf")
+        savePDFURL = tempURL
+        
+        let printInfo = (NSPrintInfo.shared.copy() as? NSPrintInfo) ?? NSPrintInfo()
+        printInfo.paperSize = NSSize(width: paperSize.width, height: paperSize.height)
+        printInfo.topMargin = margins
+        printInfo.bottomMargin = margins
+        printInfo.leftMargin = margins
+        printInfo.rightMargin = margins
+        printInfo.horizontalPagination = .automatic
+        printInfo.verticalPagination = .automatic
+        printInfo.isHorizontallyCentered = true
+        printInfo.isVerticallyCentered = false
+        printInfo.dictionary()[NSPrintInfo.AttributeKey.jobDisposition] = NSPrintInfo.JobDisposition.save
+        printInfo.dictionary()[NSPrintInfo.AttributeKey.jobSavingURL] = tempURL
+        
+        let printOperation = webView.printOperation(with: printInfo)
+        printOperation.showsPrintPanel = false
+        printOperation.showsProgressPanel = false
+        
+        // run() падает с EXC_BREAKPOINT для WKWebView — только modal.
+        printOperation.runModal(
+            for: hostWindow,
+            delegate: self,
+            didRun: #selector(printOperationDidRun(_:success:contextInfo:)),
+            contextInfo: nil
         )
+    }
+    
+    @objc private func printOperationDidRun(
+        _ operation: NSPrintOperation,
+        success: Bool,
+        contextInfo: UnsafeMutableRawPointer?
+    ) {
+        // Колбэк печати приходит с фонового потока — UI только на main.
+        DispatchQueue.main.async { [weak self] in
+            self?.finishPrintExport(success: success)
+        }
+    }
+    
+    private func finishPrintExport(success: Bool) {
+        hostWindow.orderOut(nil)
+        guard let completion = pdfCompletion else { return }
+        pdfCompletion = nil
         
-        webView.createPDF(configuration: config) { [weak self] result in
-            guard let completion = self?.pdfCompletion else { return }
-            self?.pdfCompletion = nil
-            completion(result)
+        guard success,
+              let url = savePDFURL,
+              FileManager.default.fileExists(atPath: url.path) else {
+            if let url = savePDFURL { try? FileManager.default.removeItem(at: url) }
+            savePDFURL = nil
+            completion(.failure(ExportError.conversionFailed("PDF export failed.")))
+            return
+        }
+        
+        do {
+            let data = try Data(contentsOf: url)
+            try? FileManager.default.removeItem(at: url)
+            savePDFURL = nil
+            completion(.success(data))
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            savePDFURL = nil
+            completion(.failure(error))
         }
     }
 }

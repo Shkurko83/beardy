@@ -75,6 +75,8 @@ struct MarkdownEditorApp: App {
                 .keyboardShortcut("e", modifiers: .command)
                 .disabled(documentManager.currentDocument == nil)
                 
+                Divider()
+                
                 Button("HTML...") {
                     documentManager.exportDocument(as: .html)
                 }
@@ -84,6 +86,33 @@ struct MarkdownEditorApp: App {
                     documentManager.exportDocument(as: .htmlPlain)
                 }
                 .disabled(documentManager.currentDocument == nil)
+                
+                Divider()
+                
+                Button("Word (.docx)...") {
+                    documentManager.exportDocument(as: .docx)
+                }
+                .disabled(documentManager.currentDocument == nil)
+                
+                Button("OpenDocument (.odt)...") {
+                    documentManager.exportDocument(as: .odt)
+                }
+                .disabled(documentManager.currentDocument == nil)
+                
+                Button("RTF...") {
+                    documentManager.exportDocument(as: .rtf)
+                }
+                .disabled(documentManager.currentDocument == nil)
+                
+                Button("EPUB...") {
+                    documentManager.exportDocument(as: .epub)
+                }
+                .disabled(documentManager.currentDocument == nil || !PandocConverter.isAvailable)
+                
+                Button("LaTeX...") {
+                    documentManager.exportDocument(as: .latex)
+                }
+                .disabled(documentManager.currentDocument == nil || !PandocConverter.isAvailable)
                 
                 Divider()
                 

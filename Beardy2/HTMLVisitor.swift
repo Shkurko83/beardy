@@ -56,6 +56,35 @@ struct HTMLVisitor: MarkupVisitor {
         return "<em>\(defaultVisit(emphasis))</em>"
     }
     
+    mutating func visitStrikethrough(_ strikethrough: Strikethrough) -> String {
+        return "<del>\(defaultVisit(strikethrough))</del>"
+    }
+    
+    mutating func visitLink(_ link: Markdown.Link) -> String {
+        let href = link.destination ?? ""
+        return "<a href=\"\(href)\">\(defaultVisit(link))</a>"
+    }
+    
+    mutating func visitThematicBreak(_ thematicBreak: ThematicBreak) -> String {
+        return "<hr>\n"
+    }
+    
+    mutating func visitBlockQuote(_ blockQuote: BlockQuote) -> String {
+        return "<blockquote>\(defaultVisit(blockQuote))</blockquote>\n"
+    }
+    
+    mutating func visitUnorderedList(_ list: UnorderedList) -> String {
+        return "<ul>\(defaultVisit(list))</ul>\n"
+    }
+    
+    mutating func visitOrderedList(_ list: OrderedList) -> String {
+        return "<ol>\(defaultVisit(list))</ol>\n"
+    }
+    
+    mutating func visitListItem(_ listItem: ListItem) -> String {
+        return "<li>\(defaultVisit(listItem))</li>\n"
+    }
+    
     // Блоки кода с сохранением форматирования (white-space: pre)
     mutating func visitCodeBlock(_ codeBlock: CodeBlock) -> String {
         let escapedCode = codeBlock.code
