@@ -344,23 +344,88 @@ class DocumentManager: ObservableObject {
     }
     
     func exportAsPDF() {
+        exportDocument(as: .pdf)
+    }
+    
+    func exportDocument(as format: ExportService.ExportFormat) {
         guard let doc = currentDocument else { return }
         
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.pdf]
-        panel.nameFieldStringValue = doc.fileName.replacingOccurrences(of: ".md", with: ".pdf")
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = suggestedExportFileName(for: doc, format: format)
+        
+        switch format {
+        case .pdf:
+            panel.allowedContentTypes = [.pdf]
+        case .html, .htmlPlain:
+            panel.allowedContentTypes = [.html]
+        case .plainText:
+            panel.allowedContentTypes = [.plainText]
+        case .markdown:
+            if let md = UTType(filenameExtension: "md") {
+                panel.allowedContentTypes = [md]
+            }
+        }
         
         panel.begin { [weak self] response in
-            if response == .OK, let url = panel.url {
-                self?.exportToPDF(at: url)
+            guard response == .OK, let url = panel.url else { return }
+            self?.performExport(format: format, to: url, document: doc)
+        }
+    }
+    
+    private func suggestedExportFileName(
+        for doc: MarkdownDocument,
+        format: ExportService.ExportFormat
+    ) -> String {
+        let base = doc.url?.deletingPathExtension().lastPathComponent
+            ?? doc.fileName.replacingOccurrences(of: ".md", with: "")
+        return "\(base).\(format.fileExtension)"
+    }
+    
+    private func makeExportOptions(for format: ExportService.ExportFormat) -> ExportService.ExportOptions {
+        var options = ExportService.ExportOptions()
+        let margins = UserDefaults.standard.double(forKey: AppConstants.Keys.exportPDFMargins)
+        options.margins = margins > 0 ? CGFloat(margins) : 72
+        options.includeCSS = format.includesStyles
+        options.paperSize = .a4
+        return options
+    }
+    
+    private func performExport(
+        format: ExportService.ExportFormat,
+        to url: URL,
+        document doc: MarkdownDocument
+    ) {
+        let options = makeExportOptions(for: format)
+        ExportService.shared.export(
+            markdown: doc.content,
+            to: url,
+            documentURL: doc.url,
+            format: format,
+            options: options
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let savedURL):
+                    self?.showExportSuccess(savedURL, format: format)
+                case .failure(let error):
+                    self?.showError("Export failed: \(error.localizedDescription)")
+                }
             }
         }
     }
     
-    private func exportToPDF(at url: URL) {
-        // PDF export implementation
-        print("Exporting to PDF: \(url)")
-        // This would involve rendering the markdown to PDF
+    private func showExportSuccess(_ url: URL, format: ExportService.ExportFormat) {
+        let alert = NSAlert()
+        alert.messageText = "Export Complete"
+        alert.informativeText = "Saved as \(format.displayName) to:\n\(url.path)"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Reveal in Finder")
+        let response = alert.runModal()
+        if response == .alertSecondButtonReturn {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
     }
     
     func updateContent(_ newContent: String) {

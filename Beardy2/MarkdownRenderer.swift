@@ -142,9 +142,25 @@ struct MarkdownRenderer: NSViewRepresentable {
                             line-height: 1.5 !important;
                         }
                 
+                        table.hljs-ln {
+                            display: table !important;
+                            border-collapse: collapse;
+                            width: 100%;
+                        }
+                        table.hljs-ln tbody { display: table-row-group !important; }
+                        table.hljs-ln tr { display: table-row !important; }
+                        td.hljs-ln-numbers,
+                        td.hljs-ln-code {
+                            display: table-cell !important;
+                            vertical-align: top;
+                        }
+                        .hljs-ln-line {
+                            display: inline;
+                            white-space: pre;
+                        }
                         .hljs-ln-code {
-                            padding-left: 20px !important;
-                            padding-right: 16px !important;
+                            padding-left: 12px !important;
+                            padding-right: 12px !important;
                             padding-top: 0px !important;
                             padding-bottom: 0px !important;
                             vertical-align: top;
@@ -174,7 +190,6 @@ struct MarkdownRenderer: NSViewRepresentable {
                             border-right: 1px solid \(currentBorder) !important;
                         }
                 
-                        .hljs-ln { border-collapse: collapse; width: 100%; }
                 
                         /* --- СТИЛИ ЗАГОЛОВКОВ --- */
                         p, h1, h2, h3, h4, h5, h6, pre, ul, ol {

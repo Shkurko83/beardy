@@ -66,12 +66,35 @@ struct MarkdownEditorApp: App {
                 .keyboardShortcut("s", modifiers: [.command, .shift])
                 .disabled(documentManager.currentDocument == nil)
                 
-                Divider()
-                
-                Button("Export as PDF...") {
-                    documentManager.exportAsPDF()
+            }
+            
+            CommandMenu("Export") {
+                Button("PDF...") {
+                    documentManager.exportDocument(as: .pdf)
                 }
                 .keyboardShortcut("e", modifiers: .command)
+                .disabled(documentManager.currentDocument == nil)
+                
+                Button("HTML...") {
+                    documentManager.exportDocument(as: .html)
+                }
+                .disabled(documentManager.currentDocument == nil)
+                
+                Button("HTML (without styles)...") {
+                    documentManager.exportDocument(as: .htmlPlain)
+                }
+                .disabled(documentManager.currentDocument == nil)
+                
+                Divider()
+                
+                Button("Plain Text...") {
+                    documentManager.exportDocument(as: .plainText)
+                }
+                .disabled(documentManager.currentDocument == nil)
+                
+                Button("Markdown...") {
+                    documentManager.exportDocument(as: .markdown)
+                }
                 .disabled(documentManager.currentDocument == nil)
             }
             

@@ -281,18 +281,6 @@
                     #live-editor .hljs-ln td {
                         background: transparent !important;
                     }
-                    #preview-content .hljs-ln td.hljs-ln-numbers,
-                    #live-editor .hljs-ln td.hljs-ln-numbers {
-                        color: var(--md-secondary, #6a737d);
-                        border-right: 1px solid var(--md-border, #d0d7de);
-                        padding-right: 10px !important;
-                        user-select: none;
-                        vertical-align: top;
-                    }
-                    #preview-content .hljs-ln td.hljs-ln-code,
-                    #live-editor .hljs-ln td.hljs-ln-code {
-                        padding-left: 12px !important;
-                    }
                     #preview-content table:not(.md-table):not(.hljs-ln) {
                         border-collapse: collapse;
                         margin: 1em 0;
@@ -486,9 +474,17 @@
                         border-radius: 0 !important;
                         margin: 0 !important;
                         background-color: transparent !important;
-                        padding: 14px 16px !important;
+                        padding: 12px 14px !important;
                         min-height: 4.5em;
                         cursor: text;
+                    }
+                    .code-fence-wrap pre.hljs.has-line-numbers {
+                        padding: 8px 0 !important;
+                    }
+                    .code-fence-wrap pre.hljs.has-line-numbers > code {
+                        display: block;
+                        padding: 0 !important;
+                        margin: 0 !important;
                     }
                     .code-fence-wrap pre.hljs.is-empty {
                         display: flex;
@@ -506,21 +502,84 @@
                     body.dark .code-fence-placeholder {
                         color: #8b949e;
                     }
-                    /* Нумерация строк — не как markdown-таблица */
+                    .live-block:has(.code-fence-wrap.is-editing) {
+                        padding: 0 !important;
+                        background: transparent !important;
+                        border-radius: 0;
+                    }
+                    .code-fence-wrap.is-editing {
+                        border: 1px solid var(--md-code-border, #d0d7de);
+                    }
+                    .code-fence-wrap.is-editing .code-fence-edit-area {
+                        display: block;
+                        margin: 0;
+                        padding: 14px 16px;
+                        min-height: 4.5em;
+                        font-family: "SF Mono", Menlo, Monaco, "Courier New", monospace;
+                        font-size: 13px;
+                        line-height: 1.5;
+                        white-space: pre;
+                        overflow-x: auto;
+                        background: transparent;
+                        border: none !important;
+                        outline: none !important;
+                        box-shadow: none !important;
+                        cursor: text;
+                        color: inherit;
+                        tab-size: 4;
+                        -webkit-user-modify: read-write-plaintext-only;
+                    }
+                    .code-fence-wrap.is-editing .code-fence-edit-area:focus {
+                        outline: none !important;
+                        box-shadow: none !important;
+                    }
+                    /* Нумерация строк highlight.js — сохраняем table-layout (не display:block на .hljs-ln-line!) */
                     #preview-content table.hljs-ln,
                     #live-editor table.hljs-ln {
+                        display: table !important;
                         border-collapse: collapse;
                         width: 100%;
                         margin: 0;
                         border: none !important;
+                        table-layout: auto;
                     }
-                    #preview-content table.hljs-ln td,
-                    #live-editor table.hljs-ln td,
-                    #preview-content table.hljs-ln th,
-                    #live-editor table.hljs-ln th {
+                    #preview-content table.hljs-ln tbody,
+                    #live-editor table.hljs-ln tbody {
+                        display: table-row-group !important;
+                    }
+                    #preview-content table.hljs-ln tr,
+                    #live-editor table.hljs-ln tr {
+                        display: table-row !important;
+                    }
+                    #preview-content table.hljs-ln td.hljs-ln-numbers,
+                    #live-editor table.hljs-ln td.hljs-ln-numbers,
+                    #preview-content table.hljs-ln td.hljs-ln-code,
+                    #live-editor table.hljs-ln td.hljs-ln-code {
+                        display: table-cell !important;
+                        vertical-align: top;
                         border: none !important;
-                        padding: 0 !important;
                         background: transparent !important;
+                    }
+                    #preview-content table.hljs-ln td.hljs-ln-numbers,
+                    #live-editor table.hljs-ln td.hljs-ln-numbers {
+                        white-space: nowrap;
+                        text-align: right;
+                        padding: 0 10px 0 12px !important;
+                        border-right: 1px solid var(--md-code-border, #d0d7de);
+                        user-select: none;
+                    }
+                    #preview-content table.hljs-ln td.hljs-ln-code,
+                    #live-editor table.hljs-ln td.hljs-ln-code {
+                        padding: 0 12px 0 10px !important;
+                        white-space: pre;
+                        width: 100%;
+                    }
+                    #preview-content table.hljs-ln .hljs-ln-line,
+                    #live-editor table.hljs-ln .hljs-ln-line {
+                        display: inline;
+                        white-space: pre;
+                        padding: 0 !important;
+                        margin: 0 !important;
                     }
                     
                     /* Списки */
@@ -770,11 +829,11 @@
                 if (table) {
                     const lines = [];
                     table.querySelectorAll('td.hljs-ln-code').forEach((cell) => {
-                        lines.push(cell.textContent || '');
+                        lines.push((cell.textContent || '').replace(/\u00a0/g, ' '));
                     });
-                    return lines.join('\n');
+                    return dedentUniformLeadingWhitespace(lines.join('\n'));
                 }
-                return code.textContent || pre.textContent || '';
+                return dedentUniformLeadingWhitespace(code?.textContent || pre.textContent || '');
             }
 
             function restoreCodeBlock(pre) {
@@ -837,9 +896,11 @@
                         console.warn('hljs.highlightElement failed', e);
                     }
 
+                    pre.classList.remove('has-line-numbers');
                     if (showCodeLineNumbers && typeof hljs.lineNumbersBlock === 'function') {
                         try {
                             hljs.lineNumbersBlock(restored);
+                            pre.classList.add('has-line-numbers');
                         } catch (e) {
                             console.warn('lineNumbersBlock failed', e);
                         }
@@ -1819,13 +1880,94 @@
                 } else if (lines.length === 2) {
                     inner = lines[1] === '```' ? '' : lines[1];
                 }
+                inner = dedentUniformLeadingWhitespace(inner);
                 return { lang, inner };
             }
 
             function buildCodeFenceSource(lang, inner) {
                 const fenceLang = (lang || '').trim().toLowerCase();
                 const open = fenceLang ? `\`\`\`${fenceLang}` : '```';
-                return `${open}\n${inner || ''}\n\`\`\``;
+                const cleaned = dedentUniformLeadingWhitespace(inner || '');
+                return `${open}\n${cleaned}\n\`\`\``;
+            }
+
+            function measureLeadingWhitespace(line) {
+                const m = (line || '').match(/^(\s*)/);
+                if (!m) return 0;
+                return [...m[1]].reduce((n, ch) => n + (ch === '\t' ? 4 : 1), 0);
+            }
+
+            function stripLeadingWhitespaceColumns(line, columns) {
+                let remaining = columns;
+                let index = 0;
+                while (remaining > 0 && index < line.length) {
+                    if (line[index] === '\t') {
+                        remaining -= 4;
+                        index++;
+                    } else if (line[index] === ' ') {
+                        remaining--;
+                        index++;
+                    } else {
+                        break;
+                    }
+                }
+                return line.slice(index);
+            }
+
+            /** Убирает одинаковый «левый мусор» (часто после бага сохранения с номерами строк). */
+            function dedentUniformLeadingWhitespace(text) {
+                if (!text) return '';
+                const lines = text.replace(/\r\n/g, '\n').split('\n');
+                const nonEmpty = lines.filter((line) => line.trim().length > 0);
+                if (nonEmpty.length === 0) return text.replace(/\r\n/g, '\n');
+
+                const indents = nonEmpty.map(measureLeadingWhitespace);
+                const minIndent = Math.min(...indents);
+                if (minIndent < 4) return text.replace(/\r\n/g, '\n');
+                if (!indents.every((n) => n === minIndent)) return text.replace(/\r\n/g, '\n');
+
+                return lines.map((line) => {
+                    if (!line.trim()) return line;
+                    return stripLeadingWhitespaceColumns(line, minIndent);
+                }).join('\n');
+            }
+
+            function normalizeCodeFenceBlockSource(source) {
+                const parsed = parseCodeFenceSource(source);
+                const cleaned = dedentUniformLeadingWhitespace(parsed.inner);
+                if (cleaned === parsed.inner) return source;
+                return buildCodeFenceSource(parsed.lang, cleaned);
+            }
+
+            function readCodeFenceInner(preEl) {
+                if (!preEl) return '';
+                let text;
+                if (preEl.classList.contains('code-fence-edit-area')) {
+                    text = (preEl.textContent || '')
+                        .replace(/\u00a0/g, ' ')
+                        .replace(/\r\n/g, '\n')
+                        .replace(/\r/g, '\n');
+                } else {
+                    const code = preEl.querySelector('code');
+                    text = extractCodeText(preEl, code || preEl);
+                }
+                return dedentUniformLeadingWhitespace(text);
+            }
+
+            function detachCodeFenceEditListeners(block) {
+                const wrap = block?._codeFenceEditWrap;
+                if (!wrap) return;
+                if (block._codeFenceFocusOut) {
+                    wrap.removeEventListener('focusout', block._codeFenceFocusOut);
+                }
+                if (block._codeFenceKeyDown) {
+                    wrap.removeEventListener('keydown', block._codeFenceKeyDown);
+                }
+                delete block._codeFenceEditWrap;
+                delete block._codeFenceFocusOut;
+                delete block._codeFenceKeyDown;
+                delete block._codeFenceEditPre;
+                delete block._codeFenceLang;
             }
 
             function detectCodeLanguage(code) {
@@ -1865,55 +2007,22 @@
                 const wrap = document.createElement('div');
                 wrap.className = 'code-fence-wrap';
 
-                const langBar = document.createElement('div');
-                langBar.className = 'code-fence-lang-bar';
-
-                const langLabel = document.createElement('span');
-                langLabel.className = 'code-fence-lang-label';
-                langLabel.textContent = 'Language:';
-                langBar.appendChild(langLabel);
-
                 const displayLang = lang || 'auto';
 
                 if (readOnly) {
+                    const langBar = document.createElement('div');
+                    langBar.className = 'code-fence-lang-bar';
+                    const langLabel = document.createElement('span');
+                    langLabel.className = 'code-fence-lang-label';
+                    langLabel.textContent = 'Language:';
+                    langBar.appendChild(langLabel);
                     const langText = document.createElement('span');
                     langText.textContent = displayLang === 'auto' ? 'auto' : displayLang;
                     langBar.appendChild(langText);
+                    wrap.appendChild(langBar);
                 } else {
-                    const select = document.createElement('select');
-                    select.className = 'code-fence-lang-select';
-                    select.title = 'Code language';
-
-                    const autoOpt = document.createElement('option');
-                    autoOpt.value = '';
-                    autoOpt.textContent = lang ? `auto (${lang})` : 'auto-detect';
-                    select.appendChild(autoOpt);
-
-                    const plainOpt = document.createElement('option');
-                    plainOpt.value = 'plaintext';
-                    plainOpt.textContent = 'Plain Text';
-                    select.appendChild(plainOpt);
-
-                    listHighlightLanguages().forEach((name) => {
-                        const opt = document.createElement('option');
-                        opt.value = name;
-                        opt.textContent = name;
-                        select.appendChild(opt);
-                    });
-
-                    select.value = lang || '';
-                    select.addEventListener('change', () => {
-                        const chosen = select.value;
-                        const parsed = parseCodeFenceSource(block.source);
-                        block.source = buildCodeFenceSource(chosen, parsed.inner);
-                        setupCodeFenceBlock(el, block, index, false);
-                        highlightCodeBlocks(el);
-                        syncLiveContentToModel();
-                    });
-                    langBar.appendChild(select);
+                    appendCodeFenceLangBar(wrap, block, index, lang);
                 }
-
-                wrap.appendChild(langBar);
 
                 const pre = document.createElement('pre');
                 pre.className = 'hljs';
@@ -1940,16 +2049,145 @@
                 el.appendChild(wrap);
 
                 if (!readOnly) {
-                    langBar.addEventListener('mousedown', (e) => e.stopPropagation());
                     const openForEdit = (e) => {
                         if (e.target.closest('.code-fence-lang-bar')) return;
                         if (activeBlockIndex === index) return;
                         e.preventDefault();
-                        activateBlock(index, null);
+                        activateCodeFenceBlock(index);
                     };
                     wrap.addEventListener('mousedown', openForEdit);
                     pre.addEventListener('mousedown', openForEdit);
                 }
+
+                highlightCodeBlocks(el);
+            }
+
+            function appendCodeFenceLangBar(wrap, block, index, lang) {
+                const langBar = document.createElement('div');
+                langBar.className = 'code-fence-lang-bar';
+
+                const langLabel = document.createElement('span');
+                langLabel.className = 'code-fence-lang-label';
+                langLabel.textContent = 'Language:';
+                langBar.appendChild(langLabel);
+
+                const select = document.createElement('select');
+                select.className = 'code-fence-lang-select';
+                select.title = 'Code language';
+
+                const autoOpt = document.createElement('option');
+                autoOpt.value = '';
+                autoOpt.textContent = lang ? `auto (${lang})` : 'auto-detect';
+                select.appendChild(autoOpt);
+
+                const plainOpt = document.createElement('option');
+                plainOpt.value = 'plaintext';
+                plainOpt.textContent = 'Plain Text';
+                select.appendChild(plainOpt);
+
+                listHighlightLanguages().forEach((name) => {
+                    const opt = document.createElement('option');
+                    opt.value = name;
+                    opt.textContent = name;
+                    select.appendChild(opt);
+                });
+
+                select.value = lang || '';
+                select.addEventListener('mousedown', (e) => e.stopPropagation());
+                select.addEventListener('change', () => {
+                    block._codeFenceLang = select.value;
+                    if (!block.el.querySelector('.code-fence-edit-area')) {
+                        const parsed = parseCodeFenceSource(block.source);
+                        block.source = buildCodeFenceSource(select.value, parsed.inner);
+                        setupCodeFenceBlock(block.el, block, index, false);
+                        highlightCodeBlocks(block.el);
+                        syncLiveContentToModel();
+                    }
+                });
+                langBar.appendChild(select);
+                langBar.addEventListener('mousedown', (e) => e.stopPropagation());
+                wrap.appendChild(langBar);
+                return select;
+            }
+
+            function activateCodeFenceBlock(index) {
+                if (activeBlockIndex === index) return;
+
+                if (activeBlockIndex !== -1) {
+                    deactivateCurrentBlock();
+                }
+
+                activeBlockIndex = index;
+                const block = liveBlocks[index];
+                const { lang, inner } = parseCodeFenceSource(block.source);
+                block._codeFenceLang = lang;
+
+                block.el.className = 'live-block is-rendered';
+                block.el.removeAttribute('contenteditable');
+                block.el.onblur = null;
+                block.el.onkeydown = null;
+
+                const wrap = document.createElement('div');
+                wrap.className = 'code-fence-wrap is-editing';
+                appendCodeFenceLangBar(wrap, block, index, lang);
+
+                const pre = document.createElement('pre');
+                pre.className = 'code-fence-edit-area';
+                pre.setAttribute('contenteditable', 'true');
+                pre.setAttribute('spellcheck', 'false');
+                pre.textContent = inner;
+                wrap.appendChild(pre);
+
+                block.el.innerHTML = '';
+                block.el.appendChild(wrap);
+                block._codeFenceEditPre = pre;
+                block._codeFenceEditWrap = wrap;
+
+                const onFocusOut = (e) => {
+                    const next = e.relatedTarget;
+                    if (next && wrap.contains(next)) return;
+                    if (activeBlockIndex === index) {
+                        deactivateCurrentBlock();
+                    }
+                };
+                block._codeFenceFocusOut = onFocusOut;
+                wrap.addEventListener('focusout', onFocusOut);
+
+                const onKeyDown = (e) => {
+                    if (e.key === 'Escape') {
+                        e.preventDefault();
+                        deactivateCurrentBlock();
+                        return;
+                    }
+                    if (e.key === 'Tab') {
+                        e.preventDefault();
+                        document.execCommand('insertText', false, '    ');
+                        return;
+                    }
+
+                    const currentOffset = getCaretOffsetInEditable(pre);
+                    const textLength = (pre.textContent || '').length;
+
+                    if (e.key === 'ArrowUp' && currentOffset === 0 && index > 0) {
+                        e.preventDefault();
+                        deactivateCurrentBlock();
+                        activateBlockAtOffset(index - 1, liveBlocks[index - 1].source.length);
+                        return;
+                    }
+
+                    if (e.key === 'ArrowDown' && currentOffset === textLength && index < liveBlocks.length - 1) {
+                        e.preventDefault();
+                        deactivateCurrentBlock();
+                        activateBlockAtOffset(index + 1, 0);
+                    }
+                };
+                wrap.addEventListener('keydown', onKeyDown);
+                block._codeFenceKeyDown = onKeyDown;
+
+                requestAnimationFrame(() => {
+                    pre.focus();
+                    placeCaretAtEnd(pre);
+                });
             }
 
             function activateCodeBlockAtCursor() {
@@ -1962,7 +2200,7 @@
                     const blockEnd = offset + source.length;
                     if (pos <= blockEnd) {
                         if (liveBlocks[i].type === 'code-fence') {
-                            activateBlock(i, null);
+                            activateCodeFenceBlock(i);
                         }
                         return;
                     }
@@ -2783,7 +3021,26 @@
                 activeBlockIndex = -1;
                 liveContent = normalizeMarkdownImages(text || '');
 
-                const blocks = parseMarkdownBlocks(liveContent);
+                let blocks = parseMarkdownBlocks(liveContent);
+                let repairedSource = false;
+
+                blocks = blocks.map((block) => {
+                    if (block.type !== 'code-fence') return block;
+                    const normalized = normalizeCodeFenceBlockSource(block.source);
+                    if (normalized !== block.source) {
+                        repairedSource = true;
+                        return { ...block, source: normalized };
+                    }
+                    return block;
+                });
+
+                if (repairedSource) {
+                    const repairedText = blocks.map((b) => b.source).join('\n');
+                    liveContent = repairedText;
+                    currentContent = repairedText;
+                    textarea.value = repairedText;
+                    scheduleContentSync(repairedText);
+                }
 
                 blocks.forEach((block, index) => {
                     const el = createBlockEl(block, index, { readOnly: false });
@@ -3107,6 +3364,34 @@
                 if (activeBlockIndex < 0 || activeBlockIndex >= liveBlocks.length) return;
 
                 const block = liveBlocks[activeBlockIndex];
+
+                if (block.type === 'code-fence') {
+                    const codeEditPre = block._codeFenceEditPre
+                        || block.el.querySelector('.code-fence-edit-area');
+
+                    if (codeEditPre) {
+                        const lang = block._codeFenceLang != null
+                            ? block._codeFenceLang
+                            : parseCodeFenceSource(block.source).lang;
+                        const inner = readCodeFenceInner(codeEditPre);
+                        block.source = buildCodeFenceSource(lang, inner);
+                    }
+
+                    detachCodeFenceEditListeners(block);
+
+                    block.type = 'code-fence';
+                    block.el.className = 'live-block is-rendered';
+                    block.el.removeAttribute('contenteditable');
+                    block.el.onblur = null;
+                    block.el.onkeydown = null;
+                    setupCodeFenceBlock(block.el, block, activeBlockIndex, false);
+                    activeBlockIndex = -1;
+                    syncLiveContentToModel();
+                    highlightCodeBlocks(liveEditor);
+                    rewriteImagesInContainer(liveEditor);
+                    return;
+                }
+
                 let updatedSource = getTextFromContentEditable(block.el);
 
                 if (block.type === 'blockquote') {

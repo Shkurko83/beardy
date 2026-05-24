@@ -559,17 +559,61 @@ class ThemeService: NSObject, ObservableObject {
             background-color: transparent !important;
         }
 
+        #preview-content .code-fence-wrap pre.hljs.has-line-numbers,
+        #live-editor .code-fence-wrap pre.hljs.has-line-numbers {
+            padding: 8px 0 !important;
+        }
+
         #preview-content table.hljs-ln,
         #live-editor table.hljs-ln {
+            display: table !important;
+            border-collapse: collapse;
+            width: 100%;
             border: none !important;
         }
 
-        #preview-content table.hljs-ln td,
-        #live-editor table.hljs-ln td,
-        #preview-content table.hljs-ln th,
-        #live-editor table.hljs-ln th {
+        #preview-content table.hljs-ln tbody,
+        #live-editor table.hljs-ln tbody {
+            display: table-row-group !important;
+        }
+
+        #preview-content table.hljs-ln tr,
+        #live-editor table.hljs-ln tr {
+            display: table-row !important;
+        }
+
+        #preview-content table.hljs-ln td.hljs-ln-numbers,
+        #live-editor table.hljs-ln td.hljs-ln-numbers,
+        #preview-content table.hljs-ln td.hljs-ln-code,
+        #live-editor table.hljs-ln td.hljs-ln-code {
+            display: table-cell !important;
+            vertical-align: top;
             border: none !important;
+            background: transparent !important;
+        }
+
+        #preview-content table.hljs-ln td.hljs-ln-numbers,
+        #live-editor table.hljs-ln td.hljs-ln-numbers {
+            color: var(--md-secondary) !important;
+            white-space: nowrap;
+            text-align: right;
+            padding: 0 10px 0 12px !important;
+            border-right: 1px solid var(--md-border);
+            user-select: none;
+        }
+
+        #preview-content table.hljs-ln td.hljs-ln-code,
+        #live-editor table.hljs-ln td.hljs-ln-code {
+            padding: 0 12px 0 10px !important;
+            white-space: pre;
+        }
+
+        #preview-content table.hljs-ln .hljs-ln-line,
+        #live-editor table.hljs-ln .hljs-ln-line {
+            display: inline;
+            white-space: pre;
             padding: 0 !important;
+            margin: 0 !important;
         }
 
         #preview-content pre.hljs code,
@@ -580,35 +624,6 @@ class ThemeService: NSObject, ObservableObject {
         #live-editor pre.hljs .hljs {
             background: transparent !important;
             background-color: transparent !important;
-        }
-
-        #preview-content .hljs-ln,
-        #live-editor .hljs-ln {
-            width: 100%;
-            border-collapse: collapse;
-            background: transparent !important;
-        }
-
-        #preview-content .hljs-ln tr,
-        #live-editor .hljs-ln tr,
-        #preview-content .hljs-ln td,
-        #live-editor .hljs-ln td {
-            background: transparent !important;
-        }
-
-        #preview-content .hljs-ln td.hljs-ln-numbers,
-        #live-editor .hljs-ln td.hljs-ln-numbers {
-            color: var(--md-secondary) !important;
-            background: transparent !important;
-            border-right: 1px solid var(--md-border);
-            padding-right: 10px !important;
-            user-select: none;
-            vertical-align: top;
-        }
-
-        #preview-content .hljs-ln td.hljs-ln-code,
-        #live-editor .hljs-ln td.hljs-ln-code {
-            padding-left: 12px !important;
         }
 
         #preview-content blockquote,
