@@ -61,8 +61,19 @@ struct HTMLVisitor: MarkupVisitor {
     }
     
     mutating func visitLink(_ link: Markdown.Link) -> String {
-        let href = link.destination ?? ""
-        return "<a href=\"\(href)\">\(defaultVisit(link))</a>"
+        let href = htmlAttribute(link.destination ?? "")
+        var attrs = ["href=\"\(href)\"", "target=\"_blank\"", "rel=\"noopener noreferrer\""]
+        if let title = link.title, !title.isEmpty {
+            attrs.append("title=\"\(htmlAttribute(title))\"")
+        }
+        return "<a \(attrs.joined(separator: " "))>\(defaultVisit(link))</a>"
+    }
+
+    private func htmlAttribute(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "<", with: "&lt;")
     }
     
     mutating func visitThematicBreak(_ thematicBreak: ThematicBreak) -> String {

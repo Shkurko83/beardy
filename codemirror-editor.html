@@ -720,6 +720,7 @@
             let scrollDebounce = null;
             let documentBasePath = null;
             let showCodeLineNumbers = false;
+            let linkReferenceMap = {};
             let loadedCodeThemeURLs = new Set();
             let focusModeActive = false;
             let focusDimLines = false;
@@ -1095,11 +1096,72 @@
                 if (scroll) restoreScrollState(scroll);
             }
 
+            const LINK_REF_DEF_RE = /^\s*\[([^\]]+)\]:\s*(?:<([^>]+)>|(\S+))(?:\s+(?:"([^"]*)"|'([^']*)'))?\s*$/;
+
+            function extractLinkReferenceDefinitions(text) {
+                const lines = (text || '').split('\n');
+                const refs = {};
+                const out = [];
+                for (const line of lines) {
+                    const m = line.match(LINK_REF_DEF_RE);
+                    if (m) {
+                        const id = m[1].trim().toLowerCase();
+                        refs[id] = {
+                            url: (m[2] || m[3] || '').trim(),
+                            title: (m[4] || m[5] || '').trim(),
+                        };
+                        continue;
+                    }
+                    out.push(line);
+                }
+                return { text: out.join('\n'), refs };
+            }
+
+            function isLinkReferenceDefinitionLine(line) {
+                return LINK_REF_DEF_RE.test(line || '');
+            }
+
+            function parseLinkTarget(raw) {
+                const trimmed = (raw || '').trim();
+                const angle = trimmed.match(/^<([^>]+)>\s*(?:"([^"]*)"|'([^']*)')?$/);
+                if (angle) {
+                    return { url: angle[1].trim(), title: (angle[2] || angle[3] || '').trim() };
+                }
+                const plain = trimmed.match(/^(\S+?)(?:\s+(?:"([^"]*)"|'([^']*)'))?\s*$/);
+                if (plain) {
+                    return { url: plain[1], title: (plain[2] || plain[3] || '').trim() };
+                }
+                return { url: trimmed, title: '' };
+            }
+
+            function escapeHtmlAttr(value) {
+                return String(value)
+                    .replace(/&/g, '&amp;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/</g, '&lt;');
+            }
+
+            function escapeInlineText(value) {
+                return String(value)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+            }
+
+            function buildAnchorTag(href, label, title) {
+                const safeHref = escapeHtmlAttr(href);
+                const safeLabel = escapeInlineText(label);
+                const titleAttr = title ? ` title="${escapeHtmlAttr(title)}"` : '';
+                return `<a href="${safeHref}"${titleAttr} target="_blank" rel="noopener noreferrer">${safeLabel}</a>`;
+            }
+
             function mountDocumentBlocks(container, text, options = {}) {
                 const readOnly = !!options.readOnly;
                 const normalized = normalizeMarkdownImages(text);
+                const { text: withoutRefs, refs } = extractLinkReferenceDefinitions(normalized);
+                linkReferenceMap = refs;
                 container.innerHTML = '';
-                const blocks = parseMarkdownBlocks(normalized);
+                const blocks = parseMarkdownBlocks(withoutRefs);
                 blocks.forEach((block, index) => {
                     const el = createBlockEl(block, index, { readOnly });
                     container.appendChild(el);
@@ -2902,6 +2964,19 @@
                         continue;
                     }
 
+                    if (isLinkReferenceDefinitionLine(line)) {
+                        const m = line.match(LINK_REF_DEF_RE);
+                        if (m) {
+                            const id = m[1].trim().toLowerCase();
+                            linkReferenceMap[id] = {
+                                url: (m[2] || m[3] || '').trim(),
+                                title: (m[4] || m[5] || '').trim(),
+                            };
+                        }
+                        i++;
+                        continue;
+                    }
+
                     const listParsed = parseListLine(line);
                     if (listParsed) {
                         const listLines = [line];
@@ -3031,6 +3106,7 @@
                 const imgPlaceholders = [];
                 const mdImgPlaceholders = [];
                 const inlineHtmlPlaceholders = [];
+                const linkPlaceholders = [];
 
                 let s = (text || '').replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, src) => {
                     mdImgPlaceholders.push(buildResolvedImageTag(alt, src));
@@ -3050,6 +3126,31 @@
                     return `\x00HTML${inlineHtmlPlaceholders.length - 1}\x00`;
                 });
 
+                s = s.replace(/<((?:https?:\/\/)[^\s<>]+)>/gi, (_, url) => {
+                    linkPlaceholders.push(buildAnchorTag(url, url, ''));
+                    return `\x00LINK${linkPlaceholders.length - 1}\x00`;
+                });
+
+                s = s.replace(/<([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})>/gi, (_, email) => {
+                    linkPlaceholders.push(buildAnchorTag(`mailto:${email}`, email, ''));
+                    return `\x00LINK${linkPlaceholders.length - 1}\x00`;
+                });
+
+                s = s.replace(/\[([^\]]+)\]\[([^\]]*)\]/g, (match, label, id) => {
+                    const key = (id.trim() || label.trim()).toLowerCase();
+                    const ref = linkReferenceMap[key];
+                    if (!ref || !ref.url) return match;
+                    linkPlaceholders.push(buildAnchorTag(ref.url, label, ref.title || ''));
+                    return `\x00LINK${linkPlaceholders.length - 1}\x00`;
+                });
+
+                s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, label, targetRaw) => {
+                    const { url, title } = parseLinkTarget(targetRaw);
+                    if (!url) return match;
+                    linkPlaceholders.push(buildAnchorTag(url, label, title));
+                    return `\x00LINK${linkPlaceholders.length - 1}\x00`;
+                });
+
                 s = s
                     .replace(/&/g, '&amp;')
                     .replace(/</g, '&lt;')
@@ -3061,8 +3162,8 @@
                 s = s.replace(/_(?!_)(.+?)_(?!_)/g, '<em>$1</em>');
                 s = s.replace(/~~(.+?)~~/g, '<del>$1</del>');
                 s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-                s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
 
+                s = s.replace(/\x00LINK(\d+)\x00/g, (_, i) => linkPlaceholders[+i]);
                 s = s.replace(/\x00MDIMG(\d+)\x00/g, (_, i) => mdImgPlaceholders[+i]);
                 s = s.replace(/\x00IMG(\d+)\x00/g, (_, i) => imgPlaceholders[+i]);
                 s = s.replace(/\x00HTML(\d+)\x00/g, (_, i) => inlineHtmlPlaceholders[+i]);
