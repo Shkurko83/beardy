@@ -141,7 +141,14 @@ struct HTMLVisitor: MarkupVisitor {
     mutating func visitHeading(_ heading: Heading) -> String {
         let level = heading.level
         let content = defaultVisit(heading)
-        return "<h\(level)>\(content)</h\(level)>\n"
+        let id = headingSlug(heading.plainText)
+        return "<h\(level) id=\"\(htmlAttribute(id))\">\(content)</h\(level)>\n"
+    }
+
+    private func headingSlug(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "-")
     }
     
     mutating func visitImage(_ image: Markdown.Image) -> String {

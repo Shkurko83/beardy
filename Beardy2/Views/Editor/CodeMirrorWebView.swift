@@ -244,8 +244,11 @@ struct CodeMirrorWebView: NSViewRepresentable {
                 UserDefaults.standard.set(isSwapped, forKey: "editorPanesSwapped")
             }
 
-            if message.name == "openURL", let urlString = message.body as? String,
-               let url = URL(string: urlString) {
+            if message.name == "openURL", let urlString = message.body as? String {
+                guard !urlString.hasPrefix("#"),
+                      let url = URL(string: urlString),
+                      let scheme = url.scheme?.lowercased(),
+                      scheme == "http" || scheme == "https" || scheme == "mailto" else { return }
                 NSWorkspace.shared.open(url)
             }
 

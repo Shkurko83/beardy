@@ -678,6 +678,30 @@
                     
                     /* Курсор в live-mode */
                     #live-editor:focus-within .live-block.is-source { caret-color: currentColor; }
+
+                    /* Подсветка цели якорной ссылки (Preview / Split) */
+                    :root {
+                        --anchor-flash-bg: rgba(255, 212, 0, 0.42);
+                        --anchor-flash-ring: rgba(255, 180, 0, 0.55);
+                    }
+                    body.dark {
+                        --anchor-flash-bg: rgba(255, 196, 0, 0.28);
+                        --anchor-flash-ring: rgba(255, 196, 0, 0.45);
+                    }
+                    .live-block.anchor-flash {
+                        animation: anchor-flash-fade 2s ease-out forwards;
+                        border-radius: 6px;
+                    }
+                    @keyframes anchor-flash-fade {
+                        0% {
+                            background-color: var(--anchor-flash-bg);
+                            box-shadow: inset 0 0 0 2px var(--anchor-flash-ring);
+                        }
+                        100% {
+                            background-color: transparent;
+                            box-shadow: none;
+                        }
+                    }
                 </style>
     </head>
     <body class="mode-edit">
@@ -721,6 +745,7 @@
             let documentBasePath = null;
             let showCodeLineNumbers = false;
             let linkReferenceMap = {};
+            let anchorHighlightTimer = null;
             let loadedCodeThemeURLs = new Set();
             let focusModeActive = false;
             let focusDimLines = false;
@@ -1098,27 +1123,116 @@
 
             const LINK_REF_DEF_RE = /^\s*\[([^\]]+)\]:\s*(?:<([^>]+)>|(\S+))(?:\s+(?:"([^"]*)"|'([^']*)'))?\s*$/;
 
+            function isLinkReferenceDefinitionLine(line) {
+                return /^\s*\[[^\]]+\]:/.test(line || '');
+            }
+
+            function parseReferenceDefRemainder(remainder) {
+                const trimmed = (remainder || '').trim();
+                if (!trimmed) return null;
+                const angle = trimmed.match(/^<([^>]+)>(?:\s+(?:"([^"]*)"|'([^']*)'))?$/);
+                if (angle) {
+                    return { url: angle[1].trim(), title: (angle[2] || angle[3] || '').trim() };
+                }
+                const plain = trimmed.match(/^(\S+)(?:\s+(?:"([^"]*)"|'([^']*)'))?$/);
+                if (plain) {
+                    return { url: plain[1], title: (plain[2] || plain[3] || '').trim() };
+                }
+                return null;
+            }
+
+            function consumeReferenceDefinitionLines(lines, startIndex) {
+                const line = lines[startIndex];
+                const m = line.match(/^\s*\[([^\]]+)\]:\s*(.*)$/);
+                if (!m) return null;
+
+                const id = m[1].trim().toLowerCase();
+                const first = parseReferenceDefRemainder(m[2]);
+                if (first?.url) {
+                    return { consumed: 1, id, url: first.url, title: first.title || '' };
+                }
+
+                const chunks = [];
+                if (m[2].trim()) chunks.push(m[2].trim());
+
+                let consumed = 1;
+                let j = startIndex + 1;
+                while (j < lines.length) {
+                    const cont = lines[j];
+                    if (cont.trim() === '') {
+                        consumed = j - startIndex + (chunks.length ? 1 : 0);
+                        if (!chunks.length) consumed = j - startIndex + 1;
+                        break;
+                    }
+                    if (/^\s*\[[^\]]+\]:/.test(cont)) break;
+
+                    const joinedBefore = chunks.join(' ');
+                    if (chunks.length && joinedBefore && !/^\s+/.test(cont)) {
+                        const maybeUrl = parseReferenceDefRemainder(cont.trim());
+                        if (maybeUrl?.url) {
+                            chunks.push(cont.trim());
+                            consumed = j - startIndex + 1;
+                            j++;
+                            break;
+                        }
+                        break;
+                    }
+
+                    chunks.push(cont.trim());
+                    const parsed = parseReferenceDefRemainder(chunks.join(' '));
+                    if (parsed?.url) {
+                        consumed = j - startIndex + 1;
+                        return { consumed, id, url: parsed.url, title: parsed.title || '' };
+                    }
+                    j++;
+                    consumed = j - startIndex;
+                }
+
+                const finalParsed = parseReferenceDefRemainder(chunks.join(' '));
+                if (finalParsed?.url) {
+                    return { consumed, id, url: finalParsed.url, title: finalParsed.title || '' };
+                }
+                return { consumed, id, url: '', title: '' };
+            }
+
+            function applyLinkReferenceEntry(refs, entry) {
+                if (!entry?.url) return;
+                refs[entry.id] = { url: entry.url, title: entry.title || '' };
+            }
+
             function extractLinkReferenceDefinitions(text) {
                 const lines = (text || '').split('\n');
                 const refs = {};
                 const out = [];
-                for (const line of lines) {
-                    const m = line.match(LINK_REF_DEF_RE);
-                    if (m) {
-                        const id = m[1].trim().toLowerCase();
-                        refs[id] = {
-                            url: (m[2] || m[3] || '').trim(),
-                            title: (m[4] || m[5] || '').trim(),
-                        };
-                        continue;
+                let i = 0;
+
+                while (i < lines.length) {
+                    if (isLinkReferenceDefinitionLine(lines[i])) {
+                        const entry = consumeReferenceDefinitionLines(lines, i);
+                        if (entry) {
+                            applyLinkReferenceEntry(refs, entry);
+                            i += entry.consumed;
+                            continue;
+                        }
                     }
-                    out.push(line);
+                    out.push(lines[i]);
+                    i++;
                 }
                 return { text: out.join('\n'), refs };
             }
 
-            function isLinkReferenceDefinitionLine(line) {
-                return LINK_REF_DEF_RE.test(line || '');
+            function getEditorSource() {
+                if (document.body.classList.contains('mode-live')) {
+                    if (liveBlocks.length) {
+                        return liveBlocks.map((b) => b.source).join('\n');
+                    }
+                    return liveContent || '';
+                }
+                return currentContent || textarea.value || '';
+            }
+
+            function ensureLinkReferenceMap() {
+                linkReferenceMap = extractLinkReferenceDefinitions(getEditorSource()).refs;
             }
 
             function parseLinkTarget(raw) {
@@ -1148,11 +1262,140 @@
                     .replace(/>/g, '&gt;');
             }
 
+            function headingPlainText(text) {
+                return String(text || '')
+                    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+                    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+                    .replace(/[*_~`]/g, '')
+                    .trim();
+            }
+
+            function headingSlug(text) {
+                return headingPlainText(text)
+                    .toLowerCase()
+                    .replace(/\s+/g, '-');
+            }
+
             function buildAnchorTag(href, label, title) {
                 const safeHref = escapeHtmlAttr(href);
                 const safeLabel = escapeInlineText(label);
                 const titleAttr = title ? ` title="${escapeHtmlAttr(title)}"` : '';
-                return `<a href="${safeHref}"${titleAttr} target="_blank" rel="noopener noreferrer">${safeLabel}</a>`;
+                const externalAttrs = href.startsWith('#')
+                    ? ''
+                    : ' target="_blank" rel="noopener noreferrer"';
+                return `<a href="${safeHref}"${titleAttr}${externalAttrs}>${safeLabel}</a>`;
+            }
+
+            function getLinkNavigationRoot() {
+                if (document.body.classList.contains('mode-live')) {
+                    return document.getElementById('live-editor');
+                }
+                if (document.body.classList.contains('mode-preview')
+                    || document.body.classList.contains('mode-split')) {
+                    return document.getElementById('preview-content');
+                }
+                return null;
+            }
+
+            function getLinkScrollContainer(root) {
+                if (!root) return null;
+                if (root.id === 'live-editor') return root;
+                return root.closest('.editor-pane') || document.getElementById('preview-pane');
+            }
+
+            function findAnchorTarget(id) {
+                const root = getLinkNavigationRoot();
+                if (root) {
+                    try {
+                        const scoped = root.querySelector(`#${CSS.escape(id)}`);
+                        if (scoped) return scoped;
+                    } catch (_) {
+                        const scoped = Array.from(root.querySelectorAll('[id]'))
+                            .find((node) => node.id === id);
+                        if (scoped) return scoped;
+                    }
+                }
+                return document.getElementById(id);
+            }
+
+            function flashAnchorHighlight(el) {
+                if (!el) return;
+                el.classList.remove('anchor-flash');
+                void el.offsetWidth;
+                el.classList.add('anchor-flash');
+                clearTimeout(anchorHighlightTimer);
+                anchorHighlightTimer = setTimeout(() => {
+                    el.classList.remove('anchor-flash');
+                }, 2000);
+            }
+
+            function focusLiveBlockForAnchor(target) {
+                const blockEl = target?.closest?.('.live-block');
+                if (!blockEl) return false;
+                const index = parseInt(blockEl.getAttribute('data-index'), 10);
+                if (Number.isNaN(index) || !liveBlocks[index]) return false;
+
+                if (activeBlockIndex === index && blockEl.classList.contains('is-source')) {
+                    blockEl.focus();
+                    placeCaretAtTextOffset(blockEl, 0);
+                    return true;
+                }
+
+                activateBlockAtOffset(index, 0);
+                return true;
+            }
+
+            function scrollToDocumentAnchor(href) {
+                const id = decodeURIComponent((href || '').replace(/^#/, ''));
+                if (!id) return false;
+
+                const target = findAnchorTarget(id);
+                if (!target) return false;
+
+                const root = getLinkNavigationRoot();
+                const scrollContainer = getLinkScrollContainer(root);
+                if (scrollContainer) {
+                    const targetTop = target.getBoundingClientRect().top;
+                    const containerTop = scrollContainer.getBoundingClientRect().top;
+                    const nextScroll = scrollContainer.scrollTop + (targetTop - containerTop) - 16;
+                    scrollContainer.scrollTo({ top: Math.max(0, nextScroll), behavior: 'smooth' });
+                } else {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+
+                if (document.body.classList.contains('mode-live')) {
+                    requestAnimationFrame(() => focusLiveBlockForAnchor(target));
+                } else {
+                    flashAnchorHighlight(target);
+                }
+                return true;
+            }
+
+            function isModifiedLinkClick(e) {
+                return !!(e.metaKey || e.ctrlKey);
+            }
+
+            function handleDocumentLinkClick(e) {
+                const link = e.target.closest('a');
+                if (!link) return;
+
+                const href = link.getAttribute('href');
+                if (!href) return;
+
+                if (href.startsWith('#')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    scrollToDocumentAnchor(href);
+                    return;
+                }
+
+                if (/^(https?:\/\/|mailto:)/i.test(href)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (isModifiedLinkClick(e) && window.webkit?.messageHandlers?.openURL) {
+                        window.webkit.messageHandlers.openURL.postMessage(href);
+                    }
+                }
             }
 
             function mountDocumentBlocks(container, text, options = {}) {
@@ -1221,8 +1464,16 @@
                     if (mode === 'live') {
                         initLiveEditor(currentContent);
                         attachLiveCaretTracking();
-                    } else if (mode === 'preview' || mode === 'split') {
-                        renderPreview(currentContent);
+                    } else {
+                        const liveEditor = document.getElementById('live-editor');
+                        if (liveEditor) {
+                            liveEditor.innerHTML = '';
+                            liveBlocks = [];
+                            activeBlockIndex = -1;
+                        }
+                        if (mode === 'preview' || mode === 'split') {
+                            renderPreview(currentContent);
+                        }
                     }
                 },
 
@@ -1600,16 +1851,7 @@
                     isInitialized = true;
                 }
                 
-                // Перехват кликов по ссылкам — открываем в системном браузере
-                document.addEventListener('click', (e) => {
-                    const link = e.target.closest('a');
-                    if (!link) return;
-                    e.preventDefault();
-                    const href = link.getAttribute('href');
-                    if (href && window.webkit?.messageHandlers?.openURL) {
-                        window.webkit.messageHandlers.openURL.postMessage(href);
-                    }
-                });
+                document.addEventListener('click', handleDocumentLinkClick, true);
 
                 console.log('✅ Редактор инициализирован');
             };
@@ -2965,16 +3207,12 @@
                     }
 
                     if (isLinkReferenceDefinitionLine(line)) {
-                        const m = line.match(LINK_REF_DEF_RE);
-                        if (m) {
-                            const id = m[1].trim().toLowerCase();
-                            linkReferenceMap[id] = {
-                                url: (m[2] || m[3] || '').trim(),
-                                title: (m[4] || m[5] || '').trim(),
-                            };
+                        const entry = consumeReferenceDefinitionLines(rawLines, i);
+                        if (entry) {
+                            applyLinkReferenceEntry(linkReferenceMap, entry);
+                            i += entry.consumed;
+                            continue;
                         }
-                        i++;
-                        continue;
                     }
 
                     const listParsed = parseListLine(line);
@@ -3103,6 +3341,8 @@
             }
 
             function renderInline(text) {
+                ensureLinkReferenceMap();
+
                 const imgPlaceholders = [];
                 const mdImgPlaceholders = [];
                 const inlineHtmlPlaceholders = [];
@@ -3232,12 +3472,18 @@
                     setupCodeFenceBlock(el, block, index, readOnly);
                 } else if (block.type === 'list') {
                     setupListBlock(el, block, index, readOnly);
+                } else if (block.type.startsWith('h')) {
+                    const textMatch = block.source.match(/^#{1,6}\s+(.+)/);
+                    const headingText = textMatch ? textMatch[1] : block.source;
+                    el.id = headingSlug(headingText);
+                    el.innerHTML = renderInline(headingText);
                 } else {
                     el.innerHTML = renderBlock(block);
                 }
 
                 if (!readOnly && block.type !== 'table' && block.type !== 'code-fence' && block.type !== 'list') {
                     el.addEventListener('mousedown', (e) => {
+                        if (e.target.closest('a')) return;
                         if (activeBlockIndex === index) return;
 
                         const textOffset = getTextOffsetFromPoint(el, e.clientX, e.clientY);
@@ -3253,7 +3499,10 @@
                 liveEditor.innerHTML = '';
                 liveBlocks = [];
                 activeBlockIndex = -1;
-                liveContent = normalizeMarkdownImages(text || '');
+                const normalized = normalizeMarkdownImages(text || '');
+                const { text: withoutRefs, refs } = extractLinkReferenceDefinitions(normalized);
+                linkReferenceMap = refs;
+                liveContent = withoutRefs;
 
                 let blocks = parseMarkdownBlocks(liveContent);
                 let repairedSource = false;
