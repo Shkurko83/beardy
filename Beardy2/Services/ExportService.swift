@@ -586,8 +586,31 @@ class ExportService {
             color: \(secondary);
             border-left: 4px solid \(border);
         }
-        ul, ol { margin: 0 0 1em; padding-left: 2em; }
+        ul { margin: 0 0 1em; padding-left: 2em; list-style-type: disc; }
+        ul ul { list-style-type: disc; }
+        ol { margin: 0 0 1em; padding-left: 2em; list-style-type: decimal; }
+        ol ol { list-style-type: decimal; }
         li { margin: 0.25em 0; }
+        li > ul, li > ol { margin-top: 0.25em; margin-bottom: 0.35em; }
+        ul.task-list, ol.task-list { list-style: none; padding-left: 2em; }
+        ul.task-list ul.task-list { padding-left: 2em; margin-left: 0; }
+        li.task-list-item, .task-list > li {
+            display: block;
+            list-style: none;
+        }
+        .task-list-item-main {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+        sub, sup {
+            font-size: 0.75em;
+            line-height: 0;
+            position: relative;
+            vertical-align: baseline;
+        }
+        sup { top: -0.4em; }
+        sub { bottom: -0.2em; }
         img { max-width: 100%; height: auto; display: block; margin: 1em 0; }
         table { border-collapse: collapse; width: 100%; margin: 1em 0; }
         th, td { border: 1px solid \(border); padding: 8px 12px; text-align: left; }

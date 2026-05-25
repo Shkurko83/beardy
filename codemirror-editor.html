@@ -584,23 +584,59 @@
                     
                     /* Списки */
                     .live-block[data-type="list"] ul,
+                    #preview-content .live-block[data-type="list"] ul {
+                        margin: 0.35em 0;
+                        padding-left: 1.6em;
+                        list-style-type: disc;
+                    }
+                    .live-block[data-type="list"] ul ul,
+                    #preview-content .live-block[data-type="list"] ul ul {
+                        list-style-type: disc;
+                    }
                     .live-block[data-type="list"] ol,
-                    #preview-content .live-block[data-type="list"] ul,
                     #preview-content .live-block[data-type="list"] ol {
                         margin: 0.35em 0;
                         padding-left: 1.6em;
+                        list-style-type: decimal;
                     }
+                    .live-block[data-type="list"] ol ol,
+                    #preview-content .live-block[data-type="list"] ol ol {
+                        list-style-type: decimal;
+                    }
+                    .live-block[data-type="list"] li > ul,
+                    .live-block[data-type="list"] li > ol,
+                    #preview-content .live-block[data-type="list"] li > ul,
+                    #preview-content .live-block[data-type="list"] li > ol {
+                        margin: 0.2em 0 0.35em;
+                    }
+                    sub, sup {
+                        font-size: 0.75em;
+                        line-height: 0;
+                        position: relative;
+                        vertical-align: baseline;
+                    }
+                    sup { top: -0.4em; }
+                    sub { bottom: -0.2em; }
                     .live-block[data-type="list"] .task-list,
                     #preview-content .live-block[data-type="list"] .task-list {
                         list-style: none;
-                        padding-left: 0.35em;
+                        padding-left: 1.6em;
                     }
-                    .live-block[data-type="list"] .task-list li,
-                    #preview-content .live-block[data-type="list"] .task-list li {
+                    .live-block[data-type="list"] .task-list ul.task-list,
+                    #preview-content .live-block[data-type="list"] .task-list ul.task-list {
+                        padding-left: 1.6em;
+                        margin: 0.2em 0 0.35em;
+                    }
+                    .live-block[data-type="list"] .task-list > li,
+                    #preview-content .live-block[data-type="list"] .task-list > li {
+                        display: block;
+                        margin: 0.2em 0;
+                    }
+                    .live-block[data-type="list"] .task-list-item-main,
+                    #preview-content .live-block[data-type="list"] .task-list-item-main {
                         display: flex;
                         align-items: flex-start;
                         gap: 8px;
-                        margin: 0.2em 0;
                     }
                     .live-block[data-type="list"] .task-list input[type="checkbox"],
                     #preview-content .live-block[data-type="list"] .task-list input[type="checkbox"] {
@@ -2406,6 +2442,164 @@
                 return formatListLine({ ...item, content: '' }, lineIndex).length;
             }
 
+            function listIndentDepth(indent) {
+                const normalized = (indent || '').replace(/\t/g, '    ');
+                return Math.floor(normalized.length / 2);
+            }
+
+            function listIndentString(depth) {
+                return '  '.repeat(Math.max(0, depth));
+            }
+
+            function createListItemElement(item, itemIndex, block, blockIndex, readOnly, listKind) {
+                const li = document.createElement('li');
+                const isTask = listKind === 'task';
+                const row = isTask ? document.createElement('div') : li;
+
+                if (isTask) {
+                    row.className = 'task-list-item-main';
+                }
+
+                if (isTask) {
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.checked = !!item.checked;
+                    if (!readOnly) {
+                        cb.addEventListener('mousedown', (ev) => ev.stopPropagation());
+                        cb.addEventListener('change', () => {
+                            syncListBlockFromDOM(blockIndex);
+                        });
+                    } else {
+                        cb.disabled = true;
+                    }
+                    row.appendChild(cb);
+                }
+
+                const body = document.createElement('span');
+                body.className = 'list-item-body';
+                if (item.content.trim()) {
+                    body.innerHTML = renderInline(item.content);
+                } else if (!readOnly) {
+                    body.innerHTML = '<br>';
+                }
+
+                if (!readOnly) {
+                    body.contentEditable = 'true';
+                    body.addEventListener('mousedown', (ev) => ev.stopPropagation());
+                    body.addEventListener('input', () => scheduleListSync(blockIndex));
+                    body.addEventListener('keydown', (ev) => {
+                        handleLiveListItemKeydown(ev, blockIndex, itemIndex, body);
+                    });
+                }
+
+                row.appendChild(body);
+
+                if (isTask) {
+                    li.appendChild(row);
+                }
+
+                return li;
+            }
+
+            function listTagForKind(kind) {
+                return kind === 'ordered' ? 'ol' : 'ul';
+            }
+
+            function buildNestedListElement(items, defaultListKind, block, blockIndex, readOnly) {
+                const rootKind = defaultListKind || items[0]?.kind || 'bullet';
+                const root = document.createElement(listTagForKind(rootKind));
+                if (rootKind === 'task') root.className = 'task-list';
+
+                const stack = [{ depth: 0, listEl: root, kind: rootKind }];
+
+                items.forEach((item, itemIndex) => {
+                    const depth = listIndentDepth(item.indent);
+                    const itemKind = item.kind || rootKind;
+
+                    while (stack.length > 1 && stack[stack.length - 1].depth > depth) {
+                        stack.pop();
+                    }
+
+                    while (stack[stack.length - 1].depth < depth) {
+                        const parent = stack[stack.length - 1];
+                        let parentLi = parent.listEl.lastElementChild;
+                        if (!parentLi) {
+                            parentLi = createListItemElement(
+                                { kind: itemKind, indent: listIndentString(parent.depth), content: '', checked: false, number: 1 },
+                                itemIndex,
+                                block,
+                                blockIndex,
+                                readOnly,
+                                itemKind
+                            );
+                            parent.listEl.appendChild(parentLi);
+                        }
+                        const nested = document.createElement(listTagForKind(itemKind));
+                        if (itemKind === 'task') nested.className = 'task-list';
+                        parentLi.appendChild(nested);
+                        stack.push({
+                            depth: stack[stack.length - 1].depth + 1,
+                            listEl: nested,
+                            kind: itemKind,
+                        });
+                    }
+
+                    const li = createListItemElement(item, itemIndex, block, blockIndex, readOnly, itemKind);
+                    stack[stack.length - 1].listEl.appendChild(li);
+                });
+
+                return root;
+            }
+
+            function flattenListItemElements(listRoot) {
+                const flat = [];
+                function walk(listEl) {
+                    [...listEl.children].forEach((li) => {
+                        if (li.tagName !== 'LI') return;
+                        flat.push(li);
+                        const nested = li.querySelector(':scope > ul, :scope > ol');
+                        if (nested) walk(nested);
+                    });
+                }
+                walk(listRoot);
+                return flat;
+            }
+
+            function serializeListElementToLines(listEl) {
+                const lines = [];
+
+                function walk(listEl, depth) {
+                    const isOrdered = listEl.tagName === 'OL';
+                    let order = 1;
+
+                    [...listEl.children].forEach((li) => {
+                        if (li.tagName !== 'LI') return;
+
+                        const body = li.querySelector(':scope > .list-item-body, :scope > .task-list-item-main .list-item-body');
+                        const checkbox = li.querySelector(':scope > .task-list-item-main input[type="checkbox"], :scope > input[type="checkbox"]');
+                        const content = (body?.textContent || '').replace(/\u00a0/g, ' ');
+                        const indent = listIndentString(depth);
+                        const kind = checkbox ? 'task' : (isOrdered ? 'ordered' : 'bullet');
+
+                        lines.push(formatListLine({
+                            kind,
+                            indent,
+                            content,
+                            checked: checkbox ? checkbox.checked : false,
+                            number: order,
+                        }, order - 1));
+
+                        if (isOrdered) order += 1;
+
+                        const nested = li.querySelector(':scope > ul, :scope > ol');
+                        if (nested) walk(nested, depth + 1);
+                    });
+                }
+
+                walk(listEl, 0);
+                return lines;
+            }
+
             function getLineRangeForSelection(ta) {
                 const start = ta.selectionStart;
                 const end = ta.selectionEnd;
@@ -2548,31 +2742,10 @@
                 const block = liveBlocks[index];
                 if (!block || block.type !== 'list') return;
 
-                const lines = block.source.split('\n');
                 const listEl = block.el.querySelector('ul, ol');
                 if (!listEl) return;
 
-                const lis = [...listEl.querySelectorAll(':scope > li')];
-                const newLines = lis.map((li, itemIndex) => {
-                    const base = parseListLine(lines[itemIndex]) || {
-                        kind: block.listKind,
-                        indent: '',
-                        checked: false,
-                        number: itemIndex + 1,
-                    };
-                    const body = li.querySelector('.list-item-body');
-                    const content = (body?.textContent || '').replace(/\u00a0/g, ' ');
-                    const checkbox = li.querySelector('input[type="checkbox"]');
-                    return formatListLine({
-                        kind: base.kind,
-                        indent: base.indent,
-                        content,
-                        checked: checkbox ? checkbox.checked : base.checked,
-                        number: base.number,
-                    }, itemIndex);
-                });
-
-                block.source = newLines.join('\n');
+                block.source = serializeListElementToLines(listEl).join('\n');
                 syncLiveContentToModel();
             }
 
@@ -2599,7 +2772,8 @@
                     const listRoot = block.el.querySelector('ul, ol');
                     if (!listRoot) return false;
 
-                    const li = listRoot.querySelectorAll(':scope > li')[itemIndex];
+                    const flatItems = flattenListItemElements(listRoot);
+                    const li = flatItems[itemIndex];
                     if (!li) return false;
 
                     const body = li.querySelector('.list-item-body');
@@ -2708,55 +2882,7 @@
                 }
 
                 const listKind = block.listKind || items[0].kind;
-                const isOrdered = listKind === 'ordered';
-                const isTask = listKind === 'task';
-                const list = document.createElement(isOrdered ? 'ol' : 'ul');
-                if (isTask) list.className = 'task-list';
-
-                items.forEach((item, itemIndex) => {
-                    const li = document.createElement('li');
-
-                    if (isTask) {
-                        const cb = document.createElement('input');
-                        cb.type = 'checkbox';
-                        cb.checked = !!item.checked;
-                        if (!readOnly) {
-                            cb.addEventListener('mousedown', (ev) => ev.stopPropagation());
-                            cb.addEventListener('change', () => {
-                                const srcLines = block.source.split('\n');
-                                const p = parseListLine(srcLines[itemIndex]);
-                                if (!p) return;
-                                p.checked = cb.checked;
-                                srcLines[itemIndex] = formatListLine(p, itemIndex);
-                                block.source = srcLines.join('\n');
-                                syncLiveContentToModel();
-                            });
-                        } else {
-                            cb.disabled = true;
-                        }
-                        li.appendChild(cb);
-                    }
-
-                    const body = document.createElement('span');
-                    body.className = 'list-item-body';
-                    if (item.content.trim()) {
-                        body.innerHTML = renderInline(item.content);
-                    } else if (!readOnly) {
-                        body.innerHTML = '<br>';
-                    }
-
-                    if (!readOnly) {
-                        body.contentEditable = 'true';
-                        body.addEventListener('mousedown', (ev) => ev.stopPropagation());
-                        body.addEventListener('input', () => scheduleListSync(index));
-                        body.addEventListener('keydown', (ev) => {
-                            handleLiveListItemKeydown(ev, index, itemIndex, body);
-                        });
-                    }
-
-                    li.appendChild(body);
-                    list.appendChild(li);
-                });
+                const list = buildNestedListElement(items, listKind, block, index, readOnly);
 
                 el.innerHTML = '';
                 el.appendChild(list);
@@ -2783,7 +2909,7 @@
                         i++;
                         while (i < rawLines.length) {
                             const next = parseListLine(rawLines[i]);
-                            if (!next || next.kind !== listKind) break;
+                            if (!next) break;
                             listLines.push(rawLines[i]);
                             i++;
                         }
@@ -2904,6 +3030,7 @@
             function renderInline(text) {
                 const imgPlaceholders = [];
                 const mdImgPlaceholders = [];
+                const inlineHtmlPlaceholders = [];
 
                 let s = (text || '').replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, src) => {
                     mdImgPlaceholders.push(buildResolvedImageTag(alt, src));
@@ -2916,6 +3043,11 @@
                     });
                     imgPlaceholders.push(resolved);
                     return `\x00IMG${imgPlaceholders.length - 1}\x00`;
+                });
+
+                s = s.replace(/<(\/?)(sub|sup|mark|kbd|var|abbr)(\s[^>]*)?>/gi, (match) => {
+                    inlineHtmlPlaceholders.push(match);
+                    return `\x00HTML${inlineHtmlPlaceholders.length - 1}\x00`;
                 });
 
                 s = s
@@ -2933,6 +3065,7 @@
 
                 s = s.replace(/\x00MDIMG(\d+)\x00/g, (_, i) => mdImgPlaceholders[+i]);
                 s = s.replace(/\x00IMG(\d+)\x00/g, (_, i) => imgPlaceholders[+i]);
+                s = s.replace(/\x00HTML(\d+)\x00/g, (_, i) => inlineHtmlPlaceholders[+i]);
 
                 return s;
             }

@@ -82,7 +82,19 @@ struct HTMLVisitor: MarkupVisitor {
     }
     
     mutating func visitListItem(_ listItem: ListItem) -> String {
-        return "<li>\(defaultVisit(listItem))</li>\n"
+        var inner = ""
+        for child in listItem.children {
+            if let paragraph = child as? Paragraph {
+                let html = defaultVisit(paragraph)
+                inner += html
+                    .replacingOccurrences(of: "<p>", with: "")
+                    .replacingOccurrences(of: "</p>\n", with: "<br>\n")
+                    .replacingOccurrences(of: "</p>", with: "")
+            } else {
+                inner += visit(child)
+            }
+        }
+        return "<li>\(inner)</li>\n"
     }
     
     // Блоки кода с сохранением форматирования (white-space: pre)
