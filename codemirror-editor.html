@@ -3,8 +3,11 @@
     <head>
         <meta charset="UTF-8">
             <link id="highlight-theme" rel="stylesheet" href="HighlightJS/styles/github-dark.min.css">
+                <link rel="stylesheet" href="KaTeX/katex.min.css">
                 <script src="HighlightJS/highlight.min.js"></script>
                 <script src="HighlightJS/highlightjs-line-numbers.min.js"></script>
+                <script src="KaTeX/katex.min.js"></script>
+                <script src="Mermaid/mermaid.min.js"></script>
                 <style>
                     * { margin: 0; padding: 0; box-sizing: border-box; }
                     body {
@@ -407,6 +410,218 @@
                     body.dark .live-block[data-type="blockquote"] {
                         border-left-color: #30363d;
                         color: #8b949e;
+                    }
+                    .live-block[data-type="blockquote"] .bq-nested {
+                        border-left: 3px solid #d0d7de;
+                        padding-left: 1em;
+                        margin: 0.35em 0;
+                        color: inherit;
+                    }
+                    body.dark .live-block[data-type="blockquote"] .bq-nested {
+                        border-left-color: #484f58;
+                    }
+                    .live-block[data-type="blockquote"] ul,
+                    .live-block[data-type="blockquote"] ol {
+                        margin: 0.35em 0;
+                        padding-left: 1.5em;
+                    }
+
+                    .live-block[data-type="html"] details {
+                        margin: 0.5em 0;
+                        padding: 0.35em 0.85em;
+                        border: 1px solid #d0d7de;
+                        border-radius: 6px;
+                    }
+                    body.dark .live-block[data-type="html"] details {
+                        border-color: #30363d;
+                    }
+                    .live-block[data-type="html"] summary {
+                        cursor: pointer;
+                        font-weight: 600;
+                        margin-bottom: 0.35em;
+                    }
+                    .live-block[data-type="html"] div[align="center"] {
+                        text-align: center;
+                    }
+                    .live-block[data-type="html"] p {
+                        margin: 0.35em 0;
+                    }
+                    .live-block[data-type="html"] {
+                        white-space: normal;
+                        cursor: default;
+                    }
+
+                    .live-block[data-type="math"],
+                    .math-display {
+                        margin: 0.75em 0;
+                        overflow-x: auto;
+                        overflow-y: hidden;
+                        text-align: center;
+                    }
+                    .math-display > .katex-display {
+                        margin: 0;
+                    }
+                    .math-inline .katex {
+                        font-size: 1.05em;
+                    }
+                    .math-fallback {
+                        font-family: 'SF Mono', Monaco, Consolas, monospace;
+                        font-size: 0.9em;
+                        padding: 0.5em;
+                        background: rgba(0, 0, 0, 0.04);
+                        border-radius: 4px;
+                        overflow-x: auto;
+                    }
+                    body.dark .math-fallback {
+                        background: rgba(255, 255, 255, 0.06);
+                    }
+
+                    .live-block[data-type="math"],
+                    .live-block[data-type="mermaid"] {
+                        cursor: default;
+                    }
+                    .math-block-wrap,
+                    .mermaid-block-wrap {
+                        border: 1px solid #d0d7de;
+                        border-radius: 8px;
+                        overflow: hidden;
+                        background: #f6f8fa;
+                    }
+                    body.dark .math-block-wrap,
+                    body.dark .mermaid-block-wrap {
+                        border-color: #30363d;
+                        background: #161b22;
+                    }
+                    .math-block-bar,
+                    .mermaid-block-bar {
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        padding: 6px 12px;
+                        border-bottom: 1px solid #d0d7de;
+                        font-size: 12px;
+                        color: #57606a;
+                        background: #f6f8fa;
+                    }
+                    body.dark .math-block-bar,
+                    body.dark .mermaid-block-bar {
+                        border-bottom-color: #30363d;
+                        color: #8b949e;
+                        background: #161b22;
+                    }
+                    .math-block-display,
+                    .mermaid-diagram {
+                        padding: 16px;
+                        min-height: 48px;
+                        overflow-x: auto;
+                    }
+                    #live-editor .special-block-preview,
+                    #preview-content .special-block-preview {
+                        display: flex;
+                        justify-content: center;
+                        width: 100%;
+                    }
+                    #live-editor .math-block-display,
+                    #preview-content .math-block-display {
+                        width: 100%;
+                        text-align: center;
+                    }
+                    #live-editor .mermaid-diagram,
+                    #preview-content .mermaid-diagram {
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        width: 100%;
+                        text-align: center;
+                    }
+                    #live-editor .mermaid-diagram > *,
+                    #preview-content .mermaid-diagram > * {
+                        margin-left: auto;
+                        margin-right: auto;
+                    }
+                    .math-block-display.is-empty,
+                    .mermaid-diagram.is-empty {
+                        min-height: 64px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    }
+                    .math-placeholder,
+                    .mermaid-placeholder {
+                        color: #8b949e;
+                        font-size: 13px;
+                        font-style: italic;
+                    }
+                    .mermaid-diagram svg {
+                        max-width: 100%;
+                        height: auto;
+                    }
+                    .mermaid-error {
+                        color: #cf222e;
+                        font-family: 'SF Mono', Monaco, Consolas, monospace;
+                        font-size: 12px;
+                        white-space: pre-wrap;
+                    }
+                    body.dark .mermaid-error { color: #f85149; }
+                    .special-block-editor {
+                        display: none;
+                        border-bottom: 1px solid #d0d7de;
+                    }
+                    body.dark .special-block-editor {
+                        border-bottom-color: #30363d;
+                    }
+                    .math-block-wrap.is-editing .special-block-editor,
+                    .mermaid-block-wrap.is-editing .special-block-editor {
+                        display: block;
+                    }
+                    .special-block-preview {
+                        background: transparent;
+                    }
+                    .math-edit-area,
+                    .mermaid-edit-area,
+                    #live-editor pre.math-edit-area,
+                    #live-editor pre.mermaid-edit-area {
+                        display: block;
+                        margin: 0;
+                        padding: 12px 14px;
+                        min-height: 72px;
+                        max-height: 280px;
+                        overflow-y: auto;
+                        font-family: 'SF Mono', Monaco, Consolas, monospace;
+                        font-size: 13px;
+                        line-height: 1.5;
+                        white-space: pre-wrap;
+                        word-break: break-word;
+                        border: none !important;
+                        outline: none !important;
+                        box-shadow: none !important;
+                        border-radius: 0 !important;
+                        background: transparent !important;
+                        color: inherit;
+                        -webkit-user-modify: read-write-plaintext-only;
+                    }
+                    .math-edit-area:focus,
+                    .mermaid-edit-area:focus,
+                    #live-editor pre.math-edit-area:focus,
+                    #live-editor pre.mermaid-edit-area:focus {
+                        border: none !important;
+                        outline: none !important;
+                        box-shadow: none !important;
+                    }
+                    .math-block-wrap.is-editing,
+                    .mermaid-block-wrap.is-editing {
+                        box-shadow: none;
+                    }
+                    .live-block:has(.math-block-wrap.is-editing),
+                    .live-block:has(.mermaid-block-wrap.is-editing) {
+                        padding: 0 !important;
+                        background: transparent !important;
+                        border-radius: 0;
+                    }
+                    .live-block[data-type="math"]:focus,
+                    .live-block[data-type="mermaid"]:focus {
+                        outline: none;
                     }
                     
                     /* Горизонтальная линия */
@@ -1037,7 +1252,7 @@
 
             function syncLiveToTextarea() {
                 if (isLiveMode && liveBlocks.length) {
-                    currentContent = liveBlocks.map(b => b.source).join('\n');
+                    currentContent = liveBlocks.map((b) => blockToMarkdownSource(b)).join('\n');
                     textarea.value = currentContent;
                 }
             }
@@ -1404,13 +1619,17 @@
                 const { text: withoutRefs, refs } = extractLinkReferenceDefinitions(normalized);
                 linkReferenceMap = refs;
                 container.innerHTML = '';
-                const blocks = parseMarkdownBlocks(withoutRefs);
+                let blocks = parseMarkdownBlocks(withoutRefs);
+                blocks = coalesceHTMLBlocks(blocks);
                 blocks.forEach((block, index) => {
                     const el = createBlockEl(block, index, { readOnly });
                     container.appendChild(el);
                 });
                 highlightCodeBlocks(container);
                 rewriteImagesInContainer(container);
+                if (isElementVisibleForLayout(container)) {
+                    scheduleMermaidRenderAfterLayout([container]);
+                }
             }
             
             window.cmEditor = {
@@ -1441,6 +1660,7 @@
                         el.style.backgroundColor = 'transparent';
                         el.style.color = 'inherit';
                     });
+                    rethemeAllMermaidInApp();
                 },
 
                 setViewMode(mode) {
@@ -1462,6 +1682,8 @@
 
                     flushPendingEditorUpdates();
                     if (mode === 'live') {
+                        const previewEl = document.getElementById('preview-content');
+                        if (previewEl) previewEl.innerHTML = '';
                         initLiveEditor(currentContent);
                         attachLiveCaretTracking();
                     } else {
@@ -1475,6 +1697,9 @@
                             renderPreview(currentContent);
                         }
                     }
+                    requestAnimationFrame(() => {
+                        scheduleMermaidRenderAfterLayout(getActiveMermaidRoots());
+                    });
                 },
 
                 setSyncScroll(enabled) {
@@ -1555,6 +1780,7 @@
                             el.style.backgroundColor = 'transparent';
                             el.style.color = 'inherit';
                         });
+                        rethemeAllMermaidInApp();
                     }
 
                     if (options.themeCSS) {
@@ -2152,17 +2378,41 @@
                 return false;
             }
 
+            function parseGFMTableAlignmentCell(cell) {
+                const c = (cell || '').trim();
+                if (!/^:?-{1,}:?$/.test(c)) return 'left';
+                const left = c.startsWith(':');
+                const right = c.endsWith(':');
+                if (left && right) return 'center';
+                if (right) return 'right';
+                return 'left';
+            }
+
             function parseGFMTableSource(source) {
                 const rows = [];
+                let alignments = null;
                 for (const line of (source || '').split('\n')) {
                     const trimmed = line.trim();
-                    if (!trimmed || isGFMTableSeparator(trimmed)) continue;
+                    if (!trimmed) continue;
+                    if (isGFMTableSeparator(trimmed)) {
+                        let inner = trimmed;
+                        if (inner.startsWith('|')) inner = inner.slice(1);
+                        if (inner.endsWith('|')) inner = inner.slice(0, -1);
+                        alignments = inner.split('|').map((cell) => parseGFMTableAlignmentCell(cell.trim()));
+                        continue;
+                    }
+                    if (!trimmed.startsWith('|')) continue;
                     let inner = trimmed;
                     if (inner.startsWith('|')) inner = inner.slice(1);
                     if (inner.endsWith('|')) inner = inner.slice(0, -1);
-                    rows.push(inner.split('|').map(cell => cell.trim()));
+                    rows.push(inner.split('|').map((cell) => cell.trim()));
                 }
-                return rows;
+                return { rows, alignments };
+            }
+
+            function tableCellAlignAttr(alignments, colIndex) {
+                const align = alignments?.[colIndex] || 'left';
+                return ` style="text-align:${align}"`;
             }
 
             function tableRowsToMarkdown(rows) {
@@ -2179,15 +2429,6 @@
                     md += `| ${normalize(rows[i]).join(' | ')} |\n`;
                 }
                 return md.trimEnd();
-            }
-
-            function escapeTableCellHTML(cell) {
-                const trimmed = (cell || '').trim();
-                if (!trimmed) return '&nbsp;';
-                return trimmed
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;');
             }
 
             function applyTableColumnCount(table, rows) {
@@ -2511,7 +2752,7 @@
                     if (e.key === 'ArrowUp' && currentOffset === 0 && index > 0) {
                         e.preventDefault();
                         deactivateCurrentBlock();
-                        activateBlockAtOffset(index - 1, liveBlocks[index - 1].source.length);
+                        activateBlockAtOffset(index - 1, blockMarkdownLength(liveBlocks[index - 1]));
                         return;
                     }
 
@@ -2530,32 +2771,573 @@
                 });
             }
 
+            function buildMathBlockSource(inner) {
+                const cleaned = (inner || '').trim();
+                if (!cleaned) return '$$';
+                if (!cleaned.includes('\n')) return `$$${cleaned}$$`;
+                return `$$\n${cleaned}\n$$`;
+            }
+
+            function parseMathInnerFromText(text) {
+                const trimmed = (text || '').trim();
+                if (trimmed.startsWith('$$') && trimmed.endsWith('$$') && trimmed.length > 4) {
+                    return trimmed.slice(2, -2).trim();
+                }
+                return trimmed;
+            }
+
+            function blockToMarkdownSource(block) {
+                if (!block) return '';
+                if (block.type === 'math') return buildMathBlockSource(block.source);
+                return block.source || '';
+            }
+
+            function blockMarkdownLength(block) {
+                return blockToMarkdownSource(block).length;
+            }
+
+            let mermaidCurrentTheme = null;
+            let mermaidLivePreviewTimer = null;
+
+            function getMermaidThemeName() {
+                return document.body.classList.contains('dark') ? 'dark' : 'default';
+            }
+
+            function ensureMermaidInitialized() {
+                if (typeof mermaid === 'undefined') return false;
+                const theme = getMermaidThemeName();
+                if (mermaidCurrentTheme !== theme) {
+                    mermaid.initialize({
+                        startOnLoad: false,
+                        securityLevel: 'strict',
+                        theme,
+                        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                    });
+                    mermaidCurrentTheme = theme;
+                }
+                return true;
+            }
+
+            function resetMermaidTheme() {
+                mermaidCurrentTheme = null;
+            }
+
+            function isElementVisibleForLayout(el) {
+                if (!el || !el.isConnected) return false;
+                let node = el;
+                while (node && node !== document.body) {
+                    const style = window.getComputedStyle(node);
+                    if (style.display === 'none' || style.visibility === 'hidden') {
+                        return false;
+                    }
+                    node = node.parentElement;
+                }
+                const rect = el.getBoundingClientRect();
+                return rect.width > 2 && rect.height > 2;
+            }
+
+            function getActiveMermaidRoots() {
+                const liveEditor = document.getElementById('live-editor');
+                const preview = document.getElementById('preview-content');
+                if (document.body.classList.contains('mode-live')) {
+                    return liveEditor ? [liveEditor] : [];
+                }
+                if (document.body.classList.contains('mode-preview')
+                    || document.body.classList.contains('mode-split')) {
+                    return preview ? [preview] : [];
+                }
+                return [];
+            }
+
+            function prepareMermaidNodeForRender(node) {
+                if (!node) return false;
+                let src = node.getAttribute('data-mermaid-source');
+                if (!src || !src.trim()) {
+                    const text = (node.textContent || '').trim();
+                    if (text && !text.includes('<svg') && !text.includes('dmermaid')) {
+                        src = text;
+                        node.setAttribute('data-mermaid-source', src);
+                    }
+                }
+                if (!src || !src.trim()) return false;
+                node.innerHTML = '';
+                node.textContent = src;
+                node.classList.add('mermaid');
+                node.classList.remove('is-empty');
+                node.removeAttribute('data-mermaid-rendering');
+                node.removeAttribute('data-processed');
+                node.setAttribute('data-mermaid-pending', '1');
+                return true;
+            }
+
+            /** Перерисовать все диаграммы после смены светлой/тёмной темы приложения. */
+            function rethemeAllMermaidInApp() {
+                resetMermaidTheme();
+                const roots = getActiveMermaidRoots();
+                let hasDiagrams = false;
+                roots.forEach((root) => {
+                    root.querySelectorAll('.mermaid-diagram').forEach((node) => {
+                        if (prepareMermaidNodeForRender(node)) hasDiagrams = true;
+                    });
+                });
+                if (!hasDiagrams) return;
+                scheduleMermaidRenderAfterLayout(roots);
+            }
+
+            function scheduleMermaidRenderAfterLayout(roots, attempt = 0) {
+                const visible = (roots || getActiveMermaidRoots()).filter(isElementVisibleForLayout);
+                if (!visible.length) {
+                    if (attempt < 8) {
+                        requestAnimationFrame(() => scheduleMermaidRenderAfterLayout(roots, attempt + 1));
+                    }
+                    return;
+                }
+                visible.forEach((root) => scheduleMermaidRender(root));
+            }
+
+            const mermaidContainersScheduled = new Set();
+            let mermaidGlobalRenderFrame = null;
+
+            function scheduleMermaidRender(container) {
+                if (!container) return;
+                mermaidContainersScheduled.add(container);
+                if (mermaidGlobalRenderFrame != null) {
+                    cancelAnimationFrame(mermaidGlobalRenderFrame);
+                }
+                mermaidGlobalRenderFrame = requestAnimationFrame(() => {
+                    mermaidGlobalRenderFrame = null;
+                    const containers = Array.from(mermaidContainersScheduled);
+                    mermaidContainersScheduled.clear();
+                    renderMermaidInContainers(containers);
+                });
+            }
+
+            async function renderMermaidInContainers(containers, retryAttempt = 0) {
+                if (!containers.length || !ensureMermaidInitialized()) return;
+
+                const visibleContainers = containers.filter(isElementVisibleForLayout);
+                if (!visibleContainers.length) {
+                    if (retryAttempt < 8) {
+                        requestAnimationFrame(() => renderMermaidInContainers(containers, retryAttempt + 1));
+                    }
+                    return;
+                }
+
+                let needsLayoutRetry = false;
+
+                for (const container of visibleContainers) {
+                    const nodes = [];
+                    container.querySelectorAll('.mermaid-diagram[data-mermaid-pending]').forEach((node) => {
+                        if (node.hasAttribute('data-mermaid-rendering')) return;
+                        if (!isElementVisibleForLayout(node)) return;
+                        prepareMermaidNodeForRender(node);
+                        nodes.push(node);
+                    });
+                    if (!nodes.length) continue;
+
+                    nodes.forEach((node) => node.setAttribute('data-mermaid-rendering', '1'));
+
+                    try {
+                        await mermaid.run({ nodes, suppressErrors: false });
+                        nodes.forEach((node) => {
+                            node.removeAttribute('data-mermaid-pending');
+                            node.removeAttribute('data-mermaid-rendering');
+                            const src = node.getAttribute('data-mermaid-source');
+                            if (src) node.setAttribute('data-mermaid-source', src);
+                        });
+                    } catch (err) {
+                        console.warn('Mermaid render failed:', err);
+                        const msg = err.message || String(err);
+                        const layoutError = /getBoundingClientRect|suitable point/i.test(msg);
+                        if (layoutError && retryAttempt < 3) {
+                            needsLayoutRetry = true;
+                            nodes.forEach((node) => {
+                                node.removeAttribute('data-mermaid-rendering');
+                                node.setAttribute('data-mermaid-pending', '1');
+                            });
+                            continue;
+                        }
+                        nodes.forEach((node) => {
+                            node.removeAttribute('data-mermaid-pending');
+                            node.removeAttribute('data-mermaid-rendering');
+                            const src = node.getAttribute('data-mermaid-source') || '';
+                            node.innerHTML = `<pre class="mermaid-error">${escapeInlineText(msg)}</pre>`;
+                            if (src) node.setAttribute('data-mermaid-source', src);
+                        });
+                    }
+                }
+
+                if (needsLayoutRetry) {
+                    await new Promise((r) => setTimeout(r, 100));
+                    await renderMermaidInContainers(visibleContainers, retryAttempt + 1);
+                }
+            }
+
+            function isLikelyDisplayMathLine(line) {
+                const t = (line || '').trim();
+                if (!t) return false;
+                if (t === '$$' || (t.startsWith('$$') && t.endsWith('$$'))) return true;
+                return /^\\[a-zA-Z@]/.test(t);
+            }
+
+            function collectDisplayMathBlock(rawLines, startIndex) {
+                const mathLines = [];
+                let i = startIndex;
+                while (i < rawLines.length) {
+                    const t = rawLines[i].trim();
+                    if (t === '') break;
+                    if (t === '$$') {
+                        i++;
+                        while (i < rawLines.length && rawLines[i].trim() !== '$$') {
+                            mathLines.push(rawLines[i]);
+                            i++;
+                        }
+                        if (i < rawLines.length) i++;
+                        break;
+                    }
+                    if (t.startsWith('$$') && t.endsWith('$$') && t.length > 4) {
+                        mathLines.push(t.slice(2, -2).trim());
+                        i++;
+                        continue;
+                    }
+                    if (!isLikelyDisplayMathLine(rawLines[i])) break;
+                    mathLines.push(rawLines[i]);
+                    i++;
+                }
+                return { latex: mathLines.join('\n'), nextIndex: i };
+            }
+
+            async function renderMermaidInContainer(container) {
+                if (!container) return;
+                await renderMermaidInContainers([container]);
+            }
+
+            function detachSpecialBlockEditListeners(block) {
+                const wrap = block?._specialEditWrap;
+                const pre = block?._specialEditPre;
+                if (wrap && block._specialFocusOut) {
+                    wrap.removeEventListener('focusout', block._specialFocusOut);
+                }
+                if (wrap && block._specialKeyDown) {
+                    wrap.removeEventListener('keydown', block._specialKeyDown);
+                }
+                if (pre && block._specialInput) {
+                    pre.removeEventListener('input', block._specialInput);
+                }
+                if (pre && block._specialBlur) {
+                    pre.removeEventListener('blur', block._specialBlur);
+                }
+                delete block._specialEditWrap;
+                delete block._specialEditPre;
+                delete block._specialFocusOut;
+                delete block._specialKeyDown;
+                delete block._specialInput;
+                delete block._specialBlur;
+            }
+
+            function attachSpecialBlockEditHandlers(block, index, wrap, pre, onInput) {
+                const tryFinishEdit = () => {
+                    if (activeBlockIndex === index) {
+                        deactivateCurrentBlock();
+                    }
+                };
+
+                const onFocusOut = (e) => {
+                    const next = e.relatedTarget;
+                    if (next && wrap.contains(next)) return;
+                    tryFinishEdit();
+                };
+                block._specialFocusOut = onFocusOut;
+                wrap.addEventListener('focusout', onFocusOut);
+
+                const onBlur = () => {
+                    requestAnimationFrame(() => {
+                        if (activeBlockIndex !== index) return;
+                        const active = document.activeElement;
+                        if (active && wrap.contains(active)) return;
+                        tryFinishEdit();
+                    });
+                };
+                block._specialBlur = onBlur;
+                pre.addEventListener('blur', onBlur);
+
+                if (onInput) {
+                    const onInputHandler = () => onInput(block, pre);
+                    block._specialInput = onInputHandler;
+                    pre.addEventListener('input', onInputHandler);
+                }
+
+                const onKeyDown = (e) => {
+                    if (e.key === 'Escape') {
+                        e.preventDefault();
+                        deactivateCurrentBlock();
+                        return;
+                    }
+                    if (e.key === 'Tab') {
+                        e.preventDefault();
+                        document.execCommand('insertText', false, '    ');
+                        return;
+                    }
+
+                    const currentOffset = getCaretOffsetInEditable(pre);
+                    const textLength = (pre.textContent || '').length;
+
+                    if (e.key === 'ArrowUp' && currentOffset === 0 && index > 0) {
+                        e.preventDefault();
+                        deactivateCurrentBlock();
+                        activateBlockAtOffset(index - 1, blockMarkdownLength(liveBlocks[index - 1]));
+                        return;
+                    }
+
+                    if (e.key === 'ArrowDown' && currentOffset === textLength && index < liveBlocks.length - 1) {
+                        e.preventDefault();
+                        deactivateCurrentBlock();
+                        activateBlockAtOffset(index + 1, 0);
+                    }
+                };
+                block._specialKeyDown = onKeyDown;
+                wrap.addEventListener('keydown', onKeyDown);
+            }
+
+            function refreshMathBlockDisplay(display, inner, readOnly) {
+                if (!display) return;
+                if (!inner.trim()) {
+                    display.classList.add('is-empty');
+                    display.innerHTML = `<div class="math-placeholder">${readOnly ? '' : 'Click to edit formula…'}</div>`;
+                } else {
+                    display.classList.remove('is-empty');
+                    display.innerHTML = renderMathBlock(inner);
+                }
+            }
+
+            function refreshMermaidBlockDisplay(diagram, inner, readOnly) {
+                if (!diagram) return;
+                const src = (inner || '').trim();
+                if (!src) {
+                    diagram.classList.add('is-empty');
+                    diagram.removeAttribute('data-mermaid-pending');
+                    diagram.removeAttribute('data-mermaid-source');
+                    diagram.innerHTML = `<div class="mermaid-placeholder">${readOnly ? '' : 'Click to edit diagram…'}</div>`;
+                    return;
+                }
+                diagram.classList.remove('is-empty');
+                diagram.setAttribute('data-mermaid-source', src);
+                diagram.textContent = src;
+                diagram.setAttribute('data-mermaid-pending', '1');
+            }
+
+            function updateMathLivePreview(block, pre) {
+                const wrap = block._specialEditWrap || block.el.querySelector('.math-block-wrap');
+                const display = wrap?.querySelector('.math-block-display');
+                const latex = parseMathInnerFromText(pre.textContent || '');
+                refreshMathBlockDisplay(display, latex, false);
+            }
+
+            function updateMermaidLivePreview(block, pre) {
+                const wrap = block._specialEditWrap || block.el.querySelector('.mermaid-block-wrap');
+                const diagram = wrap?.querySelector('.mermaid-diagram');
+                const inner = (pre.textContent || '').trim();
+                refreshMermaidBlockDisplay(diagram, inner, false);
+                if (!inner) return;
+                clearTimeout(mermaidLivePreviewTimer);
+                mermaidLivePreviewTimer = setTimeout(() => {
+                    if (wrap) scheduleMermaidRenderAfterLayout([wrap]);
+                }, 350);
+            }
+
+            function setupMathBlock(el, block, index, readOnly) {
+                const inner = parseMathInnerFromText(block.source);
+                block.source = inner;
+
+                const wrap = document.createElement('div');
+                wrap.className = 'math-block-wrap';
+
+                const editorPane = document.createElement('div');
+                editorPane.className = 'special-block-editor';
+
+                const bar = document.createElement('div');
+                bar.className = 'math-block-bar';
+                bar.innerHTML = '<span>Formula (LaTeX)</span>';
+                editorPane.appendChild(bar);
+
+                const pre = document.createElement('pre');
+                pre.className = 'math-edit-area';
+                if (!readOnly) {
+                    pre.setAttribute('contenteditable', 'true');
+                    pre.setAttribute('spellcheck', 'false');
+                }
+                editorPane.appendChild(pre);
+
+                const previewPane = document.createElement('div');
+                previewPane.className = 'special-block-preview';
+
+                const display = document.createElement('div');
+                display.className = 'math-block-display';
+                previewPane.appendChild(display);
+
+                wrap.appendChild(editorPane);
+                wrap.appendChild(previewPane);
+
+                refreshMathBlockDisplay(display, inner, readOnly);
+
+                el.innerHTML = '';
+                el.appendChild(wrap);
+
+                if (!readOnly) {
+                    previewPane.addEventListener('mousedown', (e) => {
+                        if (activeBlockIndex === index) return;
+                        e.preventDefault();
+                        activateMathBlock(index);
+                    });
+                }
+            }
+
+            function activateMathBlock(index) {
+                if (activeBlockIndex === index) return;
+                if (activeBlockIndex !== -1) deactivateCurrentBlock();
+
+                activeBlockIndex = index;
+                const block = liveBlocks[index];
+
+                let wrap = block.el.querySelector('.math-block-wrap');
+                if (!wrap) {
+                    setupMathBlock(block.el, block, index, false);
+                    wrap = block.el.querySelector('.math-block-wrap');
+                }
+
+                const inner = parseMathInnerFromText(block.source);
+                const pre = wrap.querySelector('.math-edit-area');
+                pre.textContent = inner;
+
+                block.el.className = 'live-block is-rendered';
+                block.el.removeAttribute('contenteditable');
+                block.el.onblur = null;
+                block.el.onkeydown = null;
+
+                wrap.classList.add('is-editing');
+                block._specialEditWrap = wrap;
+                block._specialEditPre = pre;
+
+                attachSpecialBlockEditHandlers(block, index, wrap, pre, updateMathLivePreview);
+                updateMathLivePreview(block, pre);
+
+                requestAnimationFrame(() => {
+                    pre.focus();
+                    placeCaretAtEnd(pre);
+                });
+            }
+
+            function setupMermaidBlock(el, block, index, readOnly) {
+                const { inner } = parseCodeFenceSource(block.source);
+
+                const wrap = document.createElement('div');
+                wrap.className = 'mermaid-block-wrap';
+
+                const editorPane = document.createElement('div');
+                editorPane.className = 'special-block-editor';
+
+                const bar = document.createElement('div');
+                bar.className = 'mermaid-block-bar';
+                bar.innerHTML = '<span>Mermaid diagram</span>';
+                editorPane.appendChild(bar);
+
+                const pre = document.createElement('pre');
+                pre.className = 'mermaid-edit-area';
+                if (!readOnly) {
+                    pre.setAttribute('contenteditable', 'true');
+                    pre.setAttribute('spellcheck', 'false');
+                }
+                editorPane.appendChild(pre);
+
+                const previewPane = document.createElement('div');
+                previewPane.className = 'special-block-preview';
+
+                const diagram = document.createElement('div');
+                diagram.className = 'mermaid-diagram';
+                previewPane.appendChild(diagram);
+
+                wrap.appendChild(editorPane);
+                wrap.appendChild(previewPane);
+
+                refreshMermaidBlockDisplay(diagram, inner, readOnly);
+
+                el.innerHTML = '';
+                el.appendChild(wrap);
+
+                if (!readOnly) {
+                    previewPane.addEventListener('mousedown', (e) => {
+                        if (activeBlockIndex === index) return;
+                        e.preventDefault();
+                        activateMermaidBlock(index);
+                    });
+                }
+
+                if (inner.trim()) {
+                    scheduleMermaidRenderAfterLayout([wrap]);
+                }
+            }
+
+            function activateMermaidBlock(index) {
+                if (activeBlockIndex === index) return;
+                if (activeBlockIndex !== -1) deactivateCurrentBlock();
+
+                activeBlockIndex = index;
+                const block = liveBlocks[index];
+
+                let wrap = block.el.querySelector('.mermaid-block-wrap');
+                if (!wrap) {
+                    setupMermaidBlock(block.el, block, index, false);
+                    wrap = block.el.querySelector('.mermaid-block-wrap');
+                }
+
+                const { inner } = parseCodeFenceSource(block.source);
+                const pre = wrap.querySelector('.mermaid-edit-area');
+                pre.textContent = inner;
+
+                block.el.className = 'live-block is-rendered';
+                block.el.removeAttribute('contenteditable');
+                block.el.onblur = null;
+                block.el.onkeydown = null;
+
+                wrap.classList.add('is-editing');
+                block._specialEditWrap = wrap;
+                block._specialEditPre = pre;
+
+                attachSpecialBlockEditHandlers(block, index, wrap, pre, updateMermaidLivePreview);
+                updateMermaidLivePreview(block, pre);
+
+                requestAnimationFrame(() => {
+                    pre.focus();
+                    placeCaretAtEnd(pre);
+                });
+            }
+
             function activateCodeBlockAtCursor() {
                 if (!isLiveActive() || !liveBlocks.length) return;
 
                 const pos = textarea.selectionStart;
                 let offset = 0;
                 for (let i = 0; i < liveBlocks.length; i++) {
-                    const source = liveBlocks[i].source || '';
-                    const blockEnd = offset + source.length;
+                    const blockEnd = offset + blockMarkdownLength(liveBlocks[i]);
                     if (pos <= blockEnd) {
-                        if (liveBlocks[i].type === 'code-fence') {
-                            activateCodeFenceBlock(i);
-                        }
+                        const type = liveBlocks[i].type;
+                        if (type === 'code-fence') activateCodeFenceBlock(i);
+                        else if (type === 'math') activateMathBlock(i);
+                        else if (type === 'mermaid') activateMermaidBlock(i);
                         return;
                     }
                     offset = blockEnd + 1;
                 }
             }
 
-            function renderTableHTMLFromRows(rows) {
+            function renderTableHTMLFromRows(rows, alignments) {
                 if (!rows.length) return '';
 
                 const colCount = Math.max(1, rows[0]?.length || 1);
 
                 let html = `<div class="md-table-scroll"><table class="md-table" data-columns="${colCount}" style="--md-table-columns:${colCount}"><thead><tr>`;
-                rows[0].forEach((cell) => {
-                    html += `<th>${escapeTableCellHTML(cell)}</th>`;
+                rows[0].forEach((cell, colIndex) => {
+                    html += `<th${tableCellAlignAttr(alignments, colIndex)}>${renderInline(cell)}</th>`;
                 });
                 html += '</tr></thead>';
 
@@ -2563,8 +3345,8 @@
                     html += '<tbody>';
                     for (let i = 1; i < rows.length; i++) {
                         html += '<tr>';
-                        rows[i].forEach((cell) => {
-                            html += `<td>${escapeTableCellHTML(cell)}</td>`;
+                        rows[i].forEach((cell, colIndex) => {
+                            html += `<td${tableCellAlignAttr(alignments, colIndex)}>${renderInline(cell)}</td>`;
                         });
                         html += '</tr>';
                     }
@@ -2582,11 +3364,13 @@
                 return text.trim();
             }
 
-            function setTableCellContent(cell, cellText) {
+            function setTableCellContent(cell, cellText, alignments, colIndex) {
+                const align = alignments?.[colIndex] || 'left';
+                cell.style.textAlign = align;
                 if (!cellText || !cellText.trim()) {
-                    cell.textContent = '\u00a0';
+                    cell.innerHTML = '&nbsp;';
                 } else {
-                    cell.textContent = cellText;
+                    cell.innerHTML = renderInline(cellText);
                 }
             }
 
@@ -2616,7 +3400,7 @@
             }, 200);
 
             function setupTableBlock(el, block, index, readOnly) {
-                const rows = parseGFMTableSource(block.source);
+                const { rows, alignments } = parseGFMTableSource(block.source);
                 const table = document.createElement('table');
                 table.className = 'md-table';
                 const thead = document.createElement('thead');
@@ -2624,9 +3408,9 @@
 
                 rows.forEach((row, rowIndex) => {
                     const tr = document.createElement('tr');
-                    row.forEach((cellText) => {
+                    row.forEach((cellText, colIndex) => {
                         const cell = document.createElement(rowIndex === 0 ? 'th' : 'td');
-                        setTableCellContent(cell, cellText);
+                        setTableCellContent(cell, cellText, alignments, colIndex);
                         if (!readOnly) {
                             cell.contentEditable = 'true';
                             cell.addEventListener('focus', () => {
@@ -3133,7 +3917,7 @@
 
                     for (let i = 0; i < liveBlocks.length; i++) {
                         if (i !== blockIndex) {
-                            parts.push(liveBlocks[i].source);
+                            parts.push(blockToMarkdownSource(liveBlocks[i]));
                             continue;
                         }
                         if (block.source.trim() === '') {
@@ -3167,7 +3951,7 @@
                 }, newItemIndex));
 
                 block.source = lines.join('\n');
-                const parts = liveBlocks.map((b, i) => (i === blockIndex ? block.source : b.source));
+                const parts = liveBlocks.map((b, i) => (i === blockIndex ? blockToMarkdownSource(block) : blockToMarkdownSource(b)));
                 const newText = parts.join('\n');
                 currentContent = newText;
                 textarea.value = newText;
@@ -3190,6 +3974,217 @@
 
                 el.innerHTML = '';
                 el.appendChild(list);
+            }
+
+            const HTML_BLOCK_CONTAINER_TAGS = new Set([
+                'details', 'div', 'section', 'article', 'aside', 'header', 'footer',
+                'figure', 'main', 'nav', 'center',
+            ]);
+
+            const HTML_ALLOWED_TAGS = new Set([
+                ...HTML_BLOCK_CONTAINER_TAGS,
+                'summary', 'figcaption', 'span', 'p', 'br', 'hr', 'mark', 'sub', 'sup',
+                'kbd', 'abbr', 'strong', 'em', 'del', 'code', 'ul', 'ol', 'li', 'a', 'img',
+            ]);
+
+            function isAllowedHTMLTag(tag) {
+                const m = (tag || '').match(/^<\/?([a-z][a-z0-9]*)\b/i);
+                if (!m) return false;
+                if (!HTML_ALLOWED_TAGS.has(m[1].toLowerCase())) return false;
+                return !/javascript:|on\w+\s*=/i.test(tag);
+            }
+
+            function sanitizeHTMLTag(tag) {
+                if (!isAllowedHTMLTag(tag)) {
+                    return (tag || '')
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;');
+                }
+                if ((tag || '').match(/^<img\b/i)) {
+                    return tag.replace(/\ssrc=(["'])(.*?)\1/i, (_, quote, src) => {
+                        return ` src=${quote}${resolveImageSrc(src)}${quote}`;
+                    });
+                }
+                return tag.replace(/\s+on\w+\s*=\s*("[^"]*"|'([^']*)'|[^\s>]+)/gi, '');
+            }
+
+            function tryParseHTMLBlock(rawLines, startIndex) {
+                const trimmed = rawLines[startIndex].trim();
+                if (/^<br\s*\/?>$/i.test(trimmed)) {
+                    return { consumed: 1, source: trimmed };
+                }
+
+                const open = trimmed.match(/^<([a-z][a-z0-9]*)\b/i);
+                if (!open) return null;
+                const tag = open[1].toLowerCase();
+                if (!HTML_BLOCK_CONTAINER_TAGS.has(tag)) return null;
+
+                const closeRe = new RegExp(`</${tag}\\s*>`, 'i');
+                const lines = [rawLines[startIndex]];
+                let i = startIndex;
+                if (closeRe.test(trimmed)) {
+                    return { consumed: 1, source: lines.join('\n') };
+                }
+
+                i++;
+                while (i < rawLines.length) {
+                    lines.push(rawLines[i]);
+                    if (closeRe.test(rawLines[i].trim())) {
+                        i++;
+                        break;
+                    }
+                    i++;
+                }
+                return { consumed: i - startIndex, source: lines.join('\n') };
+            }
+
+            function shouldCoalesceHTMLBlock(block) {
+                if (!block || block.type !== 'p') return false;
+                const trimmed = (block.source || '').trim();
+                return /^<(details|div|section|article|aside|header|footer|figure|main|nav|center|br)\b/i.test(trimmed);
+            }
+
+            function coalesceHTMLBlocks(blocks) {
+                const out = [];
+                let i = 0;
+
+                while (i < blocks.length) {
+                    if (!shouldCoalesceHTMLBlock(blocks[i])) {
+                        out.push(blocks[i]);
+                        i++;
+                        continue;
+                    }
+
+                    const firstTrimmed = blocks[i].source.trim();
+                    const open = firstTrimmed.match(/^<([a-z][a-z0-9]*)\b/i);
+                    if (!open) {
+                        out.push(blocks[i]);
+                        i++;
+                        continue;
+                    }
+
+                    const tag = open[1].toLowerCase();
+                    if (/^<br\s*\/?>$/i.test(firstTrimmed)) {
+                        out.push({ type: 'html', source: firstTrimmed });
+                        i++;
+                        continue;
+                    }
+
+                    const closeRe = new RegExp(`</${tag}\\s*>`, 'i');
+                    const lines = [];
+                    let j = i;
+
+                    while (j < blocks.length) {
+                        if (blocks[j].type === 'empty') {
+                            lines.push('');
+                            j++;
+                            continue;
+                        }
+                        if (blocks[j].type !== 'p') break;
+                        lines.push(blocks[j].source);
+                        if (closeRe.test((blocks[j].source || '').trim())) {
+                            j++;
+                            break;
+                        }
+                        j++;
+                    }
+
+                    out.push({ type: 'html', source: lines.join('\n') });
+                    i = j;
+                }
+
+                return out;
+            }
+
+            function renderHTMLBlockTextSegment(text) {
+                const lines = (text || '').split('\n');
+                const parts = [];
+                let i = 0;
+
+                while (i < lines.length) {
+                    while (i < lines.length && !lines[i].trim()) i++;
+                    if (i >= lines.length) break;
+
+                    if (parseListLine(lines[i])) {
+                        const listLines = [];
+                        while (i < lines.length && parseListLine(lines[i])) {
+                            listLines.push(lines[i]);
+                            i++;
+                        }
+                        parts.push(renderListHTMLFromSourceLines(listLines));
+                        continue;
+                    }
+
+                    const paraLines = [];
+                    while (i < lines.length) {
+                        const line = lines[i];
+                        if (!line.trim()) break;
+                        if (parseListLine(line)) break;
+                        paraLines.push(line.trim());
+                        i++;
+                    }
+                    if (paraLines.length) {
+                        parts.push(`<p>${paraLines.map((line) => renderInline(line)).join('<br>')}</p>`);
+                    }
+                }
+
+                return parts.join('\n');
+            }
+
+            function protectInlineCodeInHTMLSource(source) {
+                const placeholders = [];
+                const protectedSource = (source || '').replace(/`([^`\n]+)`/g, (match) => {
+                    placeholders.push(match);
+                    return `\x00CODE${placeholders.length - 1}\x00`;
+                });
+                return { protectedSource, placeholders };
+            }
+
+            function restoreInlineCodePlaceholders(html, placeholders) {
+                if (!placeholders.length) return html;
+                return html.replace(/\x00CODE(\d+)\x00/g, (_, index) => {
+                    const raw = placeholders[+index] || '';
+                    return renderInline(raw);
+                });
+            }
+
+            function renderHTMLBlockContentCustom(source) {
+                const { protectedSource, placeholders } = protectInlineCodeInHTMLSource(source);
+                const tagRe = /<\/?[a-z][a-z0-9]*\b[^>]*>|<br\s*\/?>/gi;
+                let html = '';
+                let lastIndex = 0;
+                let match;
+
+                while ((match = tagRe.exec(protectedSource)) !== null) {
+                    const textBefore = protectedSource.slice(lastIndex, match.index);
+                    if (textBefore) {
+                        html += renderHTMLBlockTextSegment(textBefore);
+                    }
+                    html += sanitizeHTMLTag(match[0]);
+                    lastIndex = tagRe.lastIndex;
+                }
+
+                const rest = protectedSource.slice(lastIndex);
+                if (rest) html += renderHTMLBlockTextSegment(rest);
+                return restoreInlineCodePlaceholders(html, placeholders);
+            }
+
+            function renderHTMLBlockContent(source) {
+                if (typeof marked !== 'undefined' && typeof marked.parse === 'function') {
+                    try {
+                        const parsed = marked.parse(source || '');
+                        if (typeof parsed === 'string' && parsed.trim()) {
+                            const wrapper = document.createElement('div');
+                            wrapper.innerHTML = parsed;
+                            rewriteImagesInContainer(wrapper);
+                            return wrapper.innerHTML;
+                        }
+                    } catch (err) {
+                        console.warn('marked HTML block render failed:', err);
+                    }
+                }
+                return renderHTMLBlockContentCustom(source || '');
             }
 
             function parseMarkdownBlocks(text) {
@@ -3245,7 +4240,14 @@
                             fenceLines.push(rawLines[i]);
                             i++;
                         }
-                        blocks.push({ type: 'code-fence', source: fenceLines.join('\n') });
+                        const fenceSource = fenceLines.join('\n');
+                        const fenceLang = (fenceLines[0] || '').trim().match(/^```+([\w-]*)/);
+                        const lang = fenceLang ? (fenceLang[1] || '').trim().toLowerCase() : '';
+                        if (lang === 'mermaid') {
+                            blocks.push({ type: 'mermaid', source: fenceSource });
+                        } else {
+                            blocks.push({ type: 'code-fence', source: fenceSource });
+                        }
                         continue;
                     }
 
@@ -3290,6 +4292,40 @@
                         continue;
                     }
 
+                    const htmlBlock = tryParseHTMLBlock(rawLines, i);
+                    if (htmlBlock) {
+                        blocks.push({ type: 'html', source: htmlBlock.source });
+                        i += htmlBlock.consumed;
+                        continue;
+                    }
+
+                    if (trimmed === '$$') {
+                        const mathLines = [];
+                        i++;
+                        while (i < rawLines.length && rawLines[i].trim() !== '$$') {
+                            mathLines.push(rawLines[i]);
+                            i++;
+                        }
+                        if (i < rawLines.length) i++;
+                        blocks.push({ type: 'math', source: mathLines.join('\n') });
+                        continue;
+                    }
+
+                    if (trimmed.startsWith('$$') && trimmed.endsWith('$$') && trimmed.length > 4) {
+                        blocks.push({ type: 'math', source: trimmed.slice(2, -2).trim() });
+                        i++;
+                        continue;
+                    }
+
+                    if (isLikelyDisplayMathLine(line)) {
+                        const collected = collectDisplayMathBlock(rawLines, i);
+                        if (collected.latex.trim()) {
+                            blocks.push({ type: 'math', source: collected.latex.trim() });
+                            i = collected.nextIndex;
+                            continue;
+                        }
+                    }
+
                     blocks.push({ type: 'p', source: line });
                     i++;
                 }
@@ -3305,6 +4341,10 @@
                 }
 
                 if (text.trim().startsWith('```')) {
+                    const { lang } = parseCodeFenceSource(text);
+                    if (lang === 'mermaid') {
+                        return { type: 'mermaid', source: text };
+                    }
                     return { type: 'code-fence', source: text };
                 }
 
@@ -3331,6 +4371,22 @@
                     return { type: 'image', source: text };
                 }
 
+                const lines = text.split('\n');
+                const htmlBlock = tryParseHTMLBlock(lines, 0);
+                if (htmlBlock && htmlBlock.consumed === lines.length) {
+                    return { type: 'html', source: text };
+                }
+
+                const trimmedMath = text.trim();
+                if (trimmedMath.startsWith('$$') && trimmedMath.endsWith('$$') && trimmedMath.length > 4) {
+                    return { type: 'math', source: trimmedMath.slice(2, -2).trim() };
+                }
+
+                const mathLines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+                if (mathLines.length && mathLines.every(isLikelyDisplayMathLine)) {
+                    return { type: 'math', source: mathLines.join('\n') };
+                }
+
                 const firstListLine = text.split('\n')[0] || '';
                 const listInfo = parseListLine(firstListLine);
                 if (listInfo) {
@@ -3338,6 +4394,81 @@
                 }
 
                 return { type: 'p', source: text };
+            }
+
+            function isMathAvailable() {
+                return typeof katex !== 'undefined' && typeof katex.renderToString === 'function';
+            }
+
+            function renderLatexToHtml(latex, displayMode) {
+                if (!isMathAvailable()) return null;
+                try {
+                    return katex.renderToString(latex, {
+                        displayMode: !!displayMode,
+                        throwOnError: false,
+                        strict: 'ignore',
+                        trust: true,
+                    });
+                } catch (err) {
+                    console.warn('KaTeX render failed:', err);
+                    return null;
+                }
+            }
+
+            function renderMathBlock(latex) {
+                const trimmed = (latex || '').trim();
+                if (!trimmed) return '<br>';
+                const html = renderLatexToHtml(trimmed, true);
+                if (html) return `<div class="math-display">${html}</div>`;
+                return `<pre class="math-fallback">${escapeInlineText(trimmed)}</pre>`;
+            }
+
+            function applyMathToText(text) {
+                const mathPlaceholders = [];
+                const codePlaceholders = [];
+                let s = text || '';
+
+                s = s.replace(/`([^`]+)`/g, (match) => {
+                    codePlaceholders.push(match);
+                    return `\x00MATHCODE${codePlaceholders.length - 1}\x00`;
+                });
+
+                s = s.replace(/\$\$([\s\S]+?)\$\$/g, (match, latex) => {
+                    const html = renderLatexToHtml(latex, true);
+                    if (!html) return match;
+                    mathPlaceholders.push(`<span class="math-display math-inline-block">${html}</span>`);
+                    return `\x00MATH${mathPlaceholders.length - 1}\x00`;
+                });
+
+                s = s.replace(/(^|[^\\$])\$(?!\$)((?:\\.|[^$\n\\])+?)\$(?!\$)/g, (match, prefix, latex) => {
+                    const html = renderLatexToHtml(latex, false);
+                    if (!html) return match;
+                    mathPlaceholders.push(`<span class="math-inline">${html}</span>`);
+                    return `${prefix}\x00MATH${mathPlaceholders.length - 1}\x00`;
+                });
+
+                s = s.replace(/\\\(([\s\S]+?)\\\)/g, (match, latex) => {
+                    const html = renderLatexToHtml(latex, false);
+                    if (!html) return match;
+                    mathPlaceholders.push(`<span class="math-inline">${html}</span>`);
+                    return `\x00MATH${mathPlaceholders.length - 1}\x00`;
+                });
+
+                s = s.replace(/\\\[([\s\S]+?)\\\]/g, (match, latex) => {
+                    const html = renderLatexToHtml(latex, true);
+                    if (!html) return match;
+                    mathPlaceholders.push(`<span class="math-display math-inline-block">${html}</span>`);
+                    return `\x00MATH${mathPlaceholders.length - 1}\x00`;
+                });
+
+                s = s.replace(/\x00MATHCODE(\d+)\x00/g, (_, index) => codePlaceholders[+index]);
+
+                return { text: s, mathPlaceholders };
+            }
+
+            function restoreMathPlaceholders(text, mathPlaceholders) {
+                if (!mathPlaceholders.length) return text;
+                return text.replace(/\x00MATH(\d+)\x00/g, (_, index) => mathPlaceholders[+index] || '');
             }
 
             function renderInline(text) {
@@ -3348,7 +4479,10 @@
                 const inlineHtmlPlaceholders = [];
                 const linkPlaceholders = [];
 
-                let s = (text || '').replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, src) => {
+                const mathPrepared = applyMathToText(text || '');
+                let s = mathPrepared.text;
+
+                s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, src) => {
                     mdImgPlaceholders.push(buildResolvedImageTag(alt, src));
                     return `\x00MDIMG${mdImgPlaceholders.length - 1}\x00`;
                 });
@@ -3361,8 +4495,14 @@
                     return `\x00IMG${imgPlaceholders.length - 1}\x00`;
                 });
 
-                s = s.replace(/<(\/?)(sub|sup|mark|kbd|var|abbr)(\s[^>]*)?>/gi, (match) => {
-                    inlineHtmlPlaceholders.push(match);
+                s = s.replace(/<br\s*\/?>/gi, () => {
+                    inlineHtmlPlaceholders.push('<br>');
+                    return `\x00HTML${inlineHtmlPlaceholders.length - 1}\x00`;
+                });
+
+                s = s.replace(/<(\/?)(sub|sup|mark|kbd|var|abbr|span|strong|em|del|code)(\s[^>]*)?>/gi, (match) => {
+                    if (!isAllowedHTMLTag(match)) return match;
+                    inlineHtmlPlaceholders.push(sanitizeHTMLTag(match));
                     return `\x00HTML${inlineHtmlPlaceholders.length - 1}\x00`;
                 });
 
@@ -3408,9 +4548,100 @@
                 s = s.replace(/\x00IMG(\d+)\x00/g, (_, i) => imgPlaceholders[+i]);
                 s = s.replace(/\x00HTML(\d+)\x00/g, (_, i) => inlineHtmlPlaceholders[+i]);
 
-                return s;
+                return restoreMathPlaceholders(s, mathPrepared.mathPlaceholders);
             }
 
+
+            function parseBlockquoteLine(line) {
+                const m = (line || '').match(/^((?:>\s*)+)(.*)$/);
+                if (!m) return { depth: 1, content: line || '' };
+                return {
+                    depth: (m[1].match(/>/g) || []).length,
+                    content: m[2],
+                };
+            }
+
+            function renderListHTMLFromSourceLines(listLines) {
+                const items = listLines
+                    .map((line) => parseListLine(line))
+                    .filter(Boolean);
+                if (!items.length) return '';
+                const list = buildNestedListElement(items, items[0].kind, { type: 'list' }, -1, true);
+                return list.outerHTML;
+            }
+
+            function renderBlockquoteSegment(segmentLines) {
+                let i = 0;
+                const parts = [];
+
+                while (i < segmentLines.length) {
+                    const content = segmentLines[i].content;
+                    if (parseListLine(content)) {
+                        const listSourceLines = [];
+                        while (i < segmentLines.length && parseListLine(segmentLines[i].content)) {
+                            listSourceLines.push(segmentLines[i].content);
+                            i++;
+                        }
+                        parts.push(renderListHTMLFromSourceLines(listSourceLines));
+                        continue;
+                    }
+
+                    if (!content.trim()) {
+                        parts.push('<br>');
+                        i++;
+                        continue;
+                    }
+
+                    const paragraphLines = [];
+                    while (i < segmentLines.length) {
+                        const lineContent = segmentLines[i].content;
+                        if (!lineContent.trim()) break;
+                        if (parseListLine(lineContent)) break;
+                        paragraphLines.push(lineContent);
+                        i++;
+                    }
+                    parts.push(paragraphLines.map((line) => renderInline(line)).join('<br>'));
+                }
+
+                return parts.join('');
+            }
+
+            function renderBlockquoteHTML(source) {
+                const parsed = (source || '').split('\n').map(parseBlockquoteLine);
+                let html = '';
+                let openDepth = 0;
+                let i = 0;
+
+                function closeToDepth(targetDepth) {
+                    while (openDepth > targetDepth) {
+                        if (openDepth > 1) html += '</blockquote>';
+                        openDepth--;
+                    }
+                }
+
+                function openToDepth(targetDepth) {
+                    while (openDepth < targetDepth) {
+                        if (openDepth >= 1) html += '<blockquote class="bq-nested">';
+                        openDepth++;
+                    }
+                }
+
+                while (i < parsed.length) {
+                    const depth = parsed[i].depth;
+                    closeToDepth(depth);
+                    openToDepth(depth);
+
+                    const segmentLines = [];
+                    while (i < parsed.length && parsed[i].depth === depth) {
+                        segmentLines.push(parsed[i]);
+                        i++;
+                    }
+                    html += renderBlockquoteSegment(segmentLines);
+                }
+
+                closeToDepth(0);
+                return html;
+            }
 
             function renderBlock(block) {
                 if (block.type === 'empty') return '<br>';
@@ -3431,8 +4662,8 @@
                 }
 
                 if (block.type === 'table') {
-                    const rows = parseGFMTableSource(block.source);
-                    return renderTableHTMLFromRows(rows);
+                    const { rows, alignments } = parseGFMTableSource(block.source);
+                    return renderTableHTMLFromRows(rows, alignments);
                 }
 
                 if (block.type === 'list') {
@@ -3445,10 +4676,34 @@
                 }
 
                 if (block.type === 'blockquote') {
-                    return block.source.split('\n').map((line) => {
-                        const inner = line.replace(/^>\s?/, '');
-                        return renderInline(inner);
-                    }).join('<br>');
+                    return renderBlockquoteHTML(block.source);
+                }
+
+                if (block.type === 'html') {
+                    return renderHTMLBlockContent(block.source);
+                }
+
+                if (block.type === 'math') {
+                    return renderMathBlock(block.source);
+                }
+
+                if (block.type === 'mermaid') {
+                    const { inner } = parseCodeFenceSource(block.source);
+                    if (!inner.trim()) return '<div class="mermaid-diagram is-empty"><div class="mermaid-placeholder">Empty diagram</div></div>';
+                    const src = inner.trim();
+                    return `<div class="mermaid mermaid-diagram" data-mermaid-source="${escapeInlineText(src)}" data-mermaid-pending="1">${escapeInlineText(src)}</div>`;
+                }
+
+                const trimmedSource = (block.source || '').trim();
+                if (block.type === 'p' && /^<[a-z][a-z0-9]*\b/i.test(trimmedSource)) {
+                    const lines = block.source.split('\n');
+                    const htmlBlock = tryParseHTMLBlock(lines, 0);
+                    if (htmlBlock) {
+                        return renderHTMLBlockContent(htmlBlock.source);
+                    }
+                    if (/^<br\s*\/?>$/i.test(trimmedSource)) {
+                        return '<br>';
+                    }
                 }
 
                 return renderInline(block.source);
@@ -3477,11 +4732,17 @@
                     const headingText = textMatch ? textMatch[1] : block.source;
                     el.id = headingSlug(headingText);
                     el.innerHTML = renderInline(headingText);
+                } else if (block.type === 'html') {
+                    el.innerHTML = renderHTMLBlockContent(block.source);
+                } else if (block.type === 'math') {
+                    setupMathBlock(el, block, index, readOnly);
+                } else if (block.type === 'mermaid') {
+                    setupMermaidBlock(el, block, index, readOnly);
                 } else {
                     el.innerHTML = renderBlock(block);
                 }
 
-                if (!readOnly && block.type !== 'table' && block.type !== 'code-fence' && block.type !== 'list') {
+                if (!readOnly && block.type !== 'table' && block.type !== 'code-fence' && block.type !== 'list' && block.type !== 'html' && block.type !== 'math' && block.type !== 'mermaid') {
                     el.addEventListener('mousedown', (e) => {
                         if (e.target.closest('a')) return;
                         if (activeBlockIndex === index) return;
@@ -3518,7 +4779,7 @@
                 });
 
                 if (repairedSource) {
-                    const repairedText = blocks.map((b) => b.source).join('\n');
+                    const repairedText = blocks.map((b) => blockToMarkdownSource(b)).join('\n');
                     liveContent = repairedText;
                     currentContent = repairedText;
                     textarea.value = repairedText;
@@ -3538,6 +4799,7 @@
 
                 highlightCodeBlocks(liveEditor);
                 rewriteImagesInContainer(liveEditor);
+                scheduleMermaidRenderAfterLayout([liveEditor]);
 
                 lastLiveInteraction = {
                     blockIndex: Math.max(liveBlocks.length - 1, 0),
@@ -3666,7 +4928,7 @@
             function removeLiveBlockAt(blockIndex, focusBlockIndex, focusOffset) {
                 const parts = [];
                 for (let i = 0; i < liveBlocks.length; i++) {
-                    if (i !== blockIndex) parts.push(liveBlocks[i].source);
+                    if (i !== blockIndex) parts.push(blockToMarkdownSource(liveBlocks[i]));
                 }
                 if (!parts.length) parts.push('');
                 applyLiveDocumentParts(parts, focusBlockIndex, focusOffset);
@@ -3794,12 +5056,25 @@
             function activateBlock(index, clickTextOffset = null) {
                 if (activeBlockIndex === index) return;
 
+                const block = liveBlocks[index];
+                if (block.type === 'code-fence') {
+                    activateCodeFenceBlock(index);
+                    return;
+                }
+                if (block.type === 'math') {
+                    activateMathBlock(index);
+                    return;
+                }
+                if (block.type === 'mermaid') {
+                    activateMermaidBlock(index);
+                    return;
+                }
+
                 if (activeBlockIndex !== -1) {
                     deactivateCurrentBlock();
                 }
 
                 activeBlockIndex = index;
-                const block = liveBlocks[index];
 
                 block.el.className = 'live-block is-source';
                 block.el.setAttribute('contenteditable', 'true');
@@ -3830,7 +5105,7 @@
                     if (e.key === 'ArrowUp' && currentOffset === 0 && index > 0) {
                         e.preventDefault();
                         deactivateCurrentBlock();
-                        activateBlockAtOffset(index - 1, liveBlocks[index - 1].source.length);
+                        activateBlockAtOffset(index - 1, blockMarkdownLength(liveBlocks[index - 1]));
                         return;
                     }
 
@@ -3875,6 +5150,49 @@
                     return;
                 }
 
+                if (block.type === 'math') {
+                    const wrap = block.el.querySelector('.math-block-wrap');
+                    const mathEditPre = block._specialEditPre
+                        || wrap?.querySelector('.math-edit-area');
+                    if (mathEditPre) {
+                        block.source = parseMathInnerFromText(mathEditPre.textContent || '');
+                    }
+                    detachSpecialBlockEditListeners(block);
+                    if (wrap) wrap.classList.remove('is-editing');
+                    const display = wrap?.querySelector('.math-block-display');
+                    refreshMathBlockDisplay(display, block.source, false);
+                    block.el.className = 'live-block is-rendered';
+                    block.el.removeAttribute('contenteditable');
+                    block.el.onblur = null;
+                    block.el.onkeydown = null;
+                    activeBlockIndex = -1;
+                    syncLiveContentToModel();
+                    return;
+                }
+
+                if (block.type === 'mermaid') {
+                    const wrap = block.el.querySelector('.mermaid-block-wrap');
+                    const mermaidEditPre = block._specialEditPre
+                        || wrap?.querySelector('.mermaid-edit-area');
+                    if (mermaidEditPre) {
+                        const inner = (mermaidEditPre.textContent || '').trim();
+                        block.source = buildCodeFenceSource('mermaid', inner);
+                    }
+                    detachSpecialBlockEditListeners(block);
+                    if (wrap) wrap.classList.remove('is-editing');
+                    const diagram = wrap?.querySelector('.mermaid-diagram');
+                    const { inner } = parseCodeFenceSource(block.source);
+                    refreshMermaidBlockDisplay(diagram, inner, false);
+                    if (inner.trim() && wrap) scheduleMermaidRender(wrap);
+                    block.el.className = 'live-block is-rendered';
+                    block.el.removeAttribute('contenteditable');
+                    block.el.onblur = null;
+                    block.el.onkeydown = null;
+                    activeBlockIndex = -1;
+                    syncLiveContentToModel();
+                    return;
+                }
+
                 let updatedSource = getTextFromContentEditable(block.el);
 
                 if (block.type === 'blockquote') {
@@ -3886,7 +5204,7 @@
                     const parts = [];
                     for (let i = 0; i < liveBlocks.length; i++) {
                         if (i !== activeBlockIndex) {
-                            parts.push(liveBlocks[i].source);
+                            parts.push(blockToMarkdownSource(liveBlocks[i]));
                         } else {
                             lines.forEach((line) => parts.push(line));
                         }
@@ -3925,6 +5243,10 @@
                     setupCodeFenceBlock(block.el, block, activeBlockIndex, false);
                 } else if (block.type === 'list') {
                     setupListBlock(block.el, block, activeBlockIndex, false);
+                } else if (block.type === 'math') {
+                    setupMathBlock(block.el, block, activeBlockIndex, false);
+                } else if (block.type === 'mermaid') {
+                    setupMermaidBlock(block.el, block, activeBlockIndex, false);
                 } else {
                     block.el.innerHTML = renderBlock(block);
                 }
@@ -3933,10 +5255,11 @@
                 syncLiveContentToModel();
                 highlightCodeBlocks(liveEditor);
                 rewriteImagesInContainer(liveEditor);
+                scheduleMermaidRenderAfterLayout([liveEditor]);
             }
 
             function syncLiveContentToModel() {
-                currentContent = liveBlocks.map(block => block.source).join('\n');
+                currentContent = liveBlocks.map((block) => blockToMarkdownSource(block)).join('\n');
                 textarea.value = currentContent;
                 schedulePreviewRender(currentContent);
                 scheduleContentSync(currentContent);

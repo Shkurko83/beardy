@@ -100,8 +100,11 @@ struct MarkdownRenderer: NSViewRepresentable {
                 <head>
                     <meta charset="UTF-8">
                     <link rel="stylesheet" href="\(BundledHighlightJS.relativeThemeCSSPath(for: CodeTheme(rawValue: codeTheme) ?? .github))">
+                    <link rel="stylesheet" href="\(BundledKaTeX.relativeCSSPath())">
                     <script src="\(BundledHighlightJS.relativeScriptPath())"></script>
                     <script src="\(BundledHighlightJS.relativeLineNumbersPath())"></script>
+                    <script src="\(BundledKaTeX.relativeScriptPath())"></script>
+                    <script src="\(BundledMermaid.relativeScriptPath())"></script>
                     
                     <style>
                         body { 
@@ -222,6 +225,16 @@ struct MarkdownRenderer: NSViewRepresentable {
                             margin-bottom: 0.5em !important;
                         }
 
+                        .math-display {
+                            margin: 0.75em 0;
+                            overflow-x: auto;
+                            text-align: center;
+                        }
+                        .math-display > .katex-display { margin: 0; }
+                        .math-inline .katex { font-size: 1.05em; }
+                        .mermaid-diagram { margin: 0.75em 0; text-align: center; overflow-x: auto; }
+                        .mermaid-diagram svg { max-width: 100%; height: auto; }
+
                     </style>
                 </head>
                 <body>
@@ -235,6 +248,55 @@ struct MarkdownRenderer: NSViewRepresentable {
                                     });
                                 }, 0);
                         }
+                        if (typeof typesetExportMath === 'function') {
+                            typesetExportMath(document.getElementById('main-content'));
+                        } else if (typeof katex !== 'undefined') {
+                            (function typeset(root) {
+                                function renderLatex(latex, displayMode) {
+                                    try {
+                                        return katex.renderToString(latex, { displayMode: displayMode, throwOnError: false, strict: 'ignore', trust: true });
+                                    } catch (e) { return null; }
+                                }
+                                root.querySelectorAll('p').forEach(function(p) {
+                                    if (p.closest('pre')) return;
+                                    var t = p.textContent.trim();
+                                    if (t.startsWith('$$') && t.endsWith('$$') && t.length > 4) {
+                                        var html = renderLatex(t.slice(2, -2).trim(), true);
+                                        if (html) p.outerHTML = '<div class="math-display">' + html + '</div>';
+                                    }
+                                });
+                                root.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6').forEach(function(el) {
+                                    if (el.closest('pre, code') || el.classList.contains('math-display')) return;
+                                    var html = el.innerHTML;
+                                    if (!/\\$/.test(html)) return;
+                                    var next = html.replace(/(^|[^\\\\$])\\$(?!\\$)((?:\\\\.|[^$\\n\\\\])+?)\\$(?!\\$)/g, function(m, pre, latex) {
+                                        var out = renderLatex(latex, false);
+                                        return out ? pre + '<span class="math-inline">' + out + '</span>' : m;
+                                    });
+                                    if (next !== html) el.innerHTML = next;
+                                });
+                            })(document.getElementById('main-content'));
+                        }
+                        (async function() {
+                            const root = document.getElementById('main-content');
+                            if (!root || typeof mermaid === 'undefined') return;
+                            const codes = Array.from(root.querySelectorAll('pre code.language-mermaid, pre code.mermaid'));
+                            const nodes = [];
+                            codes.forEach(function(code) {
+                                const pre = code.closest('pre');
+                                if (!pre) return;
+                                const div = document.createElement('div');
+                                div.className = 'mermaid-diagram';
+                                div.textContent = code.textContent || '';
+                                pre.replaceWith(div);
+                                nodes.push(div);
+                            });
+                            if (!nodes.length) return;
+                            try {
+                                mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'default' });
+                                await mermaid.run({ nodes: nodes });
+                            } catch (e) { console.warn(e); }
+                        })();
                     </script>
                 </body>
                 </html>

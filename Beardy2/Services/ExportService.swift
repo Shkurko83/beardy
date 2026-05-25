@@ -338,6 +338,12 @@ class ExportService {
             if let hljsJS = BundledHighlightJS.loadScriptSource() {
                 html = injectScript(hljsJS, into: html, beforeClosingHead: true)
             }
+            if let katexJS = BundledKaTeX.loadScriptSource() {
+                html = injectScript(katexJS, into: html, beforeClosingHead: true)
+            }
+            if let mermaidJS = BundledMermaid.loadScriptSource() {
+                html = injectScript(mermaidJS, into: html, beforeClosingHead: true)
+            }
         }
         return html
     }
@@ -353,6 +359,10 @@ class ExportService {
         let toc = options.includeTOC ? generateTableOfContents(markdown: markdown) : ""
         let title = documentURL?.deletingPathExtension().lastPathComponent ?? "Exported Document"
         let highlightScript = options.includeCSS ? exportCodeHighlightScript : ""
+        let mathScript = options.includeCSS ? exportMathTypesetScript : ""
+        let katexLink = options.includeCSS
+            ? "<link rel=\"stylesheet\" href=\"\(BundledKaTeX.relativeCSSPath())\">"
+            : ""
         
         return """
         <!DOCTYPE html>
@@ -361,6 +371,7 @@ class ExportService {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>\(escapeHTML(title))</title>
+            \(katexLink)
             \(options.includeCSS ? "<style>\(themedCSS)</style>" : "")
         </head>
         <body>
@@ -368,12 +379,208 @@ class ExportService {
             <article class="markdown-body" id="main-content">
                 \(renderedMarkdown)
             </article>
+            \(mathScript)
             \(highlightScript)
+            \(options.includeCSS ? exportMermaidRenderScript : "")
         </body>
         </html>
         """
     }
     
+    /// KaTeX: инлайн `$...$`, блоки `$$...$$` (в т.ч. многострочные через отдельные абзацы).
+    private var exportMathTypesetScript: String {
+        """
+        <script>
+        (function() {
+            function renderExportLatex(latex, displayMode) {
+                if (typeof katex === 'undefined') return null;
+                try {
+                    return katex.renderToString(latex, {
+                        displayMode: !!displayMode,
+                        throwOnError: false,
+                        strict: 'ignore',
+                        trust: true
+                    });
+                } catch (e) {
+                    return null;
+                }
+            }
+
+            function applyExportMathToHtml(html) {
+                const mathPh = [];
+                const codePh = [];
+                let s = html || '';
+                s = s.replace(/<code[^>]*>[\\s\\S]*?<\\/code>/gi, function(m) {
+                    codePh.push(m);
+                    return '\\x00CODE' + (codePh.length - 1) + '\\x00';
+                });
+                s = s.replace(/\\$\\$([\\s\\S]+?)\\$\\$/g, function(match, latex) {
+                    const out = renderExportLatex(latex, true);
+                    if (!out) return match;
+                    mathPh.push('<span class="math-display math-inline-block">' + out + '</span>');
+                    return '\\x00MATH' + (mathPh.length - 1) + '\\x00';
+                });
+                s = s.replace(/(^|[^\\\\$])\\$(?!\\$)((?:\\\\.|[^$\\n\\\\])+?)\\$(?!\\$)/g, function(match, prefix, latex) {
+                    const out = renderExportLatex(latex, false);
+                    if (!out) return match;
+                    mathPh.push('<span class="math-inline">' + out + '</span>');
+                    return prefix + '\\x00MATH' + (mathPh.length - 1) + '\\x00';
+                });
+                s = s.replace(/\\\\\\(([\\s\\S]+?)\\\\\\)/g, function(match, latex) {
+                    const out = renderExportLatex(latex, false);
+                    if (!out) return match;
+                    mathPh.push('<span class="math-inline">' + out + '</span>');
+                    return '\\x00MATH' + (mathPh.length - 1) + '\\x00';
+                });
+                s = s.replace(/\\\\\\[([\\s\\S]+?)\\\\\\]/g, function(match, latex) {
+                    const out = renderExportLatex(latex, true);
+                    if (!out) return match;
+                    mathPh.push('<span class="math-display math-inline-block">' + out + '</span>');
+                    return '\\x00MATH' + (mathPh.length - 1) + '\\x00';
+                });
+                s = s.replace(/\\x00CODE(\\d+)\\x00/g, function(_, i) { return codePh[+i] || ''; });
+                s = s.replace(/\\x00MATH(\\d+)\\x00/g, function(_, i) { return mathPh[+i] || ''; });
+                return s;
+            }
+
+            function isLikelyLatexLine(t) {
+                return /^\\\\[a-zA-Z@]/.test((t || '').trim());
+            }
+
+            function mergeLatexOnlyParagraphs(root) {
+                while (true) {
+                    const paras = root.querySelectorAll('p');
+                    let found = false;
+                    for (let i = 0; i < paras.length; i++) {
+                        const t = paras[i].textContent.trim();
+                        if (!isLikelyLatexLine(t)) continue;
+                        const parts = [t];
+                        let j = i + 1;
+                        while (j < paras.length && isLikelyLatexLine(paras[j].textContent.trim())) {
+                            parts.push(paras[j].textContent.trim());
+                            j++;
+                        }
+                        const html = renderExportLatex(parts.join('\\n'), true);
+                        if (html) {
+                            for (let k = j - 1; k > i; k--) paras[k].remove();
+                            paras[i].outerHTML = '<div class="math-display">' + html + '</div>';
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) break;
+                }
+            }
+
+            function mergeBlockMathParagraphs(root) {
+                while (true) {
+                    const paras = root.querySelectorAll('p');
+                    let found = false;
+                    for (let i = 0; i < paras.length; i++) {
+                        const p = paras[i];
+                        if (p.closest('pre')) continue;
+                        const t = p.textContent.trim();
+                        if (t.startsWith('$$') && t.endsWith('$$') && t.length > 4) {
+                            const html = renderExportLatex(t.slice(2, -2).trim(), true);
+                            if (html) {
+                                p.outerHTML = '<div class="math-display">' + html + '</div>';
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (t === '$$') {
+                            const parts = [];
+                            let j = i + 1;
+                            while (j < paras.length && paras[j].textContent.trim() !== '$$') {
+                                parts.push(paras[j].textContent);
+                                j++;
+                            }
+                            if (j < paras.length) {
+                                const html = renderExportLatex(parts.join('\\n'), true);
+                                if (html) {
+                                    for (let k = j; k > i; k--) paras[k].remove();
+                                    p.outerHTML = '<div class="math-display">' + html + '</div>';
+                                    found = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (!found) break;
+                }
+            }
+
+            function typesetExportMath(root) {
+                if (!root || typeof katex === 'undefined') return;
+                mergeLatexOnlyParagraphs(root);
+                mergeBlockMathParagraphs(root);
+                root.querySelectorAll('p, li, td, th, blockquote, h1, h2, h3, h4, h5, h6').forEach(function(el) {
+                    if (el.closest('pre, code')) return;
+                    if (el.classList.contains('math-display')) return;
+                    if (!/\\$|\\\\\\(|\\\\\\[/.test(el.innerHTML)) return;
+                    const next = applyExportMathToHtml(el.innerHTML);
+                    if (next !== el.innerHTML) el.innerHTML = next;
+                });
+            }
+
+            window.typesetExportMath = typesetExportMath;
+
+            function runExportMath() {
+                typesetExportMath(document.querySelector('.markdown-body') || document.body);
+            }
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', runExportMath);
+            } else {
+                runExportMath();
+            }
+        })();
+        </script>
+        """
+    }
+
+    /// Mermaid: блоки ```mermaid из Swift-Markdown (code.language-mermaid).
+    private var exportMermaidRenderScript: String {
+        """
+        <script>
+        (function() {
+            async function renderExportMermaid() {
+                if (typeof mermaid === 'undefined') return;
+                const root = document.querySelector('.markdown-body') || document.body;
+                const codes = Array.from(root.querySelectorAll('pre code.language-mermaid, pre code.mermaid'));
+                if (!codes.length) return;
+                const nodes = [];
+                codes.forEach(function(code) {
+                    const pre = code.closest('pre');
+                    if (!pre) return;
+                    const src = (code.textContent || '').trim();
+                    const div = document.createElement('div');
+                    div.className = 'mermaid mermaid-diagram export-mermaid';
+                    div.setAttribute('data-mermaid-source', src);
+                    div.textContent = src;
+                    pre.replaceWith(div);
+                    nodes.push(div);
+                });
+                try {
+                    const theme = document.body.classList.contains('dark') ? 'dark' : 'default';
+                    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: theme });
+                    await mermaid.run({ nodes: nodes });
+                } catch (e) {
+                    nodes.forEach(function(n) {
+                        n.innerHTML = '<pre class="mermaid-error">' + (e.message || String(e)) + '</pre>';
+                    });
+                }
+            }
+            window.renderExportMermaid = renderExportMermaid;
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', renderExportMermaid);
+            } else {
+                renderExportMermaid();
+            }
+        })();
+        </script>
+        """
+    }
+
     /// Подсветка как в Preview/Live: без нумерации строк.
     private var exportCodeHighlightScript: String {
         """
@@ -383,6 +590,7 @@ class ExportService {
                 if (typeof hljs === 'undefined') return;
                 document.querySelectorAll('pre code').forEach(function(block) {
                     if (block.closest('table.hljs-ln')) return;
+                    if (block.classList.contains('language-mermaid') || block.classList.contains('mermaid')) return;
                     hljs.highlightElement(block);
                     var pre = block.closest('pre');
                     if (pre) pre.classList.add('hljs');
@@ -652,6 +860,20 @@ class ExportService {
             display: none !important;
         }
         hr { border: none; border-top: 1px solid \(border); margin: 2em 0; }
+        .math-display {
+            margin: 1em 0;
+            overflow-x: auto;
+            text-align: center;
+        }
+        .math-display > .katex-display { margin: 0; }
+        .math-inline .katex { font-size: 1.05em; }
+        .mermaid-diagram, .export-mermaid {
+            margin: 1em 0;
+            text-align: center;
+            overflow-x: auto;
+        }
+        .mermaid-diagram svg { max-width: 100%; height: auto; }
+        .mermaid-error { color: \(secondary); font-family: monospace; font-size: 12px; }
         .toc {
             background: \(codeBg);
             padding: 20px 24px;
@@ -1048,7 +1270,7 @@ private final class PDFExportSession: NSObject, WKNavigationDelegate {
         
         super.init()
         webView.navigationDelegate = self
-        webView.loadHTMLString(html, baseURL: baseURL ?? BundledHighlightJS.resourceBaseURL)
+        webView.loadHTMLString(html, baseURL: baseURL ?? BundledKaTeX.resourceBaseURL ?? BundledHighlightJS.resourceBaseURL)
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 25) { [weak self] in
             self?.beginPDFRenderIfNeeded()
@@ -1120,6 +1342,12 @@ private final class PDFExportSession: NSObject, WKNavigationDelegate {
                     if (pre) pre.classList.add('hljs');
                 });
                 document.querySelectorAll('table.hljs-ln').forEach(t => t.remove());
+            }
+            if (typeof typesetExportMath === 'function') {
+                typesetExportMath(document.querySelector('.markdown-body') || document.body);
+            }
+            if (typeof renderExportMermaid === 'function') {
+                await renderExportMermaid();
             }
             let lastHeight = 0;
             let stablePasses = 0;

@@ -14,6 +14,8 @@
 		EB763A752F0EE01300B17ECA /* codemirror-script.js in Resources */ = {isa = PBXBuildFile; fileRef = EB763A742F0EE00E00B17ECA /* codemirror-script.js */; };
 		EB763A7A2F11736F00B17ECA /* codemirror-editor.html in Resources */ = {isa = PBXBuildFile; fileRef = EB763A792F11735D00B17ECA /* codemirror-editor.html */; };
 		EBHL00022F2500000040C1BB /* HighlightJS in Resources */ = {isa = PBXBuildFile; fileRef = EBHL00012F2500000040C1BB /* HighlightJS */; };
+		EBKX00022F2500000040C1BB /* KaTeX in Resources */ = {isa = PBXBuildFile; fileRef = EBKX00012F2500000040C1BB /* KaTeX */; };
+		EBMM00022F2500000040C1BB /* Mermaid in Resources */ = {isa = PBXBuildFile; fileRef = EBMM00012F2500000040C1BB /* Mermaid */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -24,6 +26,8 @@
 		EB763A742F0EE00E00B17ECA /* codemirror-script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "codemirror-script.js"; sourceTree = "<group>"; };
 		EB763A792F11735D00B17ECA /* codemirror-editor.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = "codemirror-editor.html"; sourceTree = "<group>"; };
 		EBHL00012F2500000040C1BB /* HighlightJS */ = {isa = PBXFileReference; lastKnownFileType = folder; path = HighlightJS; sourceTree = "<group>"; };
+		EBKX00012F2500000040C1BB /* KaTeX */ = {isa = PBXFileReference; lastKnownFileType = folder; path = KaTeX; sourceTree = "<group>"; };
+		EBMM00012F2500000040C1BB /* Mermaid */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Mermaid; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -64,6 +68,8 @@
 				EB763A742F0EE00E00B17ECA /* codemirror-script.js */,
 				EB763A722F0EDF2B00B17ECA /* codemirror-styles.css */,
 				EBHL00012F2500000040C1BB /* HighlightJS */,
+				EBKX00012F2500000040C1BB /* KaTeX */,
+				EBMM00012F2500000040C1BB /* Mermaid */,
 				EB2B77F82F13E31700F8976B /* Frameworks */,
 			);
 			sourceTree = "<group>";
@@ -151,6 +157,8 @@
 				EB763A732F0EDF3000B17ECA /* codemirror-styles.css in Resources */,
 				EB763A662F0D8F5900B17ECA /* editor.bundle.js in Resources */,
 				EBHL00022F2500000040C1BB /* HighlightJS in Resources */,
+				EBKX00022F2500000040C1BB /* KaTeX in Resources */,
+				EBMM00022F2500000040C1BB /* Mermaid in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
