@@ -868,6 +868,21 @@
                     .live-block[data-type="list"] .list-item-body[contenteditable="true"]:focus {
                         outline: none;
                     }
+                    .live-block[data-type="list"] li.is-source-edit {
+                        list-style: none !important;
+                    }
+                    .live-block[data-type="list"] li.is-source-edit::marker {
+                        content: '' !important;
+                    }
+                    .live-block[data-type="list"] li.is-source-edit .list-item-body {
+                        font-family: 'SF Mono', Monaco, Consolas, monospace;
+                        font-size: 14px;
+                        white-space: pre-wrap;
+                        display: block;
+                    }
+                    .live-block[data-type="list"] li.is-source-edit .task-list-item-main input[type="checkbox"] {
+                        display: none;
+                    }
 
                     /* Параграф */
                     .live-block[data-type="p"] { margin: 0.1em 0; }
@@ -1058,7 +1073,9 @@
 
             const scheduleContentSync = debounce((text) => {
                 if (window.webkit?.messageHandlers?.contentChanged) {
+                    isSyncing = true;
                     window.webkit.messageHandlers.contentChanged.postMessage(text);
+                    setTimeout(() => { isSyncing = false; }, 400);
                 }
             }, 180);
 
@@ -1635,16 +1652,18 @@
             window.cmEditor = {
                 updateContent(text) {
                     if (isSyncing) return;
-                    currentContent = text;
-                    textarea.value = text;
+                    const incoming = text ?? '';
+                    if (incoming === currentContent) return;
+                    currentContent = incoming;
+                    textarea.value = incoming;
                     schedulePreviewRender.cancel();
                     scheduleLiveRebuild.cancel();
                     scheduleContentSync.cancel();
                     if (isPreviewActive()) {
-                        renderPreview(text, { preserveScroll: true });
+                        renderPreview(incoming, { preserveScroll: true });
                     }
                     if (isLiveActive()) {
-                        initLiveEditor(text);
+                        initLiveEditor(incoming);
                     }
                 },
 
@@ -2137,6 +2156,8 @@
 
                 liveEditor.addEventListener('mousedown', (e) => {
                     if (!isLiveActive()) return;
+                    const listBody = e.target.closest('.list-item-body');
+                    finishActiveListSourceEdit(listBody || null);
                     const blockEl = e.target.closest('.live-block');
                     if (!blockEl) return;
 
@@ -3530,6 +3551,63 @@
                 return formatListLine({ ...item, content: '' }, lineIndex).length;
             }
 
+            function enterListItemSourceEdit(body, item, itemIndex, blockIndex, caretOffsetInContent) {
+                if (!body || body.dataset.sourceEdit === '1') return;
+                const line = formatListLine(item, itemIndex);
+                body.dataset.sourceEdit = '1';
+                body.textContent = line;
+                const li = body.closest('li');
+                if (li) li.classList.add('is-source-edit');
+
+                const markerLen = markerLength(item, itemIndex);
+                let caret = markerLen + Math.max(0, caretOffsetInContent ?? 0);
+                caret = Math.min(caret, line.length);
+                requestAnimationFrame(() => {
+                    body.focus();
+                    placeCaretAtTextOffset(body, caret);
+                });
+            }
+
+            let listSourceEditFinishing = false;
+
+            function finishActiveListSourceEdit(exceptBody) {
+                const body = document.querySelector('.list-item-body[data-source-edit="1"]');
+                if (!body || body === exceptBody) return;
+                const blockIndex = parseInt(body.dataset.listBlockIndex, 10);
+                const itemIndex = parseInt(body.dataset.listItemIndex, 10);
+                if (Number.isNaN(blockIndex) || Number.isNaN(itemIndex)) return;
+                finishListItemSourceEdit(body, blockIndex, itemIndex);
+            }
+
+            function finishListItemSourceEdit(body, blockIndex, itemIndex) {
+                if (!body || body.dataset.sourceEdit !== '1' || listSourceEditFinishing) return;
+                const block = liveBlocks[blockIndex];
+                if (!block || block.type !== 'list') return;
+
+                listSourceEditFinishing = true;
+                body.dataset.sourceEdit = '0';
+                body.closest('li')?.classList.remove('is-source-edit');
+
+                const fullText = (body.textContent || '').replace(/\u00a0/g, ' ');
+                const lines = block.source.split('\n');
+                lines[itemIndex] = fullText;
+                block.source = lines.join('\n');
+
+                setupListBlock(block.el, block, blockIndex, false);
+                syncLiveContentToModel();
+                listSourceEditFinishing = false;
+            }
+
+            function syncListSourceLineFromBody(blockIndex, itemIndex, body) {
+                const block = liveBlocks[blockIndex];
+                if (!block || block.type !== 'list') return;
+                const lines = block.source.split('\n');
+                lines[itemIndex] = (body.textContent || '').replace(/\u00a0/g, ' ');
+                block.source = lines.join('\n');
+                currentContent = liveBlocks.map((b) => blockToMarkdownSource(b)).join('\n');
+                textarea.value = currentContent;
+            }
+
             function listIndentDepth(indent) {
                 const normalized = (indent || '').replace(/\t/g, '    ');
                 return Math.floor(normalized.length / 2);
@@ -3565,6 +3643,8 @@
 
                 const body = document.createElement('span');
                 body.className = 'list-item-body';
+                body.dataset.listBlockIndex = String(blockIndex);
+                body.dataset.listItemIndex = String(itemIndex);
                 if (item.content.trim()) {
                     body.innerHTML = renderInline(item.content);
                 } else if (!readOnly) {
@@ -3574,8 +3654,86 @@
                 if (!readOnly) {
                     body.contentEditable = 'true';
                     body.addEventListener('mousedown', (ev) => ev.stopPropagation());
-                    body.addEventListener('input', () => scheduleListSync(blockIndex));
+                    body.addEventListener('focus', () => {
+                        if (listSourceEditFinishing || body.dataset.sourceEdit === '1') return;
+                        const block = liveBlocks[blockIndex];
+                        if (!block || block.type !== 'list') return;
+                        const lines = block.source.split('\n');
+                        const parsed = parseListLine(lines[itemIndex]);
+                        if (!parsed) return;
+                        let contentOffset = 0;
+                        const sel = window.getSelection();
+                        if (sel && sel.rangeCount && body.contains(sel.anchorNode)) {
+                            contentOffset = getCaretOffsetInEditable(body);
+                        }
+                        enterListItemSourceEdit(body, parsed, itemIndex, blockIndex, contentOffset);
+                    });
+                    body.addEventListener('blur', () => {
+                        if (body.dataset.sourceEdit !== '1') return;
+                        requestAnimationFrame(() => {
+                            if (body.dataset.sourceEdit !== '1') return;
+                            if (document.activeElement === body) return;
+                            finishListItemSourceEdit(body, blockIndex, itemIndex);
+                        });
+                    });
+                    body.addEventListener('input', () => {
+                        if (body.dataset.sourceEdit === '1') {
+                            syncListSourceLineFromBody(blockIndex, itemIndex, body);
+                            return;
+                        }
+                        scheduleListSync(blockIndex);
+                    });
                     body.addEventListener('keydown', (ev) => {
+                        if (body.dataset.sourceEdit !== '1' && ev.key === 'Backspace') {
+                            const offset = getCaretOffsetInEditable(body);
+                            if (offset === 0) {
+                                const block = liveBlocks[blockIndex];
+                                const lines = block?.source?.split('\n') || [];
+                                const parsed = parseListLine(lines[itemIndex]);
+                                if (parsed) {
+                                    ev.preventDefault();
+                                    enterListItemSourceEdit(body, parsed, itemIndex, blockIndex, 0);
+                                    return;
+                                }
+                            }
+                        }
+                        if (body.dataset.sourceEdit === '1' && ev.key === 'Backspace') {
+                            const fullText = (body.textContent || '').replace(/\u00a0/g, ' ');
+                            const parsed = parseListLine(fullText);
+                            const offset = getCaretOffsetInEditable(body);
+                            if (parsed && offset <= markerLength(parsed, itemIndex) && !(parsed.content || '').length) {
+                                ev.preventDefault();
+                                const block = liveBlocks[blockIndex];
+                                const lines = block.source.split('\n');
+                                lines.splice(itemIndex, 1);
+                                block.source = lines.join('\n');
+                                body.dataset.sourceEdit = '0';
+                                body.closest('li')?.classList.remove('is-source-edit');
+                                const parts = liveBlocks.map((b, i) => (i === blockIndex ? blockToMarkdownSource(block) : blockToMarkdownSource(b)));
+                                let focusBlockIndex = blockIndex;
+                                let focusItemIndex = Math.max(0, itemIndex - 1);
+                                let focusCaret = 9999;
+                                if (block.source.trim() === '') {
+                                    parts.splice(blockIndex, 0, '');
+                                    focusBlockIndex = blockIndex + 1;
+                                    focusItemIndex = 0;
+                                    focusCaret = 0;
+                                } else if (itemIndex > 0) {
+                                    const prev = parseListLine(block.source.split('\n')[focusItemIndex]);
+                                    focusCaret = prev ? (prev.content || '').length : 0;
+                                } else {
+                                    focusBlockIndex = blockIndex;
+                                    focusItemIndex = 0;
+                                    focusCaret = 0;
+                                }
+                                rebuildLiveDocumentAndFocus(parts, focusBlockIndex);
+                                if (block.source.trim() !== '') {
+                                    focusLiveListItemAfterRebuild(blockIndex, focusItemIndex, focusCaret);
+                                }
+                                syncLiveContentToModel();
+                                return;
+                            }
+                        }
                         handleLiveListItemKeydown(ev, blockIndex, itemIndex, body);
                     });
                 }
@@ -3895,10 +4053,6 @@
                 if (!block || block.type !== 'list') return;
 
                 const lines = block.source.split('\n');
-                const parsed = parseListLine(lines[itemIndex]);
-                if (!parsed) return;
-
-                const text = (bodyEl.textContent || '').replace(/\u00a0/g, ' ');
                 const sel = window.getSelection();
                 if (!sel || sel.rangeCount === 0) return;
 
@@ -3906,7 +4060,64 @@
                 const pre = document.createRange();
                 pre.selectNodeContents(bodyEl);
                 pre.setEnd(range.endContainer, range.endOffset);
-                const offset = pre.toString().length;
+                const offsetInBody = pre.toString().length;
+
+                if (bodyEl.dataset.sourceEdit === '1') {
+                    const fullText = (bodyEl.textContent || '').replace(/\u00a0/g, ' ');
+                    const parsed = parseListLine(fullText);
+                    if (!parsed) return;
+
+                    const markerLen = markerLength(parsed, itemIndex);
+                    const content = parsed.content || '';
+                    const contentOffset = Math.max(0, Math.min(offsetInBody - markerLen, content.length));
+
+                    if (content.trim() === '' && contentOffset <= 0) {
+                        lines.splice(itemIndex, 1);
+                        block.source = lines.join('\n');
+                        bodyEl.dataset.sourceEdit = '0';
+                        bodyEl.closest('li')?.classList.remove('is-source-edit');
+                        const parts = liveBlocks.map((b, i) => (i === blockIndex ? blockToMarkdownSource(block) : blockToMarkdownSource(b)));
+                        let focusBlockIndex = blockIndex;
+                        if (block.source.trim() === '') {
+                            parts.splice(blockIndex, 0, '');
+                            focusBlockIndex = blockIndex + 1;
+                        }
+                        rebuildLiveDocumentAndFocus(parts, focusBlockIndex);
+                        return;
+                    }
+
+                    const before = content.slice(0, contentOffset);
+                    const after = content.slice(contentOffset);
+                    const newItemIndex = itemIndex + 1;
+
+                    lines[itemIndex] = formatListLine({ ...parsed, content: before }, parsed.number);
+                    const nextNumber = parsed.kind === 'ordered'
+                        ? (parsed.number || itemIndex + 1) + 1
+                        : itemIndex + 2;
+                    lines.splice(newItemIndex, 0, formatListLine({
+                        kind: parsed.kind,
+                        indent: parsed.indent,
+                        content: after,
+                        checked: false,
+                        number: nextNumber,
+                    }, newItemIndex));
+
+                    block.source = lines.join('\n');
+                    const parts = liveBlocks.map((b, i) => (i === blockIndex ? blockToMarkdownSource(block) : blockToMarkdownSource(b)));
+                    const newText = parts.join('\n');
+                    currentContent = newText;
+                    textarea.value = newText;
+                    scheduleLiveRebuild.cancel();
+                    initLiveEditor(newText);
+                    scheduleContentSync(newText);
+                    focusLiveListItemAfterRebuild(blockIndex, newItemIndex, 0);
+                    return;
+                }
+
+                const parsed = parseListLine(lines[itemIndex]);
+                if (!parsed) return;
+
+                const text = (bodyEl.textContent || '').replace(/\u00a0/g, ' ');
 
                 if (text.trim() === '') {
                     lines.splice(itemIndex, 1);
@@ -3934,8 +4145,8 @@
                     return;
                 }
 
-                const before = text.slice(0, offset);
-                const after = text.slice(offset);
+                const before = text.slice(0, offsetInBody);
+                const after = text.slice(offsetInBody);
                 const newItemIndex = itemIndex + 1;
 
                 lines[itemIndex] = formatListLine({ ...parsed, content: before }, parsed.number);
