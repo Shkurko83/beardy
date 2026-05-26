@@ -6,6 +6,7 @@ internal import UniformTypeIdentifiers
 
 class DocumentManager: ObservableObject {
     private var statisticsUpdateWorkItem: DispatchWorkItem?
+    private var outlineUpdateWorkItem: DispatchWorkItem?
 
     // MARK: - Published Properties
     @Published var tabs: [EditorTab] = []
@@ -17,6 +18,7 @@ class DocumentManager: ObservableObject {
     @Published var sourceMode: Bool = false
     @Published var showSidebar: Bool = true
     @Published var showOutline: Bool = false
+    @Published var outlineHeadings: [HeadingItem] = []
     /// Published so SwiftUI reliably refreshes chrome when Preview / Focus Mode changes.
     @Published private(set) var isReadingChromeActive: Bool = false
     @Published var viewMode: ViewMode = .edit {
@@ -80,7 +82,18 @@ class DocumentManager: ObservableObject {
         syncReadingChromePanels()
         setupAutoSave()
         setupImagePasteObserver()
+        setupOutlineHeadingsObserver()
 
+    }
+
+    private func setupOutlineHeadingsObserver() {
+        NotificationCenter.default.publisher(for: .outlineHeadingsDidUpdate)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                guard let items = notification.object as? [HeadingItem] else { return }
+                self?.applyOutlineHeadingsFromEditor(items)
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Reading chrome (Preview / Focus Mode) panel layout
@@ -457,6 +470,34 @@ class DocumentManager: ObservableObject {
         doc.lastModifiedDate = Date()
         tabs[index].document = doc
         scheduleStatisticsUpdate(tabIndex: index)
+        scheduleOutlineUpdate()
+    }
+
+    func requestOutlineHeadings(immediately: Bool = false) {
+        if let content = currentDocument?.content {
+            outlineHeadings = Self.parseHeadings(from: content)
+        } else {
+            outlineHeadings = []
+        }
+
+        outlineUpdateWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.execEditorJS("window.cmEditor?.publishOutlineHeadings?.();")
+        }
+        outlineUpdateWorkItem = work
+        if immediately {
+            DispatchQueue.main.async(execute: work)
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: work)
+        }
+    }
+
+    func applyOutlineHeadingsFromEditor(_ items: [HeadingItem]) {
+        outlineHeadings = items
+    }
+
+    private func scheduleOutlineUpdate() {
+        requestOutlineHeadings(immediately: false)
     }
 
     private func scheduleStatisticsUpdate(tabIndex: Int) {
@@ -1091,8 +1132,82 @@ class DocumentManager: ObservableObject {
     }
     
     func scrollToHeading(_ heading: HeadingItem) {
-        // Implementation to scroll to specific heading
-        print("Scroll to heading: \(heading.title)")
+        guard selectedTabID != nil else { return }
+        let escapedTitle = escapeForJS(heading.title)
+        execEditorJS("""
+        window.cmEditor?.scrollToHeading({
+            lineNumber: \(heading.lineNumber),
+            title: `\(escapedTitle)`,
+            level: \(heading.level)
+        });
+        """)
+    }
+
+    static func parseHeadings(from markdown: String) -> [HeadingItem] {
+        var result: [HeadingItem] = []
+        let lines = markdown.components(separatedBy: .newlines)
+        var inFence = false
+        var index = 0
+
+        while index < lines.count {
+            let line = lines[index]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            if trimmed.hasPrefix("```") {
+                inFence.toggle()
+                index += 1
+                continue
+            }
+            if inFence {
+                index += 1
+                continue
+            }
+
+            if Self.isLinkReferenceDefinitionLine(line) {
+                index += Self.linkReferenceDefinitionConsumed(lines: lines, from: index)
+                continue
+            }
+
+            if let heading = Self.parseHeadingLine(line, lineNumber: index) {
+                result.append(heading)
+            }
+            index += 1
+        }
+
+        return result
+    }
+
+    private static func isLinkReferenceDefinitionLine(_ line: String) -> Bool {
+        line.range(of: #"^\s*\[[^\]]+\]:"#, options: .regularExpression) != nil
+    }
+
+    private static func linkReferenceDefinitionConsumed(lines: [String], from start: Int) -> Int {
+        guard start < lines.count, isLinkReferenceDefinitionLine(lines[start]) else { return 1 }
+        var consumed = 1
+        var index = start + 1
+        while index < lines.count {
+            let next = lines[index]
+            if next.trimmingCharacters(in: .whitespaces).isEmpty { break }
+            if isLinkReferenceDefinitionLine(next) { break }
+            if next.range(of: #"^(#{1,6})\s+"#, options: .regularExpression) != nil { break }
+            consumed += 1
+            index += 1
+        }
+        return consumed
+    }
+
+    private static func parseHeadingLine(_ line: String, lineNumber: Int) -> HeadingItem? {
+        guard let regex = try? NSRegularExpression(pattern: #"^(#{1,6})\s+(.+)$"#) else { return nil }
+        let nsLine = line as NSString
+        let range = NSRange(location: 0, length: nsLine.length)
+        guard let match = regex.firstMatch(in: line, options: [], range: range),
+              match.numberOfRanges == 3 else { return nil }
+
+        let level = nsLine.substring(with: match.range(at: 1)).count
+        let title = nsLine.substring(with: match.range(at: 2))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return nil }
+        return HeadingItem(level: level, title: title, lineNumber: lineNumber)
     }
     
     // MARK: - Auto-save
@@ -1192,6 +1307,7 @@ extension Notification.Name {
     static let showFindPanel = Notification.Name("showFindPanel")
     static let showReplacePanel = Notification.Name("showReplacePanel")
     static let editorExecJS = Notification.Name("editorExecJS")
+    static let outlineHeadingsDidUpdate = Notification.Name("outlineHeadingsDidUpdate")
     static let processImageFile = Notification.Name("processImageFile")
     static let readingChromeSettingsChanged = Notification.Name("readingChromeSettingsChanged")
 }

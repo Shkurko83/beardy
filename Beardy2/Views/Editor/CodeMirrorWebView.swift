@@ -29,6 +29,7 @@ struct CodeMirrorWebView: NSViewRepresentable {
         contentController.add(context.coordinator, name: "swapPanes")
         contentController.add(context.coordinator, name: "openURL")
         contentController.add(context.coordinator, name: "processImageFile")
+        contentController.add(context.coordinator, name: "outlineHeadings")
 
         #if DEBUG
         webView.configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
@@ -212,6 +213,7 @@ struct CodeMirrorWebView: NSViewRepresentable {
                 self.lastAppearanceToken = self.parent.appearanceToken
                 self.parent.applyAppearance(to: webView, coordinator: self)
                 self.parent.syncDocumentPath(webView, coordinator: self)
+                webView.evaluateJavaScript("window.cmEditor?.publishOutlineHeadings?.();")
             }
         }
 
@@ -262,6 +264,20 @@ struct CodeMirrorWebView: NSViewRepresentable {
                     userInfo: ["data": data, "filename": filename]
                 )
             }
+
+            if message.name == "outlineHeadings" {
+                guard let data = try? JSONSerialization.data(withJSONObject: message.body),
+                      let decoded = try? JSONDecoder().decode([JSOutlineHeading].self, from: data) else { return }
+                let items = decoded.map {
+                    HeadingItem(level: $0.level, title: $0.title, lineNumber: $0.lineNumber)
+                }
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(
+                        name: .outlineHeadingsDidUpdate,
+                        object: items
+                    )
+                }
+            }
         }
 
         @objc func handleExecJS(_ notification: Notification) {
@@ -269,4 +285,10 @@ struct CodeMirrorWebView: NSViewRepresentable {
             webView?.evaluateJavaScript(js, completionHandler: nil)
         }
     }
+}
+
+private struct JSOutlineHeading: Decodable {
+    let lineNumber: Int
+    let level: Int
+    let title: String
 }

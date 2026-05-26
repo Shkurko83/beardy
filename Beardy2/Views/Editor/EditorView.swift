@@ -616,8 +616,6 @@ struct MarkdownPreviewArea: View {
 struct OutlineView: View {
     @EnvironmentObject var documentManager: DocumentManager
     @EnvironmentObject var themeService: ThemeService
-    @State private var headings: [HeadingItem] = []
-    @State private var updateTask: Task<Void, Never>? = nil
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -630,7 +628,7 @@ struct OutlineView: View {
                 Spacer()
                 
                 Button(action: {
-                    refreshOutline(immediately: true)
+                    documentManager.requestOutlineHeadings(immediately: true)
                 }) {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 11))
@@ -644,7 +642,7 @@ struct OutlineView: View {
             
             // Headings list
             ScrollView {
-                if headings.isEmpty {
+                if documentManager.outlineHeadings.isEmpty {
                     VStack(spacing: 8) {
                         Image(systemName: "list.bullet.indent")
                             .font(.system(size: 24))
@@ -658,7 +656,7 @@ struct OutlineView: View {
                     .padding(.vertical, 40)
                 } else {
                     VStack(alignment: .leading, spacing: 2) {
-                        ForEach(headings) { heading in
+                        ForEach(documentManager.outlineHeadings) { heading in
                             OutlineHeadingRow(heading: heading) {
                                 documentManager.scrollToHeading(heading)
                             }
@@ -673,61 +671,14 @@ struct OutlineView: View {
         .background(themeService.currentTheme.colors.background)
         .foregroundStyle(themeService.currentTheme.colors.text)
         .onChange(of: documentManager.currentDocument?.content) { _, _ in
-            refreshOutline(immediately: false)
+            documentManager.requestOutlineHeadings(immediately: false)
+        }
+        .onChange(of: documentManager.selectedTabID) { _, _ in
+            documentManager.requestOutlineHeadings(immediately: true)
         }
         .onAppear {
-            refreshOutline(immediately: true)
+            documentManager.requestOutlineHeadings(immediately: true)
         }
-    }
-    
-    private func refreshOutline(immediately: some Any) {
-        // Отменяем старую задачу, если начали печатать снова
-        updateTask?.cancel()
-        
-        updateTask = Task {
-            // Если не нажата кнопка "Обновить", ждем 300мс перед парсингом
-            if !(immediately as? Bool ?? false) {
-                try? await Task.sleep(nanoseconds: 300_000_000)
-            }
-            
-            if Task.isCancelled { return }
-            
-            if let content = documentManager.currentDocument?.content {
-                let newHeadings = parseHeadings(from: content)
-                
-                await MainActor.run {
-                    self.headings = newHeadings
-                }
-            }
-        }
-    }
-    
-    private func parseHeadings(from markdown: String) -> [HeadingItem] {
-        var result: [HeadingItem] = []
-        let lines = markdown.components(separatedBy: .newlines)
-        
-        for (index, line) in lines.enumerated() {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            
-            // Заголовок должен начинаться с # и иметь пробел после них
-            if trimmed.hasPrefix("#") {
-                let hashes = trimmed.prefix(while: { $0 == "#" })
-                let level = hashes.count
-                
-                // Проверяем, что уровень от 1 до 6 и после них идет пробел
-                if level <= 6 {
-                    let suffix = trimmed.dropFirst(level)
-                    if suffix.hasPrefix(" ") || suffix.isEmpty {
-                        let title = suffix.trimmingCharacters(in: .whitespaces)
-                        if !title.isEmpty {
-                            result.append(HeadingItem(level: level, title: title, lineNumber: index))
-                        }
-                    }
-                }
-            }
-        }
-        
-        return result
     }
 }
 

@@ -1422,6 +1422,7 @@
                 const lines = (text || '').split('\n');
                 const refs = {};
                 const out = [];
+                const lineMap = [];
                 let i = 0;
 
                 while (i < lines.length) {
@@ -1433,10 +1434,11 @@
                             continue;
                         }
                     }
+                    lineMap[out.length] = i;
                     out.push(lines[i]);
                     i++;
                 }
-                return { text: out.join('\n'), refs };
+                return { text: out.join('\n'), refs, lineMap };
             }
 
             function getEditorSource() {
@@ -1563,6 +1565,184 @@
                 return true;
             }
 
+            const OUTLINE_SCROLL_DURATION_MS = 340;
+            const OUTLINE_SCROLL_TOP_INSET = 8;
+
+            function easeOutCubic(t) {
+                return 1 - Math.pow(1 - t, 3);
+            }
+
+            function smoothScrollToTop(scrollContainer, targetTop, duration = OUTLINE_SCROLL_DURATION_MS) {
+                if (!scrollContainer) return;
+                const maxScroll = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+                const nextTop = Math.max(0, Math.min(targetTop, maxScroll));
+                const startTop = scrollContainer.scrollTop;
+                const delta = nextTop - startTop;
+                if (Math.abs(delta) < 1) {
+                    scrollContainer.scrollTop = nextTop;
+                    return;
+                }
+                const startTime = performance.now();
+                function step(now) {
+                    const elapsed = now - startTime;
+                    const t = Math.min(1, elapsed / duration);
+                    scrollContainer.scrollTop = startTop + delta * easeOutCubic(t);
+                    if (t < 1) {
+                        requestAnimationFrame(step);
+                    }
+                }
+                requestAnimationFrame(step);
+            }
+
+            function smoothScrollElementToTop(scrollContainer, element, topInset = OUTLINE_SCROLL_TOP_INSET) {
+                if (!scrollContainer || !element) return;
+                const targetTop = element.getBoundingClientRect().top;
+                const containerTop = scrollContainer.getBoundingClientRect().top;
+                const nextScroll = scrollContainer.scrollTop + (targetTop - containerTop) - topInset;
+                smoothScrollToTop(scrollContainer, nextScroll);
+            }
+
+            function getOutlineSourceText() {
+                return textarea.value || currentContent || '';
+            }
+
+            function collectOutlineHeadings(text) {
+                const normalized = normalizeMarkdownImages(text || '');
+                const lines = normalized.split('\n');
+                const headings = [];
+                let inFence = false;
+                let i = 0;
+
+                while (i < lines.length) {
+                    const line = lines[i];
+                    const trimmed = line.trim();
+
+                    if (trimmed.startsWith('```')) {
+                        inFence = !inFence;
+                        i++;
+                        continue;
+                    }
+                    if (inFence) {
+                        i++;
+                        continue;
+                    }
+
+                    if (isLinkReferenceDefinitionLine(line)) {
+                        const entry = consumeReferenceDefinitionLines(lines, i);
+                        i += entry ? entry.consumed : 1;
+                        continue;
+                    }
+
+                    const hMatch = line.match(/^(#{1,6})\s+(.+)/);
+                    if (hMatch && hMatch[2].trim()) {
+                        headings.push({
+                            lineNumber: i,
+                            level: hMatch[1].length,
+                            title: hMatch[2].trim(),
+                        });
+                    }
+                    i++;
+                }
+
+                return headings;
+            }
+
+            function findRenderedHeadingByLineNumber(root, lineNumber) {
+                if (!root || lineNumber < 0) return null;
+                const direct = root.querySelector(
+                    `.live-block[data-source-line="${lineNumber}"][data-type^="h"]`
+                );
+                if (direct) return direct;
+
+                const headings = collectOutlineHeadings(getOutlineSourceText());
+                const match = headings.find((item) => item.lineNumber === lineNumber);
+                if (!match) return null;
+
+                const blocks = [...root.querySelectorAll('.live-block[data-type^="h"]')];
+                const index = headings.findIndex((item) => item.lineNumber === lineNumber);
+                return index >= 0 ? (blocks[index] || null) : null;
+            }
+
+            function getMarkdownScrollElement() {
+                if (!textarea) return markdownPane;
+                if (textarea.scrollHeight > textarea.clientHeight + 1) return textarea;
+                if (markdownPane && markdownPane.scrollHeight > markdownPane.clientHeight + 1) return markdownPane;
+                return textarea;
+            }
+
+            function scrollSourceToLine(lineNumber) {
+                const ta = textarea;
+                if (!ta || lineNumber < 0) return false;
+
+                const lines = ta.value.split('\n');
+                let offset = 0;
+                for (let i = 0; i < lineNumber && i < lines.length; i++) {
+                    offset += lines[i].length + 1;
+                }
+
+                const style = window.getComputedStyle(ta);
+                let lineHeight = parseFloat(style.lineHeight);
+                if (!lineHeight || Number.isNaN(lineHeight)) {
+                    lineHeight = (parseFloat(style.fontSize) || 14) * 1.6;
+                }
+                const padTop = parseFloat(style.paddingTop) || 0;
+                const targetScroll = Math.max(0, lineNumber * lineHeight - padTop + OUTLINE_SCROLL_TOP_INSET);
+
+                const scrollEl = getMarkdownScrollElement();
+                smoothScrollToTop(scrollEl, targetScroll);
+
+                requestAnimationFrame(() => {
+                    ta.focus({ preventScroll: true });
+                    ta.setSelectionRange(offset, offset);
+                });
+                return true;
+            }
+
+            function scrollRenderedHeadingToLine(root, lineNumber) {
+                const target = findRenderedHeadingByLineNumber(root, lineNumber);
+                if (!target) return false;
+
+                const scrollContainer = getLinkScrollContainer(root);
+                if (scrollContainer) {
+                    smoothScrollElementToTop(scrollContainer, target);
+                } else {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+                flashAnchorHighlight(target);
+                return true;
+            }
+
+            function scrollToOutlineHeading(options = {}) {
+                const lineNumber = Number(options.lineNumber);
+                if (!Number.isFinite(lineNumber) || lineNumber < 0) return false;
+
+                const modeClass = [...document.body.classList].find((name) => name.startsWith('mode-'));
+                const mode = modeClass ? modeClass.replace('mode-', '') : 'edit';
+
+                if (mode === 'edit') {
+                    return scrollSourceToLine(lineNumber);
+                }
+
+                if (mode === 'preview') {
+                    const previewRoot = document.getElementById('preview-content');
+                    return scrollRenderedHeadingToLine(previewRoot, lineNumber);
+                }
+
+                if (mode === 'live') {
+                    const liveRoot = document.getElementById('live-editor');
+                    return scrollRenderedHeadingToLine(liveRoot, lineNumber);
+                }
+
+                if (mode === 'split') {
+                    const previewRoot = document.getElementById('preview-content');
+                    const sourceOk = scrollSourceToLine(lineNumber);
+                    const previewOk = scrollRenderedHeadingToLine(previewRoot, lineNumber);
+                    return sourceOk || previewOk;
+                }
+
+                return scrollSourceToLine(lineNumber);
+            }
+
             function scrollToDocumentAnchor(href) {
                 const id = decodeURIComponent((href || '').replace(/^#/, ''));
                 if (!id) return false;
@@ -1573,10 +1753,7 @@
                 const root = getLinkNavigationRoot();
                 const scrollContainer = getLinkScrollContainer(root);
                 if (scrollContainer) {
-                    const targetTop = target.getBoundingClientRect().top;
-                    const containerTop = scrollContainer.getBoundingClientRect().top;
-                    const nextScroll = scrollContainer.scrollTop + (targetTop - containerTop) - 16;
-                    scrollContainer.scrollTo({ top: Math.max(0, nextScroll), behavior: 'smooth' });
+                    smoothScrollElementToTop(scrollContainer, target);
                 } else {
                     target.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
@@ -1620,9 +1797,9 @@
                 const readOnly = !!options.readOnly;
                 const incremental = options.incremental !== false && readOnly;
                 const normalized = normalizeMarkdownImages(text || '');
-                const { text: withoutRefs, refs } = extractLinkReferenceDefinitions(normalized);
+                const { text: withoutRefs, refs, lineMap } = extractLinkReferenceDefinitions(normalized);
                 linkReferenceMap = refs;
-                let blocks = parseMarkdownBlocks(withoutRefs);
+                let blocks = parseMarkdownBlocks(withoutRefs, lineMap);
                 blocks = coalesceHTMLBlocks(blocks);
 
                 if (incremental) {
@@ -1980,6 +2157,22 @@
 
                 getContent() {
                     return currentContent;
+                },
+
+                scrollToHeading(options) {
+                    return scrollToOutlineHeading(options || {});
+                },
+
+                getOutlineHeadings() {
+                    return collectOutlineHeadings(getOutlineSourceText());
+                },
+
+                publishOutlineHeadings() {
+                    const items = collectOutlineHeadings(getOutlineSourceText());
+                    if (window.webkit?.messageHandlers?.outlineHeadings) {
+                        window.webkit.messageHandlers.outlineHeadings.postMessage(items);
+                    }
+                    return items;
                 }
                 
             };
@@ -5006,16 +5199,20 @@
                 return renderHTMLBlockContentCustom(source || '');
             }
 
-            function parseMarkdownBlocks(text) {
+            function parseMarkdownBlocks(text, lineMap) {
                 const rawLines = (text || '').split('\n');
                 const blocks = [];
                 let i = 0;
+                const sourceLineFor = (parseIndex) => (
+                    lineMap && lineMap[parseIndex] != null ? lineMap[parseIndex] : parseIndex
+                );
 
                 while (i < rawLines.length) {
                     const line = rawLines[i];
+                    const sourceLine = sourceLineFor(i);
 
                     if (line.trim() === '') {
-                        blocks.push({ type: 'empty', source: '' });
+                        blocks.push({ type: 'empty', source: '', sourceLine });
                         i++;
                         continue;
                     }
@@ -5044,6 +5241,7 @@
                             type: 'list',
                             listKind,
                             source: listLines.join('\n'),
+                            sourceLine,
                         });
                         continue;
                     }
@@ -5063,22 +5261,22 @@
                         const fenceLang = (fenceLines[0] || '').trim().match(/^```+([\w-]*)/);
                         const lang = fenceLang ? (fenceLang[1] || '').trim().toLowerCase() : '';
                         if (lang === 'mermaid') {
-                            blocks.push({ type: 'mermaid', source: fenceSource });
+                            blocks.push({ type: 'mermaid', source: fenceSource, sourceLine });
                         } else {
-                            blocks.push({ type: 'code-fence', source: fenceSource });
+                            blocks.push({ type: 'code-fence', source: fenceSource, sourceLine });
                         }
                         continue;
                     }
 
                     const hMatch = line.match(/^(#{1,6})\s+(.+)/);
                     if (hMatch) {
-                        blocks.push({ type: `h${hMatch[1].length}`, source: line });
+                        blocks.push({ type: `h${hMatch[1].length}`, source: line, sourceLine });
                         i++;
                         continue;
                     }
 
                     if (/^(\*{3,}|-{3,}|_{3,})\s*$/.test(line.trim())) {
-                        blocks.push({ type: 'hr', source: line });
+                        blocks.push({ type: 'hr', source: line, sourceLine });
                         i++;
                         continue;
                     }
@@ -5090,7 +5288,7 @@
                             quoteLines.push(rawLines[i]);
                             i++;
                         }
-                        blocks.push({ type: 'blockquote', source: quoteLines.join('\n') });
+                        blocks.push({ type: 'blockquote', source: quoteLines.join('\n'), sourceLine });
                         continue;
                     }
 
@@ -5100,20 +5298,20 @@
                             tableLines.push(rawLines[i]);
                             i++;
                         }
-                        blocks.push({ type: 'table', source: tableLines.join('\n') });
+                        blocks.push({ type: 'table', source: tableLines.join('\n'), sourceLine });
                         continue;
                     }
 
                     const trimmed = line.trim();
                     if (/^<img\s/i.test(trimmed) || /^!\[[^\]]*\]\([^)]+\)/.test(trimmed)) {
-                        blocks.push({ type: 'image', source: line });
+                        blocks.push({ type: 'image', source: line, sourceLine });
                         i++;
                         continue;
                     }
 
                     const htmlBlock = tryParseHTMLBlock(rawLines, i);
                     if (htmlBlock) {
-                        blocks.push({ type: 'html', source: htmlBlock.source });
+                        blocks.push({ type: 'html', source: htmlBlock.source, sourceLine });
                         i += htmlBlock.consumed;
                         continue;
                     }
@@ -5126,12 +5324,12 @@
                             i++;
                         }
                         if (i < rawLines.length) i++;
-                        blocks.push({ type: 'math', source: mathLines.join('\n') });
+                        blocks.push({ type: 'math', source: mathLines.join('\n'), sourceLine });
                         continue;
                     }
 
                     if (trimmed.startsWith('$$') && trimmed.endsWith('$$') && trimmed.length > 4) {
-                        blocks.push({ type: 'math', source: trimmed.slice(2, -2).trim() });
+                        blocks.push({ type: 'math', source: trimmed.slice(2, -2).trim(), sourceLine });
                         i++;
                         continue;
                     }
@@ -5139,13 +5337,13 @@
                     if (isLikelyDisplayMathLine(line)) {
                         const collected = collectDisplayMathBlock(rawLines, i);
                         if (collected.latex.trim()) {
-                            blocks.push({ type: 'math', source: collected.latex.trim() });
+                            blocks.push({ type: 'math', source: collected.latex.trim(), sourceLine });
                             i = collected.nextIndex;
                             continue;
                         }
                     }
 
-                    blocks.push({ type: 'p', source: line });
+                    blocks.push({ type: 'p', source: line, sourceLine });
                     i++;
                 }
 
@@ -5535,6 +5733,9 @@
                 el.setAttribute('data-type', block.type);
                 el.setAttribute('data-index', index);
                 el.dataset.blockSource = block.source || '';
+                if (block.sourceLine != null) {
+                    el.setAttribute('data-source-line', String(block.sourceLine));
+                }
 
                 if (block.type === 'empty') {
                     el.innerHTML = '<br>';
@@ -5581,11 +5782,11 @@
                 liveBlocks = [];
                 activeBlockIndex = -1;
                 const normalized = normalizeMarkdownImages(text || '');
-                const { text: withoutRefs, refs } = extractLinkReferenceDefinitions(normalized);
+                const { text: withoutRefs, refs, lineMap } = extractLinkReferenceDefinitions(normalized);
                 linkReferenceMap = refs;
                 liveContent = withoutRefs;
 
-                let blocks = parseMarkdownBlocks(liveContent);
+                let blocks = parseMarkdownBlocks(liveContent, lineMap);
                 let repairedSource = false;
 
                 blocks = blocks.map((block) => {
