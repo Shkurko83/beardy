@@ -725,26 +725,12 @@
                     .code-fence-wrap.is-editing {
                         border: 1px solid var(--md-code-border, #d0d7de);
                     }
-                    .code-fence-wrap.is-editing .code-fence-edit-area {
-                        display: block;
-                        margin: 0;
-                        padding: 14px 16px;
-                        min-height: 4.5em;
-                        font-family: "SF Mono", Menlo, Monaco, "Courier New", monospace;
-                        font-size: 13px;
-                        line-height: 1.5;
-                        white-space: pre;
-                        overflow-x: auto;
-                        background: transparent;
-                        border: none !important;
+                    .code-fence-wrap.is-editing pre.hljs {
                         outline: none !important;
                         box-shadow: none !important;
                         cursor: text;
-                        color: inherit;
-                        tab-size: 4;
-                        -webkit-user-modify: read-write-plaintext-only;
                     }
-                    .code-fence-wrap.is-editing .code-fence-edit-area:focus {
+                    .code-fence-wrap.is-editing pre.hljs:focus {
                         outline: none !important;
                         box-shadow: none !important;
                     }
@@ -1632,12 +1618,41 @@
 
             function mountDocumentBlocks(container, text, options = {}) {
                 const readOnly = !!options.readOnly;
-                const normalized = normalizeMarkdownImages(text);
+                const incremental = options.incremental !== false && readOnly;
+                const normalized = normalizeMarkdownImages(text || '');
                 const { text: withoutRefs, refs } = extractLinkReferenceDefinitions(normalized);
                 linkReferenceMap = refs;
-                container.innerHTML = '';
                 let blocks = parseMarkdownBlocks(withoutRefs);
                 blocks = coalesceHTMLBlocks(blocks);
+
+                if (incremental) {
+                    const existing = [...container.querySelectorAll(':scope > .live-block')];
+                    if (existing.length === blocks.length
+                        && existing.every((el, i) => el.getAttribute('data-type') === blocks[i].type)) {
+                        let anyChange = false;
+                        blocks.forEach((block, index) => {
+                            const el = existing[index];
+                            const prevSource = el.dataset.blockSource ?? '';
+                            const nextSource = block.source || '';
+                            if (prevSource === nextSource) return;
+                            anyChange = true;
+                            const newEl = createBlockEl(block, index, { readOnly });
+                            el.replaceWith(newEl);
+                            if (block.type === 'code-fence') {
+                                highlightCodeBlocks(newEl);
+                            }
+                            if (block.type === 'mermaid' && isElementVisibleForLayout(newEl)) {
+                                scheduleMermaidRenderAfterLayout([newEl]);
+                            }
+                        });
+                        if (anyChange) {
+                            rewriteImagesInContainer(container);
+                        }
+                        return;
+                    }
+                }
+
+                container.innerHTML = '';
                 blocks.forEach((block, index) => {
                     const el = createBlockEl(block, index, { readOnly });
                     container.appendChild(el);
@@ -1902,8 +1917,7 @@
                     ta.focus();
                     let start = ta.selectionStart;
                     let end = ta.selectionEnd;
-                    if (start === 0 && end === 0 && ta.value.length > 0
-                        && (lastTextareaSelection.start > 0 || lastTextareaSelection.end > 0)) {
+                    if (start === end && lastTextareaSelection.start !== lastTextareaSelection.end) {
                         start = lastTextareaSelection.start;
                         end = lastTextareaSelection.end;
                     }
@@ -1920,6 +1934,10 @@
                         }
                     }
                     ta.focus();
+                },
+
+                insertCodeBlock() {
+                    insertMarkdownCodeFenceAtSelection();
                 },
 
                 insertLink(clipboardUrl) {
@@ -2110,6 +2128,7 @@
             let activeBlockIndex = -1;
             let liveContent = '';
             let lastLiveInteraction = { blockIndex: 0, offsetInBlock: null };
+            let lastLiveDocumentSelection = { start: 0, end: 0 };
             let liveCaretTrackingAttached = false;
             // isLiveMode уже объявлена глобально
 
@@ -2123,6 +2142,293 @@
                     ? source.length
                     : Math.max(0, Math.min(offsetInBlock, source.length));
                 return offset + safeOffset;
+            }
+
+            function lineOffsetInBlockSource(block, lineIndex) {
+                const lines = (block?.source || '').split('\n');
+                let off = 0;
+                for (let i = 0; i < lineIndex && i < lines.length; i++) {
+                    off += lines[i].length + 1;
+                }
+                return off;
+            }
+
+            function plainLenFromMarkdownSource(markdown, blockType) {
+                const div = document.createElement('div');
+                if (!markdown) return 0;
+                if (blockType === 'blockquote') {
+                    div.innerHTML = renderBlockquoteHTML(markdown);
+                } else if (typeof blockType === 'string' && /^h[1-6]$/.test(blockType)) {
+                    const m = markdown.match(/^#{1,6}\s+/);
+                    const rest = m ? markdown.slice(m[0].length) : markdown;
+                    div.innerHTML = renderInline(rest);
+                } else {
+                    div.innerHTML = renderInline(markdown);
+                }
+                return getTextFromContentEditable(div).length;
+            }
+
+            function mapPlainOffsetToSource(markdown, plainOffset, blockType) {
+                if (plainOffset <= 0) return 0;
+                let lo = 0;
+                let hi = markdown.length;
+                while (lo < hi) {
+                    const mid = Math.ceil((lo + hi) / 2);
+                    const len = plainLenFromMarkdownSource(markdown.slice(0, mid), blockType);
+                    if (len <= plainOffset) lo = mid;
+                    else hi = mid - 1;
+                }
+                return lo;
+            }
+
+            function getOffsetInElementPlain(rootEl, targetNode, targetOffset) {
+                if (!rootEl || !targetNode) return 0;
+                const range = document.createRange();
+                try {
+                    range.setStart(rootEl, 0);
+                    range.setEnd(targetNode, targetOffset);
+                } catch (err) {
+                    return getCaretOffsetInEditable(rootEl);
+                }
+                const temp = document.createElement('div');
+                temp.appendChild(range.cloneContents());
+                return getTextFromContentEditable(temp).length;
+            }
+
+            function resolveListBodyPoint(body, node, nodeOffset) {
+                const blockIndex = parseInt(body.dataset.listBlockIndex, 10);
+                const itemIndex = parseInt(body.dataset.listItemIndex, 10);
+                const block = liveBlocks[blockIndex];
+                if (!block || Number.isNaN(blockIndex) || Number.isNaN(itemIndex)) return null;
+
+                const plainOff = getOffsetInElementPlain(body, node, nodeOffset);
+                const lineStart = lineOffsetInBlockSource(block, itemIndex);
+                const lineText = (block.source.split('\n')[itemIndex] || '');
+
+                if (body.dataset.sourceEdit === '1') {
+                    return {
+                        blockIndex,
+                        offset: lineStart + Math.min(plainOff, lineText.length),
+                    };
+                }
+
+                const parsed = parseListLine(lineText);
+                if (!parsed) return { blockIndex, offset: lineStart };
+                const markerLen = markerLength(parsed, itemIndex);
+                const contentOff = mapPlainOffsetToSource(parsed.content || '', plainOff, 'p');
+                return { blockIndex, offset: lineStart + markerLen + contentOff };
+            }
+
+            function resolveLiveSelectionPoint(node, nodeOffset) {
+                if (!node) return null;
+
+                const listBody = (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement)
+                    ?.closest?.('.list-item-body');
+                if (listBody) return resolveListBodyPoint(listBody, node, nodeOffset);
+
+                const blockEl = (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement)
+                    ?.closest?.('.live-block');
+                if (!blockEl) return null;
+
+                const blockIndex = parseInt(blockEl.getAttribute('data-index'), 10);
+                if (Number.isNaN(blockIndex)) return null;
+                const block = liveBlocks[blockIndex];
+                if (!block) return null;
+
+                if (block.type === 'code-fence' || block.type === 'math' || block.type === 'mermaid' || block.type === 'table') {
+                    const plainOff = getOffsetInElementPlain(blockEl, node, nodeOffset);
+                    return { blockIndex, offset: Math.min(plainOff, block.source.length) };
+                }
+
+                const plainOff = getOffsetInElementPlain(blockEl, node, nodeOffset);
+                if (blockEl.classList.contains('is-source')) {
+                    return { blockIndex, offset: Math.min(plainOff, block.source.length) };
+                }
+
+                return { blockIndex, offset: mapPlainOffsetToSource(block.source, plainOff, block.type) };
+            }
+
+            function findPlainTextRangeInTextarea(plain) {
+                if (!plain) return null;
+                const text = textarea.value;
+                const idx = text.indexOf(plain);
+                if (idx < 0) return null;
+                return { start: idx, end: idx + plain.length };
+            }
+
+            function captureLiveDocumentSelection() {
+                if (!isLiveActive() || !liveEditor) return;
+
+                const sel = window.getSelection();
+                if (!sel || !sel.rangeCount) return;
+
+                const anchorInLive = sel.anchorNode && liveEditor.contains(sel.anchorNode);
+                const focusInLive = sel.focusNode && liveEditor.contains(sel.focusNode);
+                if (!anchorInLive && !focusInLive) return;
+
+                if (sel.isCollapsed) {
+                    const pt = resolveLiveSelectionPoint(sel.anchorNode, sel.anchorOffset);
+                    if (!pt) return;
+                    const pos = computeTextareaOffsetForLiveBlock(pt.blockIndex, pt.offset);
+                    lastLiveDocumentSelection = { start: pos, end: pos };
+                    return;
+                }
+
+                const anchor = resolveLiveSelectionPoint(sel.anchorNode, sel.anchorOffset);
+                const focus = resolveLiveSelectionPoint(sel.focusNode, sel.focusOffset);
+                if (anchor && focus) {
+                    let start = computeTextareaOffsetForLiveBlock(anchor.blockIndex, anchor.offset);
+                    let end = computeTextareaOffsetForLiveBlock(focus.blockIndex, focus.offset);
+                    if (start > end) {
+                        const tmp = start;
+                        start = end;
+                        end = tmp;
+                    }
+                    lastLiveDocumentSelection = { start, end };
+                    return;
+                }
+
+                const plain = sel.toString();
+                const found = findPlainTextRangeInTextarea(plain);
+                if (found) lastLiveDocumentSelection = found;
+            }
+
+            function syncLiveSelectionToTextarea() {
+                if (!isLiveActive()) return;
+
+                finishActiveListSourceEdit(null);
+
+                if (activeBlockIndex >= 0) {
+                    deactivateCurrentBlock();
+                }
+
+                syncLiveToTextarea();
+
+                const sel = window.getSelection();
+                const selPlain = sel?.toString?.() || '';
+
+                if (!sel || !sel.rangeCount || sel.isCollapsed) {
+                    if (lastLiveDocumentSelection.start !== lastLiveDocumentSelection.end) {
+                        textarea.setSelectionRange(
+                            lastLiveDocumentSelection.start,
+                            lastLiveDocumentSelection.end
+                        );
+                        lastTextareaSelection = { ...lastLiveDocumentSelection };
+                        return;
+                    }
+                    const blockIndex = Math.min(
+                        Math.max(lastLiveInteraction.blockIndex, 0),
+                        Math.max(liveBlocks.length - 1, 0)
+                    );
+                    const pos = computeTextareaOffsetForLiveBlock(
+                        blockIndex,
+                        lastLiveInteraction.offsetInBlock
+                    );
+                    textarea.setSelectionRange(pos, pos);
+                    lastTextareaSelection = { start: pos, end: pos };
+                    return;
+                }
+
+                const anchor = resolveLiveSelectionPoint(sel.anchorNode, sel.anchorOffset);
+                const focus = resolveLiveSelectionPoint(sel.focusNode, sel.focusOffset);
+                if (!anchor || !focus) {
+                    const found = findPlainTextRangeInTextarea(selPlain);
+                    if (found) {
+                        textarea.setSelectionRange(found.start, found.end);
+                        lastTextareaSelection = { ...found };
+                        lastLiveDocumentSelection = { ...found };
+                        return;
+                    }
+                    if (lastLiveDocumentSelection.start !== lastLiveDocumentSelection.end) {
+                        textarea.setSelectionRange(
+                            lastLiveDocumentSelection.start,
+                            lastLiveDocumentSelection.end
+                        );
+                        lastTextareaSelection = { ...lastLiveDocumentSelection };
+                        return;
+                    }
+                    syncLiveCaretToTextarea();
+                    return;
+                }
+
+                let start = computeTextareaOffsetForLiveBlock(anchor.blockIndex, anchor.offset);
+                let end = computeTextareaOffsetForLiveBlock(focus.blockIndex, focus.offset);
+                if (start > end) {
+                    const tmp = start;
+                    start = end;
+                    end = tmp;
+                }
+
+                textarea.setSelectionRange(start, end);
+                lastTextareaSelection = { start, end };
+                lastLiveDocumentSelection = { start, end };
+            }
+
+            function getTextareaSelectionRange() {
+                const ta = textarea;
+                let start = ta.selectionStart;
+                let end = ta.selectionEnd;
+                if (start === end) {
+                    if (isLiveActive() && lastLiveDocumentSelection.start !== lastLiveDocumentSelection.end) {
+                        start = lastLiveDocumentSelection.start;
+                        end = lastLiveDocumentSelection.end;
+                    } else if (lastTextareaSelection.start !== lastTextareaSelection.end) {
+                        start = lastTextareaSelection.start;
+                        end = lastTextareaSelection.end;
+                    }
+                }
+                return { start, end };
+            }
+
+            function insertMarkdownCodeFenceAtSelection() {
+                const live = isLiveActive();
+                if (live) {
+                    captureLiveDocumentSelection();
+                    syncLiveSelectionToTextarea();
+                } else {
+                    rememberTextareaSelection();
+                }
+
+                const ta = textarea;
+                ta.focus();
+
+                const { start, end } = getTextareaSelectionRange();
+                const before = ta.value.slice(0, start);
+                const after = ta.value.slice(end);
+                const selected = ta.value.slice(start, end);
+
+                const fenceBody = selected.length > 0
+                    ? `\`\`\`\n${selected}\n\`\`\``
+                    : '```\n\n```';
+
+                let prefix = '';
+                let suffix = '';
+                if (before.length > 0 && !before.endsWith('\n')) prefix = '\n';
+                if (after.length > 0 && !after.startsWith('\n')) suffix = '\n';
+
+                const insert = prefix + fenceBody + suffix;
+                ta.setRangeText(insert, start, end, 'end');
+
+                const fenceInnerStart = start + prefix.length + 4;
+                const caretPos = selected.length > 0
+                    ? fenceInnerStart + selected.length
+                    : fenceInnerStart;
+
+                lastTextareaSelection = { start: caretPos, end: caretPos };
+                ta.setSelectionRange(caretPos, caretPos);
+
+                currentContent = ta.value;
+                if (live) {
+                    scheduleLiveRebuild.cancel();
+                    initLiveEditor(ta.value);
+                    scheduleContentSync(ta.value);
+                    requestAnimationFrame(() => activateCodeBlockAtCursor());
+                } else {
+                    ta.dispatchEvent(new Event('input'));
+                    schedulePreviewRender.flush(ta.value);
+                    highlightCodeBlocks(preview);
+                }
+                ta.focus();
             }
 
             function syncLiveCaretToTextarea() {
@@ -2180,6 +2486,21 @@
 
                     lastLiveInteraction = { blockIndex, offsetInBlock };
                 }, true);
+
+                liveEditor.addEventListener('mouseup', () => {
+                    if (!isLiveActive()) return;
+                    requestAnimationFrame(captureLiveDocumentSelection);
+                });
+                liveEditor.addEventListener('keyup', () => {
+                    if (!isLiveActive()) return;
+                    captureLiveDocumentSelection();
+                });
+
+                const scheduleCaptureLiveSelection = debounce(captureLiveDocumentSelection, 40);
+                document.addEventListener('selectionchange', () => {
+                    if (!isLiveActive()) return;
+                    scheduleCaptureLiveSelection();
+                });
 
                 liveEditor.addEventListener('focusin', (e) => {
                     if (!isLiveActive()) return;
@@ -2544,11 +2865,16 @@
             function readCodeFenceInner(preEl) {
                 if (!preEl) return '';
                 let text;
-                if (preEl.classList.contains('code-fence-edit-area')) {
-                    text = (preEl.textContent || '')
+                if (preEl.classList.contains('code-fence-edit-input')
+                    || preEl.classList.contains('code-fence-edit-area')) {
+                    const raw = preEl.value != null ? preEl.value : (preEl.textContent || '');
+                    text = raw
                         .replace(/\u00a0/g, ' ')
                         .replace(/\r\n/g, '\n')
                         .replace(/\r/g, '\n');
+                } else if (preEl.isContentEditable
+                    || preEl.getAttribute('contenteditable') === 'true') {
+                    text = getTextFromContentEditable(preEl);
                 } else {
                     const code = preEl.querySelector('code');
                     text = extractCodeText(preEl, code || preEl);
@@ -2556,20 +2882,299 @@
                 return dedentUniformLeadingWhitespace(text);
             }
 
+            let codeFenceHighlightTimer = null;
+
+            function clearCodeFenceHighlightTimer() {
+                if (codeFenceHighlightTimer) {
+                    clearTimeout(codeFenceHighlightTimer);
+                    codeFenceHighlightTimer = null;
+                }
+            }
+
+            function refreshCodeFenceLiveHighlight(block, pre) {
+                if (!pre || !block) return;
+
+                const offset = getCaretOffsetInEditable(pre);
+                const text = getTextFromContentEditable(pre);
+                const lang = block._codeFenceLang != null
+                    ? block._codeFenceLang
+                    : parseCodeFenceSource(block.source).lang;
+
+                block.source = buildCodeFenceSource(lang, text);
+
+                pre.querySelector('.code-fence-placeholder')?.remove();
+                pre.classList.toggle('is-empty', !text.trim());
+
+                let code = pre.querySelector('code');
+                if (!code) {
+                    code = document.createElement('code');
+                }
+
+                paintCodeFenceHighlight(pre, code, lang, text);
+
+                pre.setAttribute('contenteditable', 'true');
+                pre.setAttribute('spellcheck', 'false');
+
+                requestAnimationFrame(() => {
+                    placeCaretAtTextOffset(pre, offset);
+                });
+            }
+
+            function scheduleCodeFenceLiveHighlight(block, pre) {
+                clearCodeFenceHighlightTimer();
+                codeFenceHighlightTimer = setTimeout(() => {
+                    codeFenceHighlightTimer = null;
+                    refreshCodeFenceLiveHighlight(block, pre);
+                }, 100);
+            }
+
+            function softUpdateCodeFenceHighlight(preEl, lang, text) {
+                const raw = (text || '')
+                    .replace(/\u00a0/g, ' ')
+                    .replace(/\r\n/g, '\n')
+                    .replace(/\r/g, '\n');
+                const codeEl = preEl?.querySelector('code');
+                if (!codeEl || !window.hljs) return false;
+
+                const lineEls = [...preEl.querySelectorAll('.hljs-ln-line')];
+                if (lineEls.length) {
+                    const lines = raw.split('\n');
+                    if (lineEls.length !== lines.length) return false;
+                    lineEls.forEach((lineEl, i) => {
+                        lineEl.textContent = lines[i];
+                    });
+                    return true;
+                }
+
+                codeEl.textContent = raw;
+                codeEl.removeAttribute('data-highlighted');
+                if (lang) {
+                    codeEl.className = `language-${lang}`;
+                    codeEl.setAttribute('data-language', lang);
+                }
+
+                try {
+                    hljs.highlightElement(codeEl);
+                } catch (e) {
+                    console.warn('hljs.highlightElement failed', e);
+                    return false;
+                }
+                return true;
+            }
+
+            function syncCodeFenceStackHeights(editArea, highlightPre) {
+                const contentHeight = Math.max(
+                    highlightPre.scrollHeight,
+                    editArea.scrollHeight,
+                    highlightPre.offsetHeight,
+                    72
+                );
+                highlightPre.style.minHeight = `${contentHeight}px`;
+                editArea.style.height = `${contentHeight}px`;
+            }
+
+            function paintCodeFenceHighlight(preEl, codeEl, lang, text) {
+                const raw = (text || '')
+                    .replace(/\u00a0/g, ' ')
+                    .replace(/\r\n/g, '\n')
+                    .replace(/\r/g, '\n');
+
+                preEl.innerHTML = '';
+                preEl.className = 'hljs';
+                codeEl.textContent = raw;
+                codeEl.removeAttribute('data-highlighted');
+
+                if (lang) {
+                    codeEl.className = `language-${lang}`;
+                    codeEl.setAttribute('data-language', lang);
+                } else {
+                    codeEl.className = '';
+                    codeEl.removeAttribute('data-language');
+                }
+
+                preEl.appendChild(codeEl);
+                preEl.classList.toggle('is-empty', !raw.trim());
+
+                if (!raw.trim() || !window.hljs) return;
+
+                try {
+                    hljs.highlightElement(codeEl);
+                } catch (e) {
+                    console.warn('hljs.highlightElement failed', e);
+                }
+
+                preEl.classList.remove('has-line-numbers');
+                const skipLineNumbers = preEl.closest('.code-fence-wrap.is-editing');
+                if (showCodeLineNumbers && !skipLineNumbers && typeof hljs.lineNumbersBlock === 'function') {
+                    try {
+                        hljs.lineNumbersBlock(codeEl);
+                        preEl.classList.add('has-line-numbers');
+                    } catch (e) {
+                        console.warn('lineNumbersBlock failed', e);
+                    }
+                }
+            }
+
+            function getFirstTextNodeInElement(el) {
+                if (!el) return null;
+                const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+                return walker.nextNode();
+            }
+
+            function measureCodeColumnOffset(pre) {
+                const codeCell = pre.querySelector('td.hljs-ln-code');
+                if (!codeCell) return null;
+                const preRect = pre.getBoundingClientRect();
+                const textNode = getFirstTextNodeInElement(codeCell.querySelector('.hljs-ln-line') || codeCell);
+                if (textNode) {
+                    const range = document.createRange();
+                    try {
+                        range.setStart(textNode, 0);
+                        range.setEnd(textNode, 0);
+                        const caretRect = range.getBoundingClientRect();
+                        return Math.max(0, Math.round(caretRect.left - preRect.left));
+                    } catch (err) {
+                        /* fall through */
+                    }
+                }
+                return Math.max(0, Math.round(codeCell.getBoundingClientRect().left - preRect.left));
+            }
+
+            function measureHighlightTextInsets(pre) {
+                const preStyle = window.getComputedStyle(pre);
+                const preRect = pre.getBoundingClientRect();
+
+                const line = pre.querySelector('.hljs-ln-line');
+                const code = pre.querySelector('code');
+                const anchorRoot = line || code;
+                const textNode = getFirstTextNodeInElement(anchorRoot);
+
+                let top = parseFloat(preStyle.paddingTop) || 0;
+                let left = parseFloat(preStyle.paddingLeft) || 0;
+
+                if (textNode) {
+                    const range = document.createRange();
+                    try {
+                        range.setStart(textNode, 0);
+                        range.setEnd(textNode, 0);
+                        const caretRect = range.getBoundingClientRect();
+                        top = Math.max(0, Math.round(caretRect.top - preRect.top));
+                        left = Math.max(0, Math.round(caretRect.left - preRect.left));
+                    } catch (err) {
+                        /* keep padding fallback */
+                    }
+                }
+
+                const columnOffset = measureCodeColumnOffset(pre);
+                if (columnOffset != null) {
+                    left = columnOffset;
+                }
+
+                return {
+                    top,
+                    left,
+                    right: parseFloat(preStyle.paddingRight) || 0,
+                    bottom: parseFloat(preStyle.paddingBottom) || 0,
+                };
+            }
+
+            function getCodeFenceOffsetFromPoint(pre, clientX, clientY) {
+                let range = null;
+                if (document.caretRangeFromPoint) {
+                    range = document.caretRangeFromPoint(clientX, clientY);
+                } else if (document.caretPositionFromPoint) {
+                    const pos = document.caretPositionFromPoint(clientX, clientY);
+                    if (pos) {
+                        range = document.createRange();
+                        range.setStart(pos.offsetNode, pos.offset);
+                        range.collapse(true);
+                    }
+                }
+                if (!range || !pre.contains(range.startContainer)) {
+                    return getTextOffsetFromPoint(pre, clientX, clientY);
+                }
+
+                const lineEl = (range.startContainer.nodeType === Node.TEXT_NODE
+                    ? range.startContainer.parentElement
+                    : range.startContainer)?.closest?.('.hljs-ln-line');
+                if (lineEl && pre.contains(lineEl)) {
+                    const rows = [...pre.querySelectorAll('.hljs-ln-line')];
+                    const rowIndex = rows.indexOf(lineEl);
+                    if (rowIndex >= 0) {
+                        let offset = 0;
+                        for (let i = 0; i < rowIndex; i++) {
+                            offset += (rows[i].textContent || '').length + 1;
+                        }
+                        const lineRange = document.createRange();
+                        lineRange.selectNodeContents(lineEl);
+                        lineRange.setEnd(range.startContainer, range.startOffset);
+                        offset += lineRange.toString().length;
+                        return offset;
+                    }
+                }
+
+                return getTextOffsetFromPoint(pre, clientX, clientY);
+            }
+
+            function positionCodeFenceEditOverlay(editArea, highlightPre, wrap) {
+                if (!editArea || !highlightPre || !wrap) return;
+
+                editArea.style.top = `${highlightPre.offsetTop}px`;
+                editArea.style.left = `${highlightPre.offsetLeft}px`;
+                editArea.style.width = `${highlightPre.offsetWidth}px`;
+                syncCodeFenceStackHeights(editArea, highlightPre);
+
+                const insets = measureHighlightTextInsets(highlightPre);
+                editArea.style.paddingTop = `${insets.top}px`;
+                editArea.style.paddingLeft = `${insets.left}px`;
+                editArea.style.paddingRight = `${insets.right}px`;
+                editArea.style.paddingBottom = `${insets.bottom}px`;
+
+                const fontLine = highlightPre.querySelector('.hljs-ln-line')
+                    || highlightPre.querySelector('td.hljs-ln-code')
+                    || highlightPre.querySelector('code');
+                if (fontLine) {
+                    const fs = window.getComputedStyle(fontLine);
+                    editArea.style.fontFamily = fs.fontFamily;
+                    editArea.style.fontSize = fs.fontSize;
+                    editArea.style.lineHeight = fs.lineHeight;
+                    editArea.style.letterSpacing = fs.letterSpacing;
+                    editArea.style.fontWeight = fs.fontWeight;
+                    editArea.style.fontVariantLigatures = fs.fontVariantLigatures;
+                    editArea.style.fontFeatureSettings = fs.fontFeatureSettings;
+                    editArea.style.tabSize = fs.tabSize || '4';
+                }
+            }
+
             function detachCodeFenceEditListeners(block) {
+                clearCodeFenceHighlightTimer();
+                detachSpecialBlockEditListeners(block);
+
                 const wrap = block?._codeFenceEditWrap;
+                const pre = block?._codeFenceEditPre;
+                if (pre) {
+                    pre.removeAttribute('contenteditable');
+                    pre.removeAttribute('spellcheck');
+                }
                 if (!wrap) return;
-                if (block._codeFenceFocusOut) {
-                    wrap.removeEventListener('focusout', block._codeFenceFocusOut);
-                }
-                if (block._codeFenceKeyDown) {
-                    wrap.removeEventListener('keydown', block._codeFenceKeyDown);
-                }
+
                 delete block._codeFenceEditWrap;
-                delete block._codeFenceFocusOut;
-                delete block._codeFenceKeyDown;
                 delete block._codeFenceEditPre;
+                delete block._codeFenceHighlightPre;
+                delete block._codeFenceHighlightCode;
                 delete block._codeFenceLang;
+                if (block._codeFenceResizeObs) {
+                    block._codeFenceResizeObs.disconnect();
+                    delete block._codeFenceResizeObs;
+                }
+                if (block._codeFenceScrollHandler && pre) {
+                    pre.removeEventListener('scroll', block._codeFenceScrollHandler);
+                    delete block._codeFenceScrollHandler;
+                }
+            }
+
+            function looksLikeMarkdownProse(text) {
+                return /(\*\*|__|~~|^\s{0,3}[-*+]\s|^\s{0,3}\d+\.\s|\[[^\]]+\]\([^)]+\))/.test(text || '');
             }
 
             function detectCodeLanguage(code) {
@@ -2598,7 +3203,7 @@
             function setupCodeFenceBlock(el, block, index, readOnly) {
                 let { lang, inner } = parseCodeFenceSource(block.source);
 
-                if (!lang && inner.trim() && !readOnly) {
+                if (!lang && inner.trim() && !readOnly && !looksLikeMarkdownProse(inner)) {
                     const detected = detectCodeLanguage(inner);
                     if (detected) {
                         lang = detected;
@@ -2655,7 +3260,8 @@
                         if (e.target.closest('.code-fence-lang-bar')) return;
                         if (activeBlockIndex === index) return;
                         e.preventDefault();
-                        activateCodeFenceBlock(index);
+                        const caretOffset = getCodeFenceOffsetFromPoint(pre, e.clientX, e.clientY);
+                        activateCodeFenceBlock(index, { caretOffset });
                     };
                     wrap.addEventListener('mousedown', openForEdit);
                     pre.addEventListener('mousedown', openForEdit);
@@ -2698,7 +3304,16 @@
                 select.addEventListener('mousedown', (e) => e.stopPropagation());
                 select.addEventListener('change', () => {
                     block._codeFenceLang = select.value;
-                    if (!block.el.querySelector('.code-fence-edit-area')) {
+                    const highlightPre = block._codeFenceEditPre
+                        || block._codeFenceHighlightPre
+                        || block.el.querySelector('.code-fence-wrap pre.hljs');
+                    if (highlightPre && block._codeFenceEditWrap?.classList.contains('is-editing')) {
+                        block._codeFenceLang = select.value;
+                        clearCodeFenceHighlightTimer();
+                        refreshCodeFenceLiveHighlight(block, highlightPre);
+                        return;
+                    }
+                    if (!block.el.querySelector('.code-fence-wrap.is-editing')) {
                         const parsed = parseCodeFenceSource(block.source);
                         block.source = buildCodeFenceSource(select.value, parsed.inner);
                         setupCodeFenceBlock(block.el, block, index, false);
@@ -2712,7 +3327,7 @@
                 return select;
             }
 
-            function activateCodeFenceBlock(index) {
+            function activateCodeFenceBlock(index, options = {}) {
                 if (activeBlockIndex === index) return;
 
                 if (activeBlockIndex !== -1) {
@@ -2723,72 +3338,65 @@
                 const block = liveBlocks[index];
                 const { lang, inner } = parseCodeFenceSource(block.source);
                 block._codeFenceLang = lang;
+                const initialCaret = options.caretOffset;
 
                 block.el.className = 'live-block is-rendered';
                 block.el.removeAttribute('contenteditable');
                 block.el.onblur = null;
                 block.el.onkeydown = null;
 
-                const wrap = document.createElement('div');
-                wrap.className = 'code-fence-wrap is-editing';
-                appendCodeFenceLangBar(wrap, block, index, lang);
+                let wrap = block.el.querySelector('.code-fence-wrap');
+                if (!wrap) {
+                    setupCodeFenceBlock(block.el, block, index, false);
+                    wrap = block.el.querySelector('.code-fence-wrap');
+                }
+                if (!wrap) return;
 
-                const pre = document.createElement('pre');
-                pre.className = 'code-fence-edit-area';
-                pre.setAttribute('contenteditable', 'true');
-                pre.setAttribute('spellcheck', 'false');
-                pre.textContent = inner;
-                wrap.appendChild(pre);
+                const highlightPre = wrap.querySelector('pre.hljs');
+                if (!highlightPre) return;
 
-                block.el.innerHTML = '';
-                block.el.appendChild(wrap);
-                block._codeFenceEditPre = pre;
+                wrap.querySelector('.code-fence-edit-stack')?.remove();
+                wrap.querySelector('.code-fence-edit-row')?.remove();
+
+                wrap.classList.add('is-editing');
+
+                const codeText = readCodeFenceInner(highlightPre) || inner;
+                highlightPre.querySelector('.code-fence-placeholder')?.remove();
+                highlightPre.classList.toggle('is-empty', !codeText.trim());
+
+                let code = highlightPre.querySelector('code');
+                if (!code) {
+                    code = document.createElement('code');
+                }
+                paintCodeFenceHighlight(highlightPre, code, lang, codeText);
+
+                highlightPre.setAttribute('contenteditable', 'true');
+                highlightPre.setAttribute('spellcheck', 'false');
+
+                block._codeFenceEditPre = highlightPre;
                 block._codeFenceEditWrap = wrap;
+                block._codeFenceHighlightPre = highlightPre;
 
-                const onFocusOut = (e) => {
-                    const next = e.relatedTarget;
-                    if (next && wrap.contains(next)) return;
-                    if (activeBlockIndex === index) {
-                        deactivateCurrentBlock();
-                    }
+                const onCodeFenceInput = () => {
+                    const currentLang = block._codeFenceLang != null
+                        ? block._codeFenceLang
+                        : lang;
+                    block.source = buildCodeFenceSource(
+                        currentLang,
+                        getTextFromContentEditable(highlightPre)
+                    );
+                    scheduleCodeFenceLiveHighlight(block, highlightPre);
                 };
-                block._codeFenceFocusOut = onFocusOut;
-                wrap.addEventListener('focusout', onFocusOut);
 
-                const onKeyDown = (e) => {
-                    if (e.key === 'Escape') {
-                        e.preventDefault();
-                        deactivateCurrentBlock();
-                        return;
-                    }
-                    if (e.key === 'Tab') {
-                        e.preventDefault();
-                        document.execCommand('insertText', false, '    ');
-                        return;
-                    }
-
-                    const currentOffset = getCaretOffsetInEditable(pre);
-                    const textLength = (pre.textContent || '').length;
-
-                    if (e.key === 'ArrowUp' && currentOffset === 0 && index > 0) {
-                        e.preventDefault();
-                        deactivateCurrentBlock();
-                        activateBlockAtOffset(index - 1, blockMarkdownLength(liveBlocks[index - 1]));
-                        return;
-                    }
-
-                    if (e.key === 'ArrowDown' && currentOffset === textLength && index < liveBlocks.length - 1) {
-                        e.preventDefault();
-                        deactivateCurrentBlock();
-                        activateBlockAtOffset(index + 1, 0);
-                    }
-                };
-                wrap.addEventListener('keydown', onKeyDown);
-                block._codeFenceKeyDown = onKeyDown;
+                attachSpecialBlockEditHandlers(block, index, wrap, highlightPre, onCodeFenceInput);
 
                 requestAnimationFrame(() => {
-                    pre.focus();
-                    placeCaretAtEnd(pre);
+                    highlightPre.focus();
+                    let pos = codeText.length;
+                    if (initialCaret != null && initialCaret >= 0) {
+                        pos = Math.min(initialCaret, codeText.length);
+                    }
+                    placeCaretAtTextOffset(highlightPre, pos);
                 });
             }
 
@@ -3101,7 +3709,7 @@
                     }
 
                     const currentOffset = getCaretOffsetInEditable(pre);
-                    const textLength = (pre.textContent || '').length;
+                    const textLength = getTextFromContentEditable(pre).length;
 
                     if (e.key === 'ArrowUp' && currentOffset === 0 && index > 0) {
                         e.preventDefault();
@@ -4926,6 +5534,7 @@
                 el.className = 'live-block is-rendered';
                 el.setAttribute('data-type', block.type);
                 el.setAttribute('data-index', index);
+                el.dataset.blockSource = block.source || '';
 
                 if (block.type === 'empty') {
                     el.innerHTML = '<br>';
@@ -5335,7 +5944,11 @@
                 const block = liveBlocks[activeBlockIndex];
 
                 if (block.type === 'code-fence') {
+                    clearCodeFenceHighlightTimer();
+
                     const codeEditPre = block._codeFenceEditPre
+                        || block.el.querySelector('.code-fence-wrap.is-editing pre.hljs')
+                        || block.el.querySelector('.code-fence-edit-input')
                         || block.el.querySelector('.code-fence-edit-area');
 
                     if (codeEditPre) {
@@ -5345,6 +5958,10 @@
                         const inner = readCodeFenceInner(codeEditPre);
                         block.source = buildCodeFenceSource(lang, inner);
                     }
+
+                    const editingWrap = block.el.querySelector('.code-fence-wrap.is-editing');
+                    editingWrap?.querySelector('.code-fence-edit-row')?.remove();
+                    editingWrap?.classList.remove('is-editing', 'has-line-numbers');
 
                     detachCodeFenceEditListeners(block);
 
@@ -5356,8 +5973,7 @@
                     setupCodeFenceBlock(block.el, block, activeBlockIndex, false);
                     activeBlockIndex = -1;
                     syncLiveContentToModel();
-                    highlightCodeBlocks(liveEditor);
-                    rewriteImagesInContainer(liveEditor);
+                    highlightCodeBlocks(block.el);
                     return;
                 }
 

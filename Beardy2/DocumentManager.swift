@@ -797,7 +797,7 @@ class DocumentManager: ObservableObject {
     }
     
     func insertCodeBlock() {
-        insertText("\n```\n\n```\n")
+        execEditorJS("window.cmEditor?.insertCodeBlock();")
     }
     
     func insertBlockquote() {
