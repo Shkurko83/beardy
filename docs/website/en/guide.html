@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How to Use Beardy — Step-by-Step Guide</title>
+  <meta name="description" content="Simple instructions for Beardy on Mac: open a file, write text, switch view modes, save and export. By Konstantin Shkurko.">
+  <meta name="author" content="Konstantin Shkurko">
+  <link rel="canonical" href="https://beardy.app/en/guide.html">
+  <link rel="alternate" hreflang="en" href="https://beardy.app/en/guide.html">
+  <link rel="alternate" hreflang="ru" href="https://beardy.app/ru/guide.html">
+  <link rel="alternate" hreflang="de" href="https://beardy.app/de/guide.html">
+  <link rel="alternate" hreflang="fr" href="https://beardy.app/fr/guide.html">
+  <link rel="alternate" hreflang="es" href="https://beardy.app/es/guide.html">
+  <meta property="og:title" content="How to Use Beardy">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://beardy.app/en/guide.html">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/main.css">
+  <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    "name": "How to use Beardy on Mac",
+    "description": "Step-by-step: open a document, write, choose a view mode, save and export.",
+    "inLanguage": "en",
+    "author": {
+      "@type": "Person",
+      "name": "Konstantin Shkurko",
+      "alternateName": "Константин Шкурко"
+    }
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#guide-main">Skip to content</a>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html"><span class="logo-placeholder" aria-hidden="true">B</span><span>Beardy</span></a>
+      <nav class="nav-desktop" aria-label="Primary">
+        <a href="index.html#features">What it does</a>
+        <a href="index.html#modes">View modes</a>
+        <a href="guide.html" aria-current="page">How to use</a>
+      </nav>
+      <div class="header-controls">
+        <div class="lang-menu">
+          <button type="button" class="select-btn" id="lang-toggle" aria-expanded="false" aria-haspopup="listbox">EN</button>
+          <div class="lang-dropdown" id="lang-dropdown" role="listbox">
+            <a href="../en/guide.html" data-lang="en" aria-current="page" hreflang="en">English</a>
+            <a href="../ru/guide.html" data-lang="ru" hreflang="ru">Русский</a>
+            <a href="../de/guide.html" data-lang="de" hreflang="de">Deutsch</a>
+            <a href="../fr/guide.html" data-lang="fr" hreflang="fr">Français</a>
+            <a href="../es/guide.html" data-lang="es" hreflang="es">Español</a>
+          </div>
+        </div>
+        <button type="button" class="icon-btn" id="theme-toggle" aria-label="Theme">◐</button>
+        <button type="button" class="icon-btn menu-toggle" id="menu-toggle" aria-label="Menu">☰</button>
+      </div>
+    </div>
+  </header>
+  <div class="mobile-nav-overlay" id="mobile-nav-overlay" hidden></div>
+  <nav class="mobile-nav" id="mobile-nav" hidden>
+    <a href="index.html">Home</a>
+    <a href="#what">What is Beardy</a>
+    <a href="#start">First launch</a>
+    <a href="#modes">View modes</a>
+    <a href="#save">Save</a>
+  </nav>
+
+  <div class="container guide-layout">
+    <aside class="guide-toc" aria-label="Table of contents">
+      <h2>On this page</h2>
+      <a href="#what">What is Beardy</a>
+      <a href="#start">First launch</a>
+      <a href="#write">How to write</a>
+      <a href="#modes">View modes</a>
+      <a href="#save">Save files</a>
+      <a href="#outline">Headings list</a>
+      <a href="#tabs">Several files</a>
+      <a href="#themes">Colors and theme</a>
+      <a href="#settings">Settings</a>
+      <a href="#shortcuts">Keyboard shortcuts</a>
+      <a href="#export">Export to PDF and others</a>
+      <a href="#extra">Formulas and charts (optional)</a>
+    </aside>
+
+    <article class="guide-content" id="guide-main">
+      <h1>How to use Beardy</h1>
+      <p class="lead">This guide is written in simple language. If you have never used Markdown — that is fine. Follow the steps in order.</p>
+
+      <h2 id="what">What is Beardy and what is Markdown?</h2>
+      <p><strong>Beardy</strong> is a program for Mac that helps you write and read text files in <strong>Markdown</strong> format.</p>
+      <p><strong>Markdown</strong> is not a separate program — it is a way to mark up text. For example:</p>
+      <ul>
+        <li><code># Title</code> — large heading</li>
+        <li><code>**bold**</code> — bold text</li>
+        <li><code>- item</code> — bullet list</li>
+      </ul>
+      <p>Beardy shows you either the “marks” (symbols) or the finished look — like in a browser or PDF.</p>
+
+      <h2 id="start">First launch — what to press</h2>
+      <p>When you open Beardy, you see the welcome screen with three main actions:</p>
+      <ol class="guide-steps">
+        <li><strong>New Document</strong> — start with an empty page.</li>
+        <li><strong>Open File</strong> — open an existing file from your Mac (often with the ending <code>.md</code>).</li>
+        <li><strong>Import</strong> — drag a file from Finder into the Beardy window.</li>
+      </ol>
+      <div class="guide-callout">
+        <p><strong>Recent files:</strong> below the buttons you may see files you opened before. Click a name to open it again. The <strong>Clear</strong> button removes the list (files on disk are not deleted).</p>
+      </div>
+
+      <h2 id="write">How to write and format text</h2>
+      <p>At the top of the window there is a <strong>toolbar</strong> with icons. They insert formatting for you:</p>
+      <ul>
+        <li>bold and italic;</li>
+        <li>headings and lists;</li>
+        <li>link, image, block of code.</li>
+      </ul>
+      <p>You can also type symbols yourself — for example <code>**word**</code> for bold.</p>
+      <p>To <strong>undo</strong> a mistake: menu Edit → Undo, or the usual Mac shortcut (see section below).</p>
+
+      <h2 id="modes">Four view modes — what each one means</h2>
+      <p>At the top you can switch the mode. It is the same document — only the display changes.</p>
+      <h3>Edit</h3>
+      <p>You see plain text with symbols (<code>#</code>, <code>**</code>, and so on). Best when you copy code or edit symbols by hand.</p>
+      <h3>Live</h3>
+      <p>Text looks “finished” while you type — headings are large, bold is bold. Convenient for articles and notes.</p>
+      <h3>Split</h3>
+      <p>Left — text with symbols, right — how it will look. Good for learning Markdown and for long documents.</p>
+      <h3>Preview</h3>
+      <p>Only the finished look, without symbols. Convenient before printing or export.</p>
+      <div class="guide-callout">
+        <p><strong>Tip:</strong> for a long document use <strong>Split</strong> and turn on “sync scroll” in Settings → Appearance — both sides scroll together.</p>
+      </div>
+
+      <h2 id="save">How to save</h2>
+      <p>Beardy saves your work as a normal text file on your Mac.</p>
+      <ol class="guide-steps">
+        <li>Menu <strong>File → Save</strong> (or the standard Mac save shortcut — see below).</li>
+        <li>In <strong>Settings → General</strong> you can turn on <strong>auto-save</strong> — then the app saves every 10–120 seconds by itself.</li>
+      </ol>
+      <p>If you insert images, the app can copy them into the document folder — then the file will open correctly on another Mac too (setting in Settings → Editor).</p>
+
+      <h2 id="outline">Headings list (Outline)</h2>
+      <p>If your document has headings (<code>#</code>, <code>##</code>, …), open the <strong>headings panel</strong> on the toolbar.</p>
+      <p>You will see a list of section names. <strong>Click a name</strong> — the document scrolls to that place. You can drag the edge of the panel to make it wider or narrower.</p>
+
+      <h2 id="tabs">Several documents at once</h2>
+      <p>You can open multiple files in <strong>tabs</strong> (like in a browser). Each tab is a separate document. Switching tabs does not erase your undo history in each file.</p>
+
+      <h2 id="themes">Colors and theme</h2>
+      <p>Do you want a dark or light screen? Open the theme list from the menu or toolbar (in the app it may be called “Themes”). Pick a look you like.</p>
+      <p>On this website, the circle button at the top (◐) switches light / dark / system theme for the site only — not inside Beardy.</p>
+
+      <h2 id="settings">Settings — what is where</h2>
+      <p>Open <strong>Settings</strong> from the Beardy menu or toolbar. Main tabs:</p>
+      <ul>
+        <li><strong>General</strong> — auto-save on/off and how often.</li>
+        <li><strong>Editor</strong> — font size, line numbers, tabs or spaces.</li>
+        <li><strong>Typing</strong> — spell check; “smart quotes” (often better to leave off for technical text).</li>
+        <li><strong>Appearance</strong> — scroll text and preview together in Split mode.</li>
+        <li><strong>Export</strong> — options for PDF and images.</li>
+      </ul>
+
+      <h2 id="shortcuts">Keyboard shortcuts (for Mac)</h2>
+      <p>On Mac, the <kbd>⌘</kbd> key is called <strong>Command</strong> (⌘ symbol, next to the space bar). Beardy supports common shortcuts:</p>
+      <ul>
+        <li><kbd>⌘N</kbd> — new document</li>
+        <li><kbd>⌘O</kbd> — open file</li>
+        <li><kbd>⌘S</kbd> — save</li>
+        <li><kbd>⌘Z</kbd> — undo · <kbd>⌘⇧Z</kbd> — redo</li>
+        <li><kbd>⌘B</kbd> bold · <kbd>⌘I</kbd> italic</li>
+        <li><kbd>⌘K</kbd> — full list of shortcuts inside the app</li>
+      </ul>
+      <p>You do not have to memorize them — everything can be done with the mouse and menus.</p>
+
+      <h2 id="export">Export to PDF and other formats</h2>
+      <p>When the text is ready:</p>
+      <ol class="guide-steps">
+        <li>Open menu <strong>File</strong> (or Share).</li>
+        <li>Choose format: <strong>PDF</strong>, web page (<strong>HTML</strong>), <strong>picture</strong> (PNG), or <strong>Word</strong> (DOCX).</li>
+      </ol>
+      <p>For a book file (<strong>EPUB</strong>) you need the free program <a href="https://pandoc.org/" rel="noopener">Pandoc</a> installed on your Mac.</p>
+
+      <h2 id="extra">Formulas and charts (if you need them)</h2>
+      <p>This is optional. For a formula in text use dollar signs, for example <code>$E = mc^2$</code>. For a simple flowchart — a code block with the word <code>mermaid</code>. The app shows them in preview without internet.</p>
+      <p>If you do not need math or charts — you can skip this section.</p>
+
+      <p><a href="index.html">← Back to Beardy home page</a></p>
+    </article>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-bottom">
+      <span>© <span data-year></span> Konstantin Shkurko · Beardy</span>
+      <span><a href="index.html">Home</a></span>
+    </div>
+  </footer>
+  <script src="../assets/js/theme.js"></script>
+  <script src="../assets/js/lang-persist.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script>document.getElementById("mobile-nav").hidden=false;document.getElementById("mobile-nav-overlay").hidden=false;</script>
+</body>
+</html>

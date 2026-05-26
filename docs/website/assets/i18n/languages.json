@@ -1,0 +1,11 @@
+{
+  "default": "en",
+  "supported": [
+    { "code": "en", "name": "English", "hreflang": "en", "ogLocale": "en_US" },
+    { "code": "ru", "name": "Русский", "hreflang": "ru", "ogLocale": "ru_RU" },
+    { "code": "de", "name": "Deutsch", "hreflang": "de", "ogLocale": "de_DE" },
+    { "code": "fr", "name": "Français", "hreflang": "fr", "ogLocale": "fr_FR" },
+    { "code": "es", "name": "Español", "hreflang": "es", "ogLocale": "es_ES" }
+  ],
+  "_comment": "To add a language: create /xx/index.html and /xx/guide.html, add entries here, update sitemap.xml, hreflang links, llms.txt, and locale-redirect.js SUPPORTED array."
+}

@@ -43,6 +43,12 @@ class DocumentManager: ObservableObject {
     private var sidebarBeforeReadingChrome: Bool?
     private var outlineBeforeReadingChrome: Bool?
     private var wasReadingChrome = false
+    private var undoHistories: [UUID: DocumentUndoHistory] = [:]
+    private var isApplyingUndoRedo = false
+    private var lastUndoRedoActionTime: Date?
+
+    @Published private(set) var canUndo = false
+    @Published private(set) var canRedo = false
 
     var currentDocument: MarkdownDocument? {
         get {
@@ -157,6 +163,10 @@ class DocumentManager: ObservableObject {
         guard tabs.contains(where: { $0.id == id }) else { return }
         DocumentSecurityAccess.deactivate()
         selectedTabID = id
+        if let tab = tabs.first(where: { $0.id == id }) {
+            ensureUndoHistory(for: id, content: tab.document.content)
+        }
+        refreshUndoAvailability()
         if let url = currentDocument?.url {
             DocumentSecurityAccess.activate(document: url)
         }
@@ -184,6 +194,7 @@ class DocumentManager: ObservableObject {
             }
         }
 
+        undoHistories.removeValue(forKey: id)
         tabs.remove(at: index)
         if selectedTabID == id {
             if tabs.isEmpty {
@@ -224,6 +235,7 @@ class DocumentManager: ObservableObject {
         let tab = EditorTab(document: doc)
         tabs.append(tab)
         selectedTabID = tab.id
+        resetUndoHistory(for: tab.id, content: doc.content)
     }
 
     private func nextUntitledFileName() -> String {
@@ -460,17 +472,119 @@ class DocumentManager: ObservableObject {
         }
     }
     
-    func updateContent(_ newContent: String) {
+    func updateContent(_ newContent: String, recordUndo: Bool = true) {
         guard let id = selectedTabID,
               let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         var doc = tabs[index].document
         guard doc.content != newContent else { return }
+
+        if recordUndo && !isApplyingUndoRedo {
+            ensureUndoHistory(for: id, content: doc.content)
+            if var history = undoHistories[id] {
+                history.record(content: newContent)
+                undoHistories[id] = history
+            }
+            refreshUndoAvailability()
+        }
+
         doc.content = newContent
         doc.hasUnsavedChanges = true
         doc.lastModifiedDate = Date()
         tabs[index].document = doc
         scheduleStatisticsUpdate(tabIndex: index)
         scheduleOutlineUpdate()
+    }
+
+    func resetUndoHistory(for tabID: UUID, content: String) {
+        var history = DocumentUndoHistory()
+        history.reset(with: content)
+        undoHistories[tabID] = history
+        refreshUndoAvailability()
+    }
+
+    func ensureUndoHistory(for tabID: UUID, content: String) {
+        if undoHistories[tabID] == nil {
+            resetUndoHistory(for: tabID, content: content)
+        }
+    }
+
+    func requestUndo() {
+        execEditorJS("window.cmEditor?.performUndo?.();")
+    }
+
+    func requestRedo() {
+        execEditorJS("window.cmEditor?.performRedo?.();")
+    }
+
+    func undo(editorSnapshot: String? = nil) {
+        guard shouldProcessUndoRedo() else { return }
+        commitEditorSnapshot(editorSnapshot)
+        guard let id = selectedTabID,
+              var history = undoHistories[id],
+              let content = history.undo() else { return }
+        undoHistories[id] = history
+        applyHistoryContent(content)
+    }
+
+    func redo(editorSnapshot: String? = nil) {
+        guard shouldProcessUndoRedo() else { return }
+        commitEditorSnapshot(editorSnapshot)
+        guard let id = selectedTabID,
+              var history = undoHistories[id],
+              let content = history.redo() else { return }
+        undoHistories[id] = history
+        applyHistoryContent(content)
+    }
+
+    private func commitEditorSnapshot(_ snapshot: String?) {
+        guard let snap = snapshot,
+              let id = selectedTabID,
+              var history = undoHistories[id] else { return }
+        if history.states.indices.contains(history.index), history.states[history.index] != snap {
+            history.replaceCurrent(with: snap)
+            undoHistories[id] = history
+        }
+    }
+
+    private func applyHistoryContent(_ content: String) {
+        guard let id = selectedTabID,
+              let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+
+        isApplyingUndoRedo = true
+        defer {
+            isApplyingUndoRedo = false
+            refreshUndoAvailability()
+        }
+
+        var doc = tabs[index].document
+        doc.content = content
+        doc.hasUnsavedChanges = true
+        doc.lastModifiedDate = Date()
+        tabs[index].document = doc
+        scheduleStatisticsUpdate(tabIndex: index)
+        scheduleOutlineUpdate()
+
+        NotificationCenter.default.post(name: .editorHistoryContentApplied, object: content)
+        execEditorJS("window.cmEditor?.applyHistoryContent(`\(escapeForJS(content))`);")
+    }
+
+    private func shouldProcessUndoRedo() -> Bool {
+        let now = Date()
+        if let last = lastUndoRedoActionTime, now.timeIntervalSince(last) < 0.12 {
+            return false
+        }
+        lastUndoRedoActionTime = now
+        return true
+    }
+
+    private func refreshUndoAvailability() {
+        guard let id = selectedTabID, let history = undoHistories[id] else {
+            canUndo = false
+            canRedo = false
+            return
+        }
+        canUndo = history.canUndo
+        canRedo = history.canRedo
     }
 
     func requestOutlineHeadings(immediately: Bool = false) {
@@ -1308,6 +1422,7 @@ extension Notification.Name {
     static let showReplacePanel = Notification.Name("showReplacePanel")
     static let editorExecJS = Notification.Name("editorExecJS")
     static let outlineHeadingsDidUpdate = Notification.Name("outlineHeadingsDidUpdate")
+    static let editorHistoryContentApplied = Notification.Name("editorHistoryContentApplied")
     static let processImageFile = Notification.Name("processImageFile")
     static let readingChromeSettingsChanged = Notification.Name("readingChromeSettingsChanged")
 }

@@ -932,7 +932,7 @@
                 </svg>
             </button>
             <div class="editor-pane" id="markdown-pane">
-                <textarea id="markdown-textarea" style="
+                <textarea id="markdown-textarea" lang="en" autocorrect="off" autocomplete="off" autocapitalize="off" spellcheck="false" data-gramm="false" style="
                 width: 100%; height: 100%; border: none; outline: none;
                 font-family: 'SF Mono', Monaco, monospace; font-size: 14px;
                 padding: 40px 60px; background: transparent;
@@ -951,6 +951,7 @@
             console.log('🎉 Загрузка скрипта');
             
             let isSyncing = false;
+            let isApplyingHistory = false;
             let currentContent = '';
             let isInitialized = false;
             let syncScroll = true;
@@ -982,6 +983,111 @@
                     clearTimeout(timer);
                 };
                 return debounced;
+            }
+
+            const SMART_DOUBLE_QUOTES = /[\u201C\u201D\u201E\u201F\u2033\u2036\u00AB\u00BB]/g;
+            const SMART_SINGLE_QUOTES = /[\u2018\u2019\u201A\u201B\u2032\u2035]/g;
+
+            function normalizeSmartQuotes(text) {
+                return String(text || '')
+                    .replace(SMART_DOUBLE_QUOTES, '"')
+                    .replace(SMART_SINGLE_QUOTES, "'");
+            }
+
+            function configurePlainTextTyping(el) {
+                if (!el) return;
+                el.setAttribute('autocorrect', 'off');
+                el.setAttribute('autocomplete', 'off');
+                el.setAttribute('autocapitalize', 'off');
+                el.setAttribute('spellcheck', 'false');
+                el.setAttribute('data-gramm', 'false');
+                el.setAttribute('data-gramm_editor', 'false');
+                el.setAttribute('data-enable-grammarly', 'false');
+            }
+
+            let isNormalizingQuotes = false;
+
+            function insertPlainTextAtSelection(el, text) {
+                if (el.isContentEditable) {
+                    const sel = window.getSelection();
+                    if (!sel || sel.rangeCount === 0) return false;
+                    const range = sel.getRangeAt(0);
+                    if (!el.contains(range.commonAncestorContainer)) return false;
+                    range.deleteContents();
+                    range.insertNode(document.createTextNode(text));
+                    range.collapse(false);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    return true;
+                }
+                if (typeof el.setRangeText === 'function' && el.selectionStart != null) {
+                    const start = el.selectionStart;
+                    const end = el.selectionEnd ?? start;
+                    el.setRangeText(text, start, end, 'end');
+                    return true;
+                }
+                return false;
+            }
+
+            function attachPlainTextTyping(el) {
+                if (!el || el.dataset.plainTextTyping === 'true') return;
+                el.dataset.plainTextTyping = 'true';
+                configurePlainTextTyping(el);
+
+                const isTextarea = el.tagName === 'TEXTAREA';
+
+                el.addEventListener('beforeinput', (e) => {
+                    if (isNormalizingQuotes || isApplyingHistory || e.isComposing) return;
+                    const data = e.data;
+                    if (!data) return;
+                    const normalized = normalizeSmartQuotes(data);
+                    if (normalized === data) return;
+                    e.preventDefault();
+                    isNormalizingQuotes = true;
+                    try {
+                        insertPlainTextAtSelection(el, normalized);
+                    } finally {
+                        isNormalizingQuotes = false;
+                    }
+                }, true);
+
+                el.addEventListener('paste', (e) => {
+                    if (isNormalizingQuotes || isApplyingHistory) return;
+                    const raw = e.clipboardData?.getData('text/plain');
+                    if (!raw) return;
+                    const normalized = normalizeSmartQuotes(raw);
+                    if (normalized === raw) return;
+                    e.preventDefault();
+                    isNormalizingQuotes = true;
+                    try {
+                        insertPlainTextAtSelection(el, normalized);
+                    } finally {
+                        isNormalizingQuotes = false;
+                    }
+                });
+
+                if (isTextarea) {
+                    el.addEventListener('input', () => {
+                        if (isNormalizingQuotes || isApplyingHistory || isSyncing) return;
+                        const start = el.selectionStart ?? 0;
+                        const end = el.selectionEnd ?? start;
+                        const value = el.value;
+                        const normalized = normalizeSmartQuotes(value);
+                        if (normalized === value) return;
+                        isNormalizingQuotes = true;
+                        try {
+                            const before = value.slice(0, start);
+                            const fixedBefore = normalizeSmartQuotes(before);
+                            const delta = fixedBefore.length - before.length;
+                            el.value = normalized;
+                            const nextStart = Math.max(0, start + delta);
+                            const nextEnd = Math.max(0, end + delta);
+                            el.setSelectionRange(nextStart, nextEnd);
+                        } finally {
+                            isNormalizingQuotes = false;
+                        }
+                    });
+                }
             }
 
             function isPreviewActive() {
@@ -1058,12 +1164,37 @@
             }, 320);
 
             const scheduleContentSync = debounce((text) => {
+                if (isApplyingHistory) return;
                 if (window.webkit?.messageHandlers?.contentChanged) {
                     isSyncing = true;
                     window.webkit.messageHandlers.contentChanged.postMessage(text);
                     setTimeout(() => { isSyncing = false; }, 400);
                 }
             }, 180);
+
+            function getEditorSnapshotForUndo() {
+                if (isLiveActive() && liveBlocks.length) {
+                    currentContent = liveBlocks.map((block) => blockToMarkdownSource(block)).join('\n');
+                    textarea.value = currentContent;
+                } else {
+                    flushPendingEditorUpdates();
+                }
+                scheduleContentSync.cancel();
+                return textarea.value || currentContent || '';
+            }
+
+            function handleGlobalUndoRedoKeydown(e) {
+                const key = (e.key || '').toLowerCase();
+                if (!(e.metaKey || e.ctrlKey) || key !== 'z') return;
+                if (!window.webkit?.messageHandlers?.editorUndoRedo) return;
+
+                e.preventDefault();
+                e.stopPropagation();
+
+                const snapshot = getEditorSnapshotForUndo();
+                const action = e.shiftKey ? 'redo' : 'undo';
+                window.webkit.messageHandlers.editorUndoRedo.postMessage({ action, snapshot });
+            }
 
             function flushPendingEditorUpdates() {
                 const text = textarea.value;
@@ -1843,7 +1974,7 @@
             
             window.cmEditor = {
                 updateContent(text) {
-                    if (isSyncing) return;
+                    if (isSyncing || isApplyingHistory) return;
                     const incoming = text ?? '';
                     if (incoming === currentContent) return;
                     currentContent = incoming;
@@ -2173,6 +2304,44 @@
                         window.webkit.messageHandlers.outlineHeadings.postMessage(items);
                     }
                     return items;
+                },
+
+                performUndo() {
+                    const snapshot = getEditorSnapshotForUndo();
+                    if (window.webkit?.messageHandlers?.editorUndoRedo) {
+                        window.webkit.messageHandlers.editorUndoRedo.postMessage({ action: 'undo', snapshot });
+                    }
+                },
+
+                performRedo() {
+                    const snapshot = getEditorSnapshotForUndo();
+                    if (window.webkit?.messageHandlers?.editorUndoRedo) {
+                        window.webkit.messageHandlers.editorUndoRedo.postMessage({ action: 'redo', snapshot });
+                    }
+                },
+
+                applyHistoryContent(text) {
+                    isApplyingHistory = true;
+                    isSyncing = true;
+                    const incoming = text ?? '';
+                    currentContent = incoming;
+                    textarea.value = incoming;
+                    schedulePreviewRender.cancel();
+                    scheduleLiveRebuild.cancel();
+                    scheduleContentSync.cancel();
+                    activeBlockIndex = -1;
+
+                    if (isPreviewActive()) {
+                        renderPreview(incoming, { preserveScroll: true });
+                    }
+                    if (isLiveActive()) {
+                        initLiveEditor(incoming);
+                    }
+
+                    setTimeout(() => {
+                        isApplyingHistory = false;
+                        isSyncing = false;
+                    }, 60);
                 }
                 
             };
@@ -2186,8 +2355,12 @@
                 renderPreview(initialText);
 
                 if (!isInitialized) {
+                    document.addEventListener('keydown', handleGlobalUndoRedoKeydown, true);
+                    attachPlainTextTyping(textarea);
+                    attachPlainTextTyping(document.getElementById('live-editor'));
+
                     textarea.addEventListener('input', () => {
-                        if (isSyncing) return;
+                        if (isSyncing || isApplyingHistory) return;
                         const text = textarea.value;
                         currentContent = text;
                         rememberTextareaSelection();
@@ -3107,6 +3280,7 @@
 
                 pre.setAttribute('contenteditable', 'true');
                 pre.setAttribute('spellcheck', 'false');
+                attachPlainTextTyping(pre);
 
                 requestAnimationFrame(() => {
                     placeCaretAtTextOffset(pre, offset);
@@ -3565,6 +3739,7 @@
 
                 highlightPre.setAttribute('contenteditable', 'true');
                 highlightPre.setAttribute('spellcheck', 'false');
+                attachPlainTextTyping(highlightPre);
 
                 block._codeFenceEditPre = highlightPre;
                 block._codeFenceEditWrap = wrap;
@@ -3987,6 +4162,7 @@
                 if (!readOnly) {
                     pre.setAttribute('contenteditable', 'true');
                     pre.setAttribute('spellcheck', 'false');
+                    attachPlainTextTyping(pre);
                 }
                 editorPane.appendChild(pre);
 
@@ -4068,6 +4244,7 @@
                 if (!readOnly) {
                     pre.setAttribute('contenteditable', 'true');
                     pre.setAttribute('spellcheck', 'false');
+                    attachPlainTextTyping(pre);
                 }
                 editorPane.appendChild(pre);
 
@@ -4454,6 +4631,7 @@
 
                 if (!readOnly) {
                     body.contentEditable = 'true';
+                    attachPlainTextTyping(body);
                     body.addEventListener('mousedown', (ev) => ev.stopPropagation());
                     body.addEventListener('focus', () => {
                         if (listSourceEditFinishing || body.dataset.sourceEdit === '1') return;
@@ -6099,6 +6277,7 @@
 
                 block.el.className = 'live-block is-source';
                 block.el.setAttribute('contenteditable', 'true');
+                attachPlainTextTyping(block.el);
                 block.el.textContent = block.source;
                 block.el.focus();
 
@@ -6287,6 +6466,7 @@
             }
 
             function syncLiveContentToModel() {
+                if (isApplyingHistory) return;
                 currentContent = liveBlocks.map((block) => blockToMarkdownSource(block)).join('\n');
                 textarea.value = currentContent;
                 schedulePreviewRender(currentContent);

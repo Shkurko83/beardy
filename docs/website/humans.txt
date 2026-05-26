@@ -1,0 +1,12 @@
+/* TEAM */
+Developer: Konstantin Shkurko (Константин Шкурко)
+Site: https://beardy.app/
+Product: Beardy — Markdown Editor for macOS
+
+/* THANKS */
+Users, contributors, and the open-source projects bundled in Beardy (CodeMirror, KaTeX, Mermaid, Highlight.js).
+
+/* SITE */
+Language: en, ru, de, fr, es
+Standards: HTML5, CSS3, Schema.org JSON-LD
+Software: Beardy2

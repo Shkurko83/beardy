@@ -101,6 +101,7 @@ struct MarkdownEditorArea: View {
     @State private var selectedRange: NSRange = NSRange(location: 0, length: 0)
     @FocusState private var isEditorFocused: Bool
     @State private var showFindPanel = false
+    @State private var suppressContentSync = false
     
     @AppStorage("previewSyncScroll") private var previewSyncScroll: Bool = true
     @Binding var scrollPosition: CGFloat
@@ -133,7 +134,14 @@ struct MarkdownEditorArea: View {
             EditorAppearanceSync.pushToEditor()
         }
         .onChange(of: textContent) { _, newValue in
+            guard !suppressContentSync else { return }
             documentManager.updateContent(newValue)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .editorHistoryContentApplied)) { notification in
+            guard let content = notification.object as? String else { return }
+            suppressContentSync = true
+            textContent = content
+            suppressContentSync = false
         }
         .onChange(of: previewSyncScroll) { _, enabled in
             NotificationCenter.default.post(
@@ -161,11 +169,14 @@ struct MarkdownEditorArea: View {
     }
     
     private func loadDocumentContent() {
-        if let doc = documentManager.currentDocument {
+        suppressContentSync = true
+        if let doc = documentManager.currentDocument, let tabID = documentManager.selectedTabID {
+            documentManager.ensureUndoHistory(for: tabID, content: doc.content)
             textContent = doc.content
         } else {
             textContent = ""
         }
+        suppressContentSync = false
     }
 }
 

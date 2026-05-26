@@ -127,6 +127,20 @@ struct MarkdownEditorApp: App {
                 .disabled(documentManager.currentDocument == nil)
             }
             
+            CommandGroup(replacing: .undoRedo) {
+                Button("Undo") {
+                    documentManager.requestUndo()
+                }
+                .keyboardShortcut("z", modifiers: .command)
+                .disabled(!documentManager.canUndo)
+
+                Button("Redo") {
+                    documentManager.requestRedo()
+                }
+                .keyboardShortcut("z", modifiers: [.command, .shift])
+                .disabled(!documentManager.canRedo)
+            }
+
             // Edit menu commands
             CommandGroup(after: .pasteboard) {
                 Divider()

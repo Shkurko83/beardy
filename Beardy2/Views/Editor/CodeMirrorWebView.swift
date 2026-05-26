@@ -14,7 +14,15 @@ struct CodeMirrorWebView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
-        config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+        let preferences = config.preferences
+        // Only use keys that exist on WKPreferences — invalid KVC keys crash the app.
+        if preferences.responds(to: Selector(("setAutomaticQuoteSubstitutionEnabled:"))) {
+            preferences.setValue(false, forKey: "automaticQuoteSubstitutionEnabled")
+        }
+        if preferences.responds(to: Selector(("setAutomaticDashSubstitutionEnabled:"))) {
+            preferences.setValue(false, forKey: "automaticDashSubstitutionEnabled")
+        }
+        preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
         config.setURLSchemeHandler(ImageSchemeHandler(), forURLScheme: "beardy")
 
@@ -30,6 +38,7 @@ struct CodeMirrorWebView: NSViewRepresentable {
         contentController.add(context.coordinator, name: "openURL")
         contentController.add(context.coordinator, name: "processImageFile")
         contentController.add(context.coordinator, name: "outlineHeadings")
+        contentController.add(context.coordinator, name: "editorUndoRedo")
 
         #if DEBUG
         webView.configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
@@ -263,6 +272,18 @@ struct CodeMirrorWebView: NSViewRepresentable {
                     object: nil,
                     userInfo: ["data": data, "filename": filename]
                 )
+            }
+
+            if message.name == "editorUndoRedo", let body = message.body as? [String: Any],
+               let action = body["action"] as? String {
+                let snapshot = body["snapshot"] as? String
+                DispatchQueue.main.async {
+                    if action == "undo" {
+                        DocumentManager.shared?.undo(editorSnapshot: snapshot)
+                    } else if action == "redo" {
+                        DocumentManager.shared?.redo(editorSnapshot: snapshot)
+                    }
+                }
             }
 
             if message.name == "outlineHeadings" {
