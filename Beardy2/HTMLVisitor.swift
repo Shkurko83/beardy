@@ -85,7 +85,9 @@ struct HTMLVisitor: MarkupVisitor {
     }
     
     mutating func visitUnorderedList(_ list: UnorderedList) -> String {
-        return "<ul>\(defaultVisit(list))</ul>\n"
+        let isTaskList = list.children.contains { ($0 as? ListItem)?.checkbox != nil }
+        let classAttr = isTaskList ? " class=\"task-list\"" : ""
+        return "<ul\(classAttr)>\(defaultVisit(list))</ul>\n"
     }
     
     mutating func visitOrderedList(_ list: OrderedList) -> String {
@@ -104,6 +106,10 @@ struct HTMLVisitor: MarkupVisitor {
             } else {
                 inner += visit(child)
             }
+        }
+        if let checkbox = listItem.checkbox {
+            let checked = checkbox == .checked ? "checked " : ""
+            return "<li class=\"task-list-item\"><input type=\"checkbox\" \(checked)disabled> \(inner)</li>\n"
         }
         return "<li>\(inner)</li>\n"
     }

@@ -43,8 +43,27 @@ class KeyboardShortcutsManager: ObservableObject {
     // MARK: - Handle Keyboard Event
     private func handleKeyboardEvent(_ event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags
-        let keyCode = event.keyCode
         let characters = event.charactersIgnoringModifiers ?? ""
+
+        if let documentManager = getDocumentManager(), documentManager.viewMode == .diff {
+            if event.keyCode == 53 {
+                documentManager.exitDiffMode()
+                return true
+            }
+            let chordless = modifiers.intersection([.command, .option, .control, .shift]).isEmpty
+            if chordless {
+                switch characters.lowercased() {
+                case "n":
+                    documentManager.diffNextChange()
+                    return true
+                case "p":
+                    documentManager.diffPreviousChange()
+                    return true
+                default:
+                    break
+                }
+            }
+        }
         
         // Command key shortcuts
         if modifiers.contains(.command) {
@@ -84,6 +103,10 @@ class KeyboardShortcutsManager: ObservableObject {
             
         case "e" where !hasShift && !hasOption:
             documentManager.exportAsPDF()
+            return true
+
+        case "d" where hasOption && !hasShift:
+            documentManager.toggleDiffMode()
             return true
             
         // Edit operations (handled by system, but we can add custom behavior)

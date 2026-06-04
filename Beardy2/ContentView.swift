@@ -226,10 +226,12 @@ struct ContentView: View {
                     ThemedDivider()
                 }
 
-                DocumentTabBar()
-                    .layoutPriority(0)
+                if documentManager.viewMode != .diff {
+                    DocumentTabBar()
+                        .layoutPriority(0)
 
-                ThemedDivider()
+                    ThemedDivider()
+                }
 
                 EditorView(
                     scrollPosition: $editorScrollPosition,
@@ -278,6 +280,7 @@ enum ViewMode: String, CaseIterable {
     case preview = "Preview"
     case split = "Split"
     case live = "Live"
+    case diff = "Diff"
 }
 
 private struct ThemedDivider: View {

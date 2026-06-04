@@ -20,9 +20,15 @@ struct EditorView: View {
     var body: some View {
         GeometryReader { geometry in
             HStack(spacing: 0) {
-                MarkdownEditorArea(scrollPosition: $scrollPosition)
-                    .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
-                    .layoutPriority(1)
+                Group {
+                    if documentManager.viewMode == .diff {
+                        DiffEditorArea()
+                    } else {
+                        MarkdownEditorArea(scrollPosition: $scrollPosition)
+                    }
+                }
+                .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+                .layoutPriority(1)
 
                 if documentManager.showOutline {
                     HStack(spacing: 0) {

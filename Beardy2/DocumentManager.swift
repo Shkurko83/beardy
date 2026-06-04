@@ -24,9 +24,23 @@ class DocumentManager: ObservableObject {
     @Published var viewMode: ViewMode = .edit {
         didSet {
             guard oldValue != viewMode else { return }
-            UserDefaults.standard.set(viewMode.rawValue, forKey: Self.viewModeDefaultsKey)
+            if viewMode == .diff, oldValue != .diff {
+                prepareDiffMode(enteringFrom: oldValue)
+            } else if oldValue == .diff, viewMode != .diff {
+                diffCoordinator.isActive = false
+            }
+            if viewMode != .diff {
+                UserDefaults.standard.set(viewMode.rawValue, forKey: Self.viewModeDefaultsKey)
+            }
         }
     }
+
+    @Published var diffCoordinator = DiffModeCoordinator()
+    /// Bumped when diff HTML changes so SwiftUI reloads the diff web view.
+    @Published private(set) var diffRenderRevision: UInt = 0
+
+    /// Comparison source / external file per editor tab.
+    private var tabDiffSettingsByTabID: [UUID: TabDiffSettings] = [:]
 
     private static let viewModeDefaultsKey = "selectedViewMode"
 
@@ -81,7 +95,8 @@ class DocumentManager: ObservableObject {
         loadFavorites()
         loadFolders()
         if let raw = UserDefaults.standard.string(forKey: Self.viewModeDefaultsKey),
-           let stored = ViewMode(rawValue: raw) {
+           let stored = ViewMode(rawValue: raw),
+           stored != .diff {
             viewMode = stored
         }
         focusMode = UserDefaults.standard.bool(forKey: AppConstants.Keys.focusMode)
@@ -89,7 +104,21 @@ class DocumentManager: ObservableObject {
         setupAutoSave()
         setupImagePasteObserver()
         setupOutlineHeadingsObserver()
+        setupDiffCoordinatorObserver()
+    }
 
+    private func setupDiffCoordinatorObserver() {
+        diffCoordinator.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+    }
+
+    private func markDiffRenderUpdated() {
+        diffRenderRevision &+= 1
+        objectWillChange.send()
     }
 
     private func setupOutlineHeadingsObserver() {
@@ -105,7 +134,7 @@ class DocumentManager: ObservableObject {
     // MARK: - Reading chrome (Preview / Focus Mode) panel layout
 
     func syncReadingChromePanels() {
-        let active = focusMode || viewMode == .preview
+        let active = focusMode || viewMode == .preview || viewMode == .diff
 
         if active && !wasReadingChrome {
             if sidebarBeforeReadingChrome == nil {
@@ -161,14 +190,21 @@ class DocumentManager: ObservableObject {
     // MARK: - Tabs
     func selectTab(_ id: UUID) {
         guard tabs.contains(where: { $0.id == id }) else { return }
+        if let previous = selectedTabID, previous != id {
+            captureDiffSettings(forTabID: previous)
+        }
         DocumentSecurityAccess.deactivate()
         selectedTabID = id
+        applyDiffSettings(forTabID: id)
         if let tab = tabs.first(where: { $0.id == id }) {
             ensureUndoHistory(for: id, content: tab.document.content)
         }
         refreshUndoAvailability()
         if let url = currentDocument?.url {
             DocumentSecurityAccess.activate(document: url)
+        }
+        if viewMode == .diff {
+            reloadDiffModeForCurrentTab(resetSnapshotSelection: false)
         }
     }
 
@@ -195,6 +231,7 @@ class DocumentManager: ObservableObject {
         }
 
         undoHistories.removeValue(forKey: id)
+        tabDiffSettingsByTabID.removeValue(forKey: id)
         tabs.remove(at: index)
         if selectedTabID == id {
             if tabs.isEmpty {
@@ -234,8 +271,15 @@ class DocumentManager: ObservableObject {
         }
         let tab = EditorTab(document: doc)
         tabs.append(tab)
+        if let previous = selectedTabID {
+            captureDiffSettings(forTabID: previous)
+        }
         selectedTabID = tab.id
+        applyDiffSettings(forTabID: tab.id)
         resetUndoHistory(for: tab.id, content: doc.content)
+        if viewMode == .diff {
+            reloadDiffModeForCurrentTab(resetSnapshotSelection: false)
+        }
     }
 
     private func nextUntitledFileName() -> String {
@@ -295,6 +339,7 @@ class DocumentManager: ObservableObject {
                 content: content,
                 url: resolved
             )
+            _ = SnapshotStore.append(content: content, label: SnapshotStore.onOpenLabel, to: doc)
             if inNewTab {
                 openInNewTab(doc)
             } else {
@@ -350,13 +395,271 @@ class DocumentManager: ObservableObject {
             doc.hasUnsavedChanges = false
             doc.lastSavedDate = Date()
             tabs[index].document = doc
+            diffCoordinator.snapshots = SnapshotStore.append(
+                content: doc.content,
+                label: SnapshotStore.saveLabel,
+                to: doc
+            )
 
             Self.grantAccessAndSaveBookmarks(for: url)
             DocumentSecurityAccess.activate(document: url)
             saveToRecent(doc)
+
+            if viewMode == .diff {
+                reloadDiffModeForCurrentTab(resetSnapshotSelection: false)
+            }
         } catch {
             showError("Failed to save document: \(error.localizedDescription)")
         }
+    }
+
+    // MARK: - Diff Mode
+
+    func toggleDiffMode() {
+        if viewMode == .diff {
+            exitDiffMode()
+        } else {
+            diffCoordinator.previousMode = viewMode
+            viewMode = .diff
+        }
+    }
+
+    func exitDiffMode() {
+        let restore = diffCoordinator.previousMode
+        diffCoordinator.isActive = false
+        if viewMode == .diff {
+            viewMode = restore == .diff ? .preview : restore
+        }
+    }
+
+    func prepareDiffMode(enteringFrom mode: ViewMode) {
+        diffCoordinator.previousMode = mode
+        diffCoordinator.isActive = true
+        if let tabID = selectedTabID {
+            applyDiffSettings(forTabID: tabID)
+        }
+        reloadDiffModeForCurrentTab(resetSnapshotSelection: false)
+    }
+
+    private func captureDiffSettings(forTabID tabID: UUID) {
+        tabDiffSettingsByTabID[tabID] = TabDiffSettings(
+            comparisonSource: diffCoordinator.comparisonSource,
+            selectedSnapshotID: diffCoordinator.selectedSnapshotID,
+            externalBaseline: diffCoordinator.externalBaseline
+        )
+    }
+
+    private func applyDiffSettings(forTabID tabID: UUID) {
+        let settings = tabDiffSettingsByTabID[tabID] ?? TabDiffSettings()
+        diffCoordinator.comparisonSource = settings.comparisonSource
+        diffCoordinator.selectedSnapshotID = settings.selectedSnapshotID
+        diffCoordinator.externalBaseline = settings.externalBaseline
+    }
+
+    private func persistDiffSettingsForCurrentTab() {
+        guard let tabID = selectedTabID else { return }
+        captureDiffSettings(forTabID: tabID)
+    }
+
+    func reloadDiffModeForCurrentTab(resetSnapshotSelection: Bool = false) {
+        guard viewMode == .diff else { return }
+        if resetSnapshotSelection {
+            diffCoordinator.selectedSnapshotID = nil
+            diffCoordinator.comparisonSource = .previousVersion
+        }
+        guard let doc = currentDocument else {
+            diffCoordinator.snapshots = []
+            diffCoordinator.diffResult = nil
+            diffCoordinator.placeholderMessage = nil
+            diffCoordinator.resetNavigation(changeCount: 0)
+            return
+        }
+
+        var snapshots = SnapshotStore.load(for: doc)
+        if snapshots.isEmpty {
+            snapshots = SnapshotStore.append(
+                content: doc.content,
+                label: SnapshotStore.onOpenLabel,
+                to: doc
+            )
+        }
+        if doc.hasUnsavedChanges {
+            let needsUnsavedSnapshot = snapshots.first?.label != "Unsaved"
+                || snapshots.first?.content != doc.content
+            if needsUnsavedSnapshot {
+                snapshots = SnapshotStore.append(
+                    content: doc.content,
+                    label: "Unsaved",
+                    to: doc,
+                    skipIfSameAsLatest: true
+                )
+            }
+        }
+        diffCoordinator.snapshots = snapshots
+        refreshDiffRender()
+    }
+
+    func selectDiffSnapshot(id: UUID?) {
+        if let id {
+            diffCoordinator.comparisonSource = .snapshot(id)
+            diffCoordinator.selectedSnapshotID = id
+        } else {
+            diffCoordinator.comparisonSource = .previousVersion
+            diffCoordinator.selectedSnapshotID = nil
+        }
+        persistDiffSettingsForCurrentTab()
+        refreshDiffRender()
+    }
+
+    func pickExternalComparisonFile() {
+        guard currentDocument != nil else { return }
+
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        if let md = UTType(filenameExtension: "md") {
+            panel.allowedContentTypes = [md, .plainText]
+        } else {
+            panel.allowedContentTypes = [.plainText]
+        }
+        panel.title = "Compare With File"
+        panel.prompt = "Compare"
+
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            Self.grantAccessAndSaveBookmarks(for: url)
+            let accessed = url.startAccessingSecurityScopedResource()
+            defer {
+                if accessed { url.stopAccessingSecurityScopedResource() }
+            }
+            do {
+                let content = try String(contentsOf: url, encoding: .utf8)
+                DispatchQueue.main.async {
+                    self?.diffCoordinator.externalBaseline = ExternalDiffBaseline(
+                        url: url,
+                        fileName: url.lastPathComponent,
+                        content: content
+                    )
+                    self?.diffCoordinator.comparisonSource = .externalFile
+                    self?.persistDiffSettingsForCurrentTab()
+                    self?.refreshDiffRender()
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self?.showError("Could not read file: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    func clearExternalComparison() {
+        diffCoordinator.clearExternalBaseline()
+        persistDiffSettingsForCurrentTab()
+        refreshDiffRender()
+    }
+
+    func setDiffGranularity(_ granularity: DiffGranularity) {
+        diffCoordinator.granularity = granularity
+        refreshDiffRender(bumpViewIdentity: false)
+    }
+
+    func refreshDiffRender(bumpViewIdentity: Bool = true) {
+        if let doc = currentDocument {
+            diffCoordinator.snapshots = SnapshotStore.load(for: doc)
+        }
+
+        guard let doc = currentDocument else {
+            diffCoordinator.diffResult = nil
+            diffCoordinator.resetNavigation(changeCount: 0)
+            markDiffRenderUpdated()
+            return
+        }
+
+        guard let baseline = diffBaselineContent(for: doc) else {
+            diffCoordinator.diffResult = nil
+            switch diffCoordinator.comparisonSource {
+            case .externalFile:
+                diffCoordinator.placeholderMessage = "Choose a file to compare using “Compare with file…” in the toolbar."
+            default:
+                if diffCoordinator.snapshots.isEmpty {
+                    diffCoordinator.placeholderMessage =
+                        "No version history yet. Save once (⌘S), edit, save again, then open Diff — or use Compare with file…"
+                } else {
+                    diffCoordinator.placeholderMessage =
+                        "No older version to compare. Save after editing, or pick a snapshot / external file from the Comparing menu."
+                }
+            }
+            diffCoordinator.resetNavigation(changeCount: 0)
+            if bumpViewIdentity { markDiffRenderUpdated() }
+            return
+        }
+
+        if baseline == doc.content {
+            diffCoordinator.diffResult = nil
+            diffCoordinator.placeholderMessage =
+                "The comparison version is identical to the current document. Pick an older snapshot or another file."
+            diffCoordinator.resetNavigation(changeCount: 0)
+            if bumpViewIdentity { markDiffRenderUpdated() }
+            return
+        }
+
+        diffCoordinator.placeholderMessage = nil
+        let chunks = DiffEngine.compute(
+            current: doc.content,
+            comparison: baseline,
+            granularity: diffCoordinator.granularity,
+            documentURL: doc.url
+        )
+        let theme = ThemeService.shared
+        let css = theme.generateCSS(colors: theme.colors)
+        let result = DiffHTMLBuilder.build(
+            chunks: chunks,
+            documentURL: doc.url,
+            isDark: theme.isDarkMode,
+            themeCSS: css,
+            codeTheme: theme.currentCodeTheme.rawValue
+        )
+        diffCoordinator.diffResult = result
+        diffCoordinator.resetNavigation(changeCount: result.changeCount)
+        if bumpViewIdentity { markDiffRenderUpdated() }
+        else { objectWillChange.send() }
+    }
+
+    /// Baseline text for comparison; `nil` when nothing suitable exists.
+    func diffBaselineContent(for doc: MarkdownDocument) -> String? {
+        switch diffCoordinator.comparisonSource {
+        case .externalFile:
+            return diffCoordinator.externalBaseline?.content
+
+        case .snapshot(let id):
+            return diffCoordinator.snapshots.first(where: { $0.id == id })?.content
+
+        case .previousVersion:
+            return SnapshotStore.previousDifferentSnapshot(
+                in: diffCoordinator.snapshots,
+                current: doc.content
+            )?.content
+        }
+    }
+
+    func diffNextChange() {
+        guard diffCoordinator.totalChanges > 0 else { return }
+        var next = diffCoordinator.currentChangeIndex + 1
+        if next > diffCoordinator.totalChanges { next = 1 }
+        diffCoordinator.currentChangeIndex = next
+    }
+
+    func diffPreviousChange() {
+        guard diffCoordinator.totalChanges > 0 else { return }
+        var prev = diffCoordinator.currentChangeIndex - 1
+        if prev < 1 { prev = diffCoordinator.totalChanges }
+        diffCoordinator.currentChangeIndex = prev
+    }
+
+    func focusDiffChange(_ index: Int) {
+        guard index >= 1, index <= diffCoordinator.totalChanges else { return }
+        diffCoordinator.currentChangeIndex = index
     }
 
     /// Starts security-scoped access and stores bookmarks for the file and its parent folder (required for image copy).
