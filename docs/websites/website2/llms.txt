@@ -1,0 +1,38 @@
+# Beardy — Markdown Editor for macOS
+
+> Beardy is a native macOS markdown editor for developers and technical writers.
+> Author: Konstantin Shkurko (Константин Шкурко).
+
+## Canonical
+
+- Product: Beardy
+- Platform: macOS (native SwiftUI + CodeMirror)
+- Website languages: English, Russian, German, French, Spanish
+
+## Key pages
+
+- Home (EN): /en/
+- User guide (EN): /en/guide.html
+- Home (RU): /ru/
+- User guide (RU): /ru/guide.html
+- Home (DE): /de/
+- Home (FR): /fr/
+- Home (ES): /es/
+
+## Features (summary)
+
+- Four editor modes: Edit, Live, Split, Preview
+- Syntax highlighting, outline navigation, synced scroll
+- KaTeX math and Mermaid diagrams (offline bundled)
+- Custom themes (light/dark families)
+- Export: HTML, PDF, PNG, DOCX, EPUB (Pandoc where applicable)
+- Multi-tab documents, auto-save, undo/redo across modes
+- Spell check, smart typography options (configurable)
+
+## Author
+
+Konstantin Shkurko — software developer, creator of Beardy.
+
+## License / contact
+
+Update contact URL in sitemap and footer when publishing.

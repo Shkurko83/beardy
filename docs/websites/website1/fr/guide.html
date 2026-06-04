@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Comment utiliser BlackBeard Editor — guide pas à pas</title>
+  <meta name="description" content="Guide simple de BlackBeard Editor sur Mac : ouvrir un fichier, écrire, choisir le mode d’affichage, enregistrer et exporter. Auteur : Konstantin Shkurko.">
+  <meta name="author" content="Konstantin Shkurko">
+  <link rel="canonical" href="https://beardyeditor.com/fr/guide.html">
+  <link rel="alternate" hreflang="en" href="https://beardyeditor.com/en/guide.html">
+  <link rel="alternate" hreflang="ru" href="https://beardyeditor.com/ru/guide.html">
+  <link rel="alternate" hreflang="de" href="https://beardyeditor.com/de/guide.html">
+  <link rel="alternate" hreflang="fr" href="https://beardyeditor.com/fr/guide.html">
+  <link rel="alternate" hreflang="es" href="https://beardyeditor.com/es/guide.html">
+  <meta property="og:title" content="Comment utiliser BlackBeard Editor">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://beardyeditor.com/fr/guide.html">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/main.css">
+  <link rel="icon" href="../assets/img/logo.png" type="image/png">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    "name": "Comment utiliser BlackBeard Editor sur Mac",
+    "description": "Étape par étape : ouvrir un document, écrire, choisir un mode, enregistrer et exporter.",
+    "inLanguage": "fr",
+    "author": {
+      "@type": "Person",
+      "name": "Konstantin Shkurko"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div class="pirate-banner-wrap" aria-hidden="true">
+    <img src="../assets/img/pirate-banner.png" alt="" width="1200" height="72">
+  </div>
+  <a class="skip-link" href="#guide-main">Aller au contenu</a>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html">
+        <img class="brand-logo" src="../assets/img/logo.png" alt="" width="44" height="44">
+        <span class="brand-name">BlackBeard Editor</span>
+      </a>
+      <nav class="nav-desktop" aria-label="Navigation principale">
+        <a href="index.html#features">Cale</a>
+        <a href="index.html#modes">Modes</a>
+        <a href="guide.html" aria-current="page">Tenir le gouvernail</a>
+      </nav>
+      <div class="header-controls">
+        <div class="lang-menu">
+          <button type="button" class="select-btn" id="lang-toggle" aria-expanded="false" aria-haspopup="listbox" aria-label="Langue">FR</button>
+          <div class="lang-dropdown" id="lang-dropdown" role="listbox">
+            <a href="../en/guide.html" data-lang="en" hreflang="en">English</a>
+            <a href="../ru/guide.html" data-lang="ru" hreflang="ru">Русский</a>
+            <a href="../de/guide.html" data-lang="de" hreflang="de">Deutsch</a>
+            <a href="../fr/guide.html" data-lang="fr" aria-current="page" hreflang="fr">Français</a>
+            <a href="../es/guide.html" data-lang="es" hreflang="es">Español</a>
+          </div>
+        </div>
+        <button type="button" class="icon-btn" id="theme-toggle" aria-label="Thème">◐</button>
+        <button type="button" class="icon-btn menu-toggle" id="menu-toggle" aria-label="Menu">☰</button>
+      </div>
+    </div>
+  </header>
+  <div class="mobile-nav-overlay" id="mobile-nav-overlay" hidden></div>
+  <nav class="mobile-nav" id="mobile-nav" hidden>
+    <a href="index.html">Accueil</a>
+    <a href="#what">Qu’est-ce que c’est</a>
+    <a href="#start">Premier lancement</a>
+    <a href="#modes">Modes</a>
+    <a href="#save">Enregistrer</a>
+  </nav>
+
+  <div class="container guide-layout">
+    <aside class="guide-toc" aria-label="Sommaire">
+      <h2>Sur cette page</h2>
+      <a href="#what">Qu’est-ce que BlackBeard Editor</a>
+      <a href="#start">Premier lancement</a>
+      <a href="#write">Comment écrire</a>
+      <a href="#modes">Modes d’affichage</a>
+      <a href="#save">Enregistrer</a>
+      <a href="#outline">Liste des titres</a>
+      <a href="#tabs">Plusieurs fichiers</a>
+      <a href="#themes">Couleurs et thème</a>
+      <a href="#settings">Réglages</a>
+      <a href="#shortcuts">Raccourcis clavier</a>
+      <a href="#export">Exporter en PDF et autres</a>
+      <a href="#extra">Formules et schémas (optionnel)</a>
+    </aside>
+
+    <article class="guide-content" id="guide-main">
+      <h1>Comment utiliser BlackBeard Editor</h1>
+      <p class="lead">Ce guide est écrit en langage simple. Si vous n’avez jamais utilisé Markdown — pas de panique. Suivez les étapes dans l’ordre, capitaine.</p>
+
+      <h2 id="what">Qu’est-ce que BlackBeard Editor et qu’est-ce que Markdown ?</h2>
+      <p><strong>BlackBeard Editor</strong> est un programme pour Mac qui aide à écrire et lire des fichiers texte au format <strong>Markdown</strong>.</p>
+      <p><strong>Markdown</strong> n’est pas un programme à part — c’est une façon de marquer le texte. Par exemple :</p>
+      <ul>
+        <li><code># Titre</code> — grand titre</li>
+        <li><code>**gras**</code> — texte en gras</li>
+        <li><code>- élément</code> — puce de liste</li>
+      </ul>
+      <p>BlackBeard Editor affiche soit les « marques » (symboles), soit le rendu final — comme sur le web ou en PDF.</p>
+
+      <h2 id="start">Premier lancement — quoi cliquer</h2>
+      <p>À l’ouverture de BlackBeard Editor, vous voyez l’écran d’accueil avec trois actions :</p>
+      <ol class="guide-steps">
+        <li><strong>New Document</strong> — page vide pour un nouveau texte.</li>
+        <li><strong>Open File</strong> — ouvrir un fichier existant sur votre Mac (souvent avec l’extension <code>.md</code>).</li>
+        <li><strong>Import</strong> — glisser un fichier depuis le Finder dans la fenêtre BlackBeard Editor.</li>
+      </ol>
+      <div class="guide-callout">
+        <p><strong>Fichiers récents :</strong> sous les boutons, une liste de ce que vous avez déjà ouvert peut apparaître. Cliquez sur un nom pour le rouvrir. Le bouton <strong>Clear</strong> efface seulement la liste ; les fichiers sur le disque ne sont pas supprimés.</p>
+      </div>
+
+      <h2 id="write">Comment écrire et mettre en forme</h2>
+      <p>En haut de la fenêtre, une <strong>barre d’outils</strong> avec des icônes insère la mise en forme pour vous :</p>
+      <ul>
+        <li>gras et italique ;</li>
+        <li>titres et listes ;</li>
+        <li>lien, image, bloc de code.</li>
+      </ul>
+      <p>Vous pouvez aussi taper les symboles vous-même — par exemple <code>**mot**</code> pour le gras.</p>
+      <p>Pour <strong>annuler</strong> une erreur : menu Édition → Annuler, ou le raccourci Mac habituel (voir ci-dessous).</p>
+
+      <h2 id="modes">Quatre modes — ce qu’ils signifient</h2>
+      <p>En haut, vous pouvez changer de mode. C’est le même document — seul l’affichage change.</p>
+      <h3>Edit</h3>
+      <p>Texte brut avec symboles (<code>#</code>, <code>**</code>, etc.). Idéal quand il y a beaucoup de code ou que vous retouchez la syntaxe à la main.</p>
+      <h3>Live</h3>
+      <p>Le texte a l’air « fini » pendant que vous tapez — titres grands, gras vraiment gras. Pratique pour articles et notes.</p>
+      <h3>Split</h3>
+      <p>À gauche le texte avec symboles, à droite l’aperçu. Bien pour apprendre Markdown et pour les longs documents.</p>
+      <h3>Preview</h3>
+      <p>Seulement le rendu final, sans symboles. Pratique avant impression ou export.</p>
+      <div class="guide-callout">
+        <p><strong>Astuce :</strong> pour un long document, utilisez <strong>Split</strong> et activez le défilement synchronisé dans <strong>Settings → Appearance</strong> — les deux côtés défilent ensemble.</p>
+      </div>
+
+      <h2 id="save">Comment enregistrer</h2>
+      <p>BlackBeard Editor enregistre votre travail comme fichier texte normal sur votre Mac.</p>
+      <ol class="guide-steps">
+        <li>Menu <strong>File → Save</strong> (ou le raccourci Mac standard — voir ci-dessous).</li>
+        <li>Dans <strong>Settings → General</strong>, vous pouvez activer l’<strong>enregistrement automatique</strong> — l’app sauvegarde alors toutes les 10 à 120 secondes.</li>
+      </ol>
+      <p>Si vous insérez des images, l’app peut les copier dans le dossier du document — le fichier s’ouvrira correctement sur un autre Mac aussi (réglage dans <strong>Settings → Editor</strong>).</p>
+
+      <h2 id="outline">Liste des titres (Outline)</h2>
+      <p>Si votre document a des titres (<code>#</code>, <code>##</code>, …), ouvrez le panneau <strong>Outline</strong> dans la barre d’outils.</p>
+      <p>Vous verrez la liste des sections. <strong>Cliquez sur un nom</strong> — le document défile jusqu’à cet endroit. Vous pouvez tirer le bord du panneau pour l’élargir ou le rétrécir.</p>
+
+      <h2 id="tabs">Plusieurs documents à la fois</h2>
+      <p>Vous pouvez ouvrir plusieurs fichiers dans des <strong>onglets</strong> (comme dans un navigateur). Chaque onglet est un document distinct. Changer d’onglet n’efface pas l’historique d’annulation de chaque fichier.</p>
+
+      <h2 id="themes">Couleurs et thème</h2>
+      <p>Écran sombre ou clair ? Ouvrez la liste <strong>Themes</strong> dans le menu ou la barre d’outils. Choisissez ce qui repose les yeux.</p>
+      <p>Sur ce site, le bouton ◐ en haut ne change que le thème du site — pas celui de BlackBeard Editor.</p>
+
+      <h2 id="settings">Settings — où trouver quoi</h2>
+      <p>Ouvrez <strong>Settings</strong> depuis le menu BlackBeard Editor. Onglets principaux :</p>
+      <ul>
+        <li><strong>General</strong> — enregistrement automatique : activé/désactivé et fréquence.</li>
+        <li><strong>Editor</strong> — taille de police, numéros de ligne, tabulations ou espaces.</li>
+        <li><strong>Typing</strong> — correction orthographique ; « guillemets intelligents » (souvent à désactiver pour le texte technique).</li>
+        <li><strong>Appearance</strong> — faire défiler texte et aperçu ensemble en mode Split.</li>
+        <li><strong>Export</strong> — options pour PDF et images.</li>
+      </ul>
+
+      <h2 id="shortcuts">Raccourcis clavier (sur Mac)</h2>
+      <p>La touche <kbd>⌘</kbd> s’appelle <strong>Command</strong> (symbole ⌘, à côté de la barre d’espace). BlackBeard Editor propose des combinaisons familières :</p>
+      <ul>
+        <li><kbd>⌘N</kbd> — New Document</li>
+        <li><kbd>⌘O</kbd> — Open File</li>
+        <li><kbd>⌘S</kbd> — enregistrer</li>
+        <li><kbd>⌘Z</kbd> — annuler · <kbd>⌘⇧Z</kbd> — rétablir</li>
+        <li><kbd>⌘B</kbd> gras · <kbd>⌘I</kbd> italique</li>
+        <li><kbd>⌘K</kbd> — liste complète des raccourcis dans l’app</li>
+      </ul>
+      <p>Inutile de tout mémoriser — tout se fait aussi à la souris et via les menus.</p>
+
+      <h2 id="export">Exporter en PDF et autres formats</h2>
+      <p>Quand le texte est prêt :</p>
+      <ol class="guide-steps">
+        <li>Ouvrez le menu <strong>File</strong> (ou Partager).</li>
+        <li>Choisissez le format : <strong>PDF</strong>, page web (<strong>HTML</strong>), <strong>image</strong> (<strong>PNG</strong>) ou <strong>Word</strong> (<strong>DOCX</strong>).</li>
+      </ol>
+      <p>Pour un fichier livre (<strong>EPUB</strong>), installez le programme gratuit <a href="https://pandoc.org/" rel="noopener">Pandoc</a> sur votre Mac.</p>
+
+      <h2 id="extra">Formules et schémas (si besoin)</h2>
+      <p>C’est optionnel. Pour une formule dans le texte, utilisez des signes dollar, par exemple <code>$E = mc^2$</code>. Pour un organigramme simple — un bloc de code avec le mot <code>mermaid</code>. L’app les affiche en Preview sans internet.</p>
+      <p>Pas besoin de maths ni de schémas ? Passez cette section — le navire avance quand même.</p>
+
+      <p><a href="index.html">← Retour à l’accueil BlackBeard Editor</a></p>
+    </article>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-bottom">
+      <span>© <span data-year></span> Konstantin Shkurko · BlackBeard Editor</span>
+      <span><a href="index.html">Accueil</a></span>
+    </div>
+  </footer>
+  <script src="../assets/js/theme.js"></script>
+  <script src="../assets/js/lang-persist.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script>document.getElementById("mobile-nav").hidden=false;document.getElementById("mobile-nav-overlay").hidden=false;</script>
+</body>
+</html>

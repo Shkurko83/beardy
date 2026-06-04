@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BlackBeard Editor — éditeur Markdown pirate pour Mac</title>
+  <meta name="description" content="BlackBeard Editor — éditeur Markdown de corsaire pour Mac. Trop cher à acheter ? Faites-le flibustier ici — gratuit. Par Konstantin Shkurko.">
+  <meta name="keywords" content="BlackBeard Editor, éditeur markdown, macOS, pirate, Barbe Noire, Konstantin Shkurko, beardyeditor">
+  <meta name="author" content="Konstantin Shkurko">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="https://beardyeditor.com/fr/">
+  <link rel="alternate" hreflang="en" href="https://beardyeditor.com/en/">
+  <link rel="alternate" hreflang="ru" href="https://beardyeditor.com/ru/">
+  <link rel="alternate" hreflang="de" href="https://beardyeditor.com/de/">
+  <link rel="alternate" hreflang="fr" href="https://beardyeditor.com/fr/">
+  <link rel="alternate" hreflang="es" href="https://beardyeditor.com/es/">
+  <link rel="alternate" hreflang="x-default" href="https://beardyeditor.com/en/">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://beardyeditor.com/fr/">
+  <meta property="og:title" content="BlackBeard Editor — Markdown pirate pour Mac">
+  <meta property="og:description" content="Trop cher pour un honnête marchand — heureusement : zéro doublon. Flibustier-le ici.">
+  <meta property="og:image" content="https://beardyeditor.com/assets/img/logo.png">
+  <meta property="og:locale" content="fr_FR">
+  <meta property="og:site_name" content="BlackBeard Editor">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="BlackBeard Editor">
+  <meta name="twitter:description" content="Éditeur Markdown gratuit pour Mac. Barbe Noire approuve (à sa manière).">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/main.css">
+  <link rel="icon" href="../assets/img/logo.png" type="image/png">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "name": "BlackBeard Editor",
+        "url": "https://beardyeditor.com/fr/",
+        "inLanguage": "fr",
+        "description": "Éditeur Markdown pirate pour macOS.",
+        "author": { "@id": "https://beardyeditor.com/#author" }
+      },
+      {
+        "@type": "SoftwareApplication",
+        "name": "BlackBeard Editor",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "macOS",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "description": "Éditeur Markdown pour Mac avec les modes Edit, Live, Split et Preview.",
+        "author": { "@id": "https://beardyeditor.com/#author" }
+      },
+      {
+        "@type": "Person",
+        "@id": "https://beardyeditor.com/#author",
+        "name": "Konstantin Shkurko",
+        "alternateName": ["Константин Шкурко"]
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Aller au contenu</a>
+
+  <div class="pirate-banner-wrap" aria-hidden="true">
+    <img src="../assets/img/pirate-banner.png" alt="" width="1200" height="72" loading="eager">
+  </div>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html" aria-label="BlackBeard Editor — accueil">
+        <img class="brand-logo" src="../assets/img/logo.png" alt="" width="44" height="44">
+        <span class="brand-name">BlackBeard Editor</span>
+      </a>
+      <nav class="nav-desktop" aria-label="Navigation principale">
+        <a href="#pirate-code">Ordre du capitaine</a>
+        <a href="#how-it-works">Plan d’abordage</a>
+        <a href="#features">Cale</a>
+        <a href="guide.html">Tenir le gouvernail</a>
+      </nav>
+      <div class="header-controls">
+        <div class="lang-menu">
+          <button type="button" class="select-btn" id="lang-toggle" aria-expanded="false" aria-haspopup="listbox" aria-label="Langue">FR</button>
+          <div class="lang-dropdown" id="lang-dropdown" role="listbox">
+            <a href="../en/" data-lang="en" hreflang="en">English</a>
+            <a href="../ru/" data-lang="ru" hreflang="ru">Русский</a>
+            <a href="../de/" data-lang="de" hreflang="de">Deutsch</a>
+            <a href="../fr/" data-lang="fr" aria-current="page" hreflang="fr">Français</a>
+            <a href="../es/" data-lang="es" hreflang="es">Español</a>
+          </div>
+        </div>
+        <button type="button" class="icon-btn" id="theme-toggle" aria-label="Thème d’affichage">◐</button>
+        <button type="button" class="icon-btn menu-toggle" id="menu-toggle" aria-label="Menu">☰</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="mobile-nav-overlay" id="mobile-nav-overlay" hidden></div>
+  <nav class="mobile-nav" id="mobile-nav" hidden>
+    <a href="#pirate-code">Ordre du capitaine</a>
+    <a href="#how-it-works">Plan d’abordage</a>
+    <a href="#features">Cale</a>
+    <a href="guide.html">Tenir le gouvernail</a>
+    <a href="#download">À l’abordage</a>
+  </nav>
+
+  <main id="main">
+    <section class="hero">
+      <div class="container hero-grid">
+        <div class="reveal">
+          <p class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span> Ohé, Mac · Cabine de Barbe Noire</p>
+          <h1>Écrivez vos journaux de bord comme un capitaine</h1>
+          <p class="hero-lead"><strong>BlackBeard Editor</strong> est un éditeur Markdown pour Mac : du texte brut qui devient de beaux documents. Notes, README, règlements de bord… nourrissez le perroquet plus tard ; écrivez maintenant.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#download">Flibustier l’app (gratuit)</a>
+            <a class="btn btn-secondary" href="guide.html">Apprendre à gouverner l’éditeur</a>
+          </div>
+          <p class="hero-note">Vos fichiers restent sur votre Mac. L’autosauvegarde évite que le butin coule à pic. L’aperçu fonctionne hors ligne — pas besoin de voir la côte.</p>
+        </div>
+        <div class="reveal hero-logo-wrap">
+          <img class="hero-logo" src="../assets/img/logo.png" alt="BlackBeard Editor — tête de pirate au tricorne avec dent en or" width="512" height="512">
+        </div>
+      </div>
+    </section>
+
+    <section id="pirate-code" class="pirate-plank">
+      <div class="container">
+        <div class="pirate-plank-inner reveal">
+          <img src="../assets/img/compass-rose.png" alt="" class="plank-deco" width="64" height="64" loading="lazy">
+          <h2>Ordre du capitaine</h2>
+          <p class="pirate-lead">Cette app est <em>ruineusement chère</em> pour un marchand honnête — parce que le prix est de <strong>zéro doublon</strong>. On n’achète pas ce qu’on ne vend pas. Il ne reste donc qu’une solution raisonnable :</p>
+          <p class="pirate-shout">Flibustier-la ici. Légalement. Sur Mac.</p>
+          <ul class="pirate-jokes">
+            <li>Pas un réal de huit. Pas d’abonnement. Pas de taxe royale.</li>
+            <li>Nous ne sommes pas le fantôme de Barbe Noire — mais le logo a une dent en or. Considérez-vous prévenu.</li>
+            <li>La planche, c’est seulement si vous fermez sans enregistrer.</li>
+            <li>Volez-nous l’éditeur. Nous l’exigeons.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="how-it-works" class="alt-bg">
+      <div class="container">
+        <header class="section-header reveal">
+          <h2>Plan d’abordage en trois temps</h2>
+          <p>Même un terrien hisse les voiles en quelques minutes.</p>
+        </header>
+        <ol class="steps-list reveal">
+          <li><strong>Prenez le navire.</strong> Installez BlackBeard Editor sur votre Mac et ouvrez-le — nouveau journal, fichier existant ou glisser-déposer dans la fenêtre.</li>
+          <li><strong>Tracez les cartes.</strong> Écrivez avec la barre d’outils ou les signes Markdown — titres, listes, code pour l’équipage.</li>
+          <li><strong>Choisissez la longue-vue.</strong> Texte seul, bel aperçu seul, ou les deux côte à côte — puis export PDF quand l’expédition est finie.</li>
+        </ol>
+        <p class="reveal" style="text-align:center;margin-top:1.5rem;">
+          <a class="btn btn-secondary" href="guide.html">Charte de navigation complète</a>
+        </p>
+      </div>
+    </section>
+
+    <section id="audience">
+      <div class="container">
+        <header class="section-header reveal">
+          <h2>Qui navigue avec nous ?</h2>
+          <p>Développeurs, scribes et tous ceux qui rédigent de longs textes sur Mac.</p>
+        </header>
+        <div class="audience-grid">
+          <article class="audience-block reveal">
+            <h3>Corsaires du code</h3>
+            <ul>
+              <li>Blocs de code en couleurs dans vos parchemins</li>
+              <li>Sauter de chapitre en chapitre — liste des titres sur le côté</li>
+              <li>Annuler survit au changement de mode d’affichage</li>
+              <li>Plusieurs onglets ; autosauvegarde digne d’un quartier-maître</li>
+            </ul>
+          </article>
+          <article class="audience-block reveal">
+            <h3>Scribes &amp; chroniqueurs</h3>
+            <ul>
+              <li>Mode Live — la mise en forme pendant la frappe</li>
+              <li>Export PDF, page web, image ou Word</li>
+              <li>Formules et diagrammes en cale — sans réseau</li>
+              <li>Orthographe, pour ne pas n’écrire que « arr »</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="alt-bg">
+      <div class="container">
+        <header class="section-header reveal">
+          <h2>Ce qu’il y a en cale</h2>
+          <p>Le butin — sans jargon de la marine royale.</p>
+        </header>
+        <div class="feature-grid cols-3">
+          <article class="feature-card reveal">
+            <div class="feature-icon" aria-hidden="true">⚔</div>
+            <h3>Quatre modes d’affichage</h3>
+            <p>Edit, Live, Split, Preview — un document, plusieurs longues-vues. Basculez à volonté ; l’historique d’annulation vous suit.</p>
+          </article>
+          <article class="feature-card reveal">
+            <div class="feature-icon" aria-hidden="true">☰</div>
+            <h3>Sabres de la barre d’outils</h3>
+            <p>Gras, titres, listes, liens, code — un clic si vous n’avez pas mémorisé les runes.</p>
+          </article>
+          <article class="feature-card reveal">
+            <div class="feature-icon" aria-hidden="true">🗺</div>
+            <h3>Carte des titres</h3>
+            <p>Panneau latéral des sections. Un clic — le parchemin défile jusqu’au bon endroit. Pas besoin de carte au trésor.</p>
+          </article>
+          <article class="feature-card reveal">
+            <div class="feature-icon" aria-hidden="true">⚓</div>
+            <h3>Maths &amp; cartes marines</h3>
+            <p>Formules et diagrammes Mermaid dans l’aperçu — même en pleine mer sans réseau.</p>
+          </article>
+          <article class="feature-card reveal">
+            <div class="feature-icon" aria-hidden="true">☠</div>
+            <h3>Sombre &amp; or</h3>
+            <p>Clair, sombre ou comme votre Mac — raid de nuit ou négociation de midi.</p>
+          </article>
+          <article class="feature-card reveal">
+            <div class="feature-icon" aria-hidden="true">📜</div>
+            <h3>Exporter les parchemins</h3>
+            <p>PDF, HTML, PNG, DOCX — et EPUB si vous installez Pandoc (gratuit, comme cet éditeur).</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="modes">
+      <div class="container">
+        <header class="section-header reveal">
+          <h2>Quatre façons de lire le même journal</h2>
+          <p>Les noms des modes dans l’app restent en anglais — voici la traduction pour l’équipage.</p>
+        </header>
+        <div class="modes-row reveal">
+          <div class="mode-pill"><strong>Edit</strong><span>Marques brutes sur parchemin</span></div>
+          <div class="mode-pill"><strong>Live</strong><span>Beau texte pendant que vous écrivez</span></div>
+          <div class="mode-pill"><strong>Split</strong><span>À babord les marques, à tribord le rendu</span></div>
+          <div class="mode-pill"><strong>Preview</strong><span>Seule la copie du capitaine</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="screenshots" class="alt-bg">
+      <div class="container">
+        <header class="section-header reveal">
+          <h2>Vue depuis le pont</h2>
+          <p>Captures d’écran de l’app bientôt disponibles. Ordre du capitaine : <a href="../SCREENSHOTS.md">SCREENSHOTS.md</a>.</p>
+        </header>
+        <div class="gallery">
+          <div class="gallery-item reveal" data-shot-group>
+            <div class="shot-frame hero-frame">
+              <div class="shot-chrome" aria-hidden="true"><span class="shot-dot"></span><span class="shot-dot"></span><span class="shot-dot"></span></div>
+              <div class="shot-variant is-active" data-shot-variant="light">
+                <div class="shot-placeholder" role="img">
+                  <p class="shot-placeholder-title">Mode Split · thème clair</p>
+                  <p class="shot-placeholder-desc">Texte et aperçu côte à côte</p>
+                </div>
+              </div>
+              <div class="shot-variant" data-shot-variant="dark">
+                <div class="shot-placeholder" role="img">
+                  <p class="shot-placeholder-title">Mode Split · thème sombre</p>
+                  <p class="shot-placeholder-desc">split-dark.png</p>
+                </div>
+              </div>
+              <div class="shot-theme-tabs" role="tablist">
+                <button type="button" class="shot-theme-tab is-active" data-shot-tab="light" role="tab" aria-selected="true">Clair</button>
+                <button type="button" class="shot-theme-tab" data-shot-tab="dark" role="tab" aria-selected="false">Sombre</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="download">
+      <div class="container">
+        <div class="cta-band reveal">
+          <h2>Hissez le pavillon — téléchargement pour Mac</h2>
+          <p>Créé par <strong>Konstantin Shkurko</strong>. Le vrai Barbe Noire n’a pas édité de Markdown — vous, si.</p>
+          <a class="btn btn-secondary" href="guide.html">Ouvrir la charte de navigation</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <a class="brand" href="index.html">
+            <img class="brand-logo" src="../assets/img/logo.png" alt="" width="36" height="36">
+            <span class="brand-name">BlackBeard Editor</span>
+          </a>
+          <p style="margin-top:0.75rem;color:var(--text-muted);max-width:36ch;font-size:0.9375rem;">Éditeur Markdown pirate pour Mac · beardyeditor.com · Konstantin Shkurko.</p>
+        </div>
+        <div>
+          <h4>Pont</h4>
+          <ul>
+            <li><a href="#features">Cale</a></li>
+            <li><a href="#modes">Modes d’affichage</a></li>
+            <li><a href="guide.html">Tenir le gouvernail</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Langues</h4>
+          <ul>
+            <li><a href="../en/" data-lang="en" hreflang="en">English</a></li>
+            <li><a href="../ru/" data-lang="ru" hreflang="ru">Русский</a></li>
+            <li><a href="../de/" data-lang="de" hreflang="de">Deutsch</a></li>
+            <li><a href="../fr/" data-lang="fr" hreflang="fr">Français</a></li>
+            <li><a href="../es/" data-lang="es" hreflang="es">Español</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© <span data-year></span> Konstantin Shkurko · BlackBeard Editor</span>
+        <span><a href="../llms.txt">llms.txt</a> · <a href="../sitemap.xml">Plan du site</a></span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../assets/js/theme.js"></script>
+  <script src="../assets/js/lang-persist.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script>
+    document.getElementById("mobile-nav").hidden = false;
+    document.getElementById("mobile-nav-overlay").hidden = false;
+  </script>
+</body>
+</html>

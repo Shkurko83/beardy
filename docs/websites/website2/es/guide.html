@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cómo usar Beardy — guía paso a paso</title>
+  <meta name="description" content="Guía sencilla de Beardy en Mac: abrir un archivo, escribir, elegir modo de vista, guardar y exportar. Autor: Konstantin Shkurko.">
+  <meta name="author" content="Konstantin Shkurko">
+  <link rel="canonical" href="https://beardy.app/es/guide.html">
+  <link rel="alternate" hreflang="en" href="https://beardy.app/en/guide.html">
+  <link rel="alternate" hreflang="ru" href="https://beardy.app/ru/guide.html">
+  <link rel="alternate" hreflang="de" href="https://beardy.app/de/guide.html">
+  <link rel="alternate" hreflang="fr" href="https://beardy.app/fr/guide.html">
+  <link rel="alternate" hreflang="es" href="https://beardy.app/es/guide.html">
+  <meta property="og:title" content="Cómo usar Beardy">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://beardy.app/es/guide.html">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/main.css">
+  <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    "name": "Cómo usar Beardy en Mac",
+    "description": "Paso a paso: abrir un documento, escribir, elegir modo, guardar y exportar.",
+    "inLanguage": "es",
+    "author": {
+      "@type": "Person",
+      "name": "Konstantin Shkurko"
+    }
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#guide-main">Ir al contenido</a>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html"><span class="logo-placeholder" aria-hidden="true">B</span><span>Beardy</span></a>
+      <nav class="nav-desktop" aria-label="Navegación principal">
+        <a href="index.html#features">Funciones</a>
+        <a href="index.html#modes">Modos</a>
+        <a href="guide.html" aria-current="page">Guía</a>
+      </nav>
+      <div class="header-controls">
+        <div class="lang-menu">
+          <button type="button" class="select-btn" id="lang-toggle" aria-expanded="false" aria-haspopup="listbox">ES</button>
+          <div class="lang-dropdown" id="lang-dropdown" role="listbox">
+            <a href="../en/guide.html" data-lang="en" hreflang="en">English</a>
+            <a href="../ru/guide.html" data-lang="ru" hreflang="ru">Русский</a>
+            <a href="../de/guide.html" data-lang="de" hreflang="de">Deutsch</a>
+            <a href="../fr/guide.html" data-lang="fr" hreflang="fr">Français</a>
+            <a href="../es/guide.html" data-lang="es" aria-current="page" hreflang="es">Español</a>
+          </div>
+        </div>
+        <button type="button" class="icon-btn" id="theme-toggle" aria-label="Tema">◐</button>
+        <button type="button" class="icon-btn menu-toggle" id="menu-toggle" aria-label="Menú">☰</button>
+      </div>
+    </div>
+  </header>
+  <div class="mobile-nav-overlay" id="mobile-nav-overlay" hidden></div>
+  <nav class="mobile-nav" id="mobile-nav" hidden>
+    <a href="index.html">Inicio</a>
+    <a href="#what">Qué es</a>
+    <a href="#start">Primer uso</a>
+    <a href="#modes">Modos</a>
+    <a href="#save">Guardar</a>
+  </nav>
+
+  <div class="container guide-layout">
+    <aside class="guide-toc" aria-label="Contenido">
+      <h2>En esta página</h2>
+      <a href="#what">Qué es Beardy</a>
+      <a href="#start">Primer uso</a>
+      <a href="#write">Cómo escribir</a>
+      <a href="#modes">Modos de vista</a>
+      <a href="#save">Cómo guardar</a>
+      <a href="#outline">Lista de títulos</a>
+      <a href="#tabs">Varios archivos</a>
+      <a href="#themes">Colores y tema</a>
+      <a href="#settings">Ajustes</a>
+      <a href="#shortcuts">Atajos de teclado</a>
+      <a href="#export">Exportar a PDF y más</a>
+      <a href="#extra">Fórmulas y diagramas (opcional)</a>
+    </aside>
+
+    <article class="guide-content" id="guide-main">
+      <h1>Cómo usar Beardy</h1>
+      <p class="lead">Esta guía está escrita en lenguaje sencillo. Si nunca ha usado Markdown, no pasa nada. Siga los pasos en orden.</p>
+
+      <h2 id="what">¿Qué es Beardy y qué es Markdown?</h2>
+      <p><strong>Beardy</strong> es una aplicación para Mac en la que puede escribir y leer cómodamente archivos de texto en formato <strong>Markdown</strong>.</p>
+      <p><strong>Markdown</strong> no es un programa aparte: es una forma de marcar el texto. Por ejemplo:</p>
+      <ul>
+        <li><code># Título</code> — título grande</li>
+        <li><code>**negrita**</code> — texto en negrita</li>
+        <li><code>- elemento</code> — punto de lista</li>
+      </ul>
+      <p>Beardy muestra las «marcas» (símbolos) o el aspecto final — como en una web o en un PDF.</p>
+
+      <h2 id="start">Primer uso — qué pulsar</h2>
+      <p>Al abrir Beardy verá una pantalla de bienvenida con tres acciones:</p>
+      <ol class="guide-steps">
+        <li><strong>Documento nuevo</strong> — página en blanco para texto nuevo.</li>
+        <li><strong>Abrir archivo</strong> — elegir un archivo que ya tenga en el Mac (a menudo con extensión <code>.md</code>).</li>
+        <li><strong>Importar</strong> — arrastrar un archivo desde el Finder a la ventana de Beardy.</li>
+      </ol>
+      <div class="guide-callout">
+        <p><strong>Archivos recientes:</strong> debajo de los botones puede haber una lista de lo que abrió antes. Pulse el nombre — el archivo se abrirá de nuevo. El botón <strong>Borrar</strong> solo vacía la lista; los archivos en el disco no se eliminan.</p>
+      </div>
+
+      <h2 id="write">Cómo escribir y dar formato al texto</h2>
+      <p>En la parte superior hay una <strong>barra con botones</strong>. Insertan el formato por usted:</p>
+      <ul>
+        <li>negrita y cursiva;</li>
+        <li>títulos y listas;</li>
+        <li>enlace, imagen, bloque de código.</li>
+      </ul>
+      <p>También puede escribir los símbolos usted mismo — por ejemplo <code>**palabra**</code> para negrita.</p>
+      <p>Puede <strong>deshacer</strong> un error: menú «Edición» → «Deshacer» o el atajo de Mac (véase más abajo).</p>
+
+      <h2 id="modes">Cuatro modos — qué significan</h2>
+      <p>Arriba puede cambiar de modo. Es el mismo texto — solo cambia cómo lo ve.</p>
+      <h3>Edit</h3>
+      <p>Se ve el texto normal con símbolos (<code>#</code>, <code>**</code>, etc.). Útil cuando hay mucho código o corrige el formato a mano.</p>
+      <h3>Live</h3>
+      <p>El texto se ve «bonito» al momento — títulos grandes, negrita de verdad. Cómodo para artículos y notas.</p>
+      <h3>Split</h3>
+      <p>A la izquierda el texto con símbolos, a la derecha la vista previa. Bueno para aprender y documentos largos.</p>
+      <h3>Preview</h3>
+      <p>Solo la vista final, sin símbolos. Útil antes de imprimir o exportar.</p>
+      <div class="guide-callout">
+        <p><strong>Consejo:</strong> en documentos largos use el modo <strong>Split</strong> y en «Ajustes → Apariencia» active «desplazamiento sincronizado» para que la parte izquierda y la derecha se muevan juntas.</p>
+      </div>
+
+      <h2 id="save">Cómo guardar</h2>
+      <p>Beardy guarda su trabajo como un archivo de texto normal en el Mac.</p>
+      <ol class="guide-steps">
+        <li>Menú <strong>Archivo → Guardar</strong> (o el atajo habitual de Mac — véase abajo).</li>
+        <li>En <strong>Ajustes → General</strong> puede activar <strong>guardado automático</strong> — el programa guarda solo cada 10–120 segundos.</li>
+      </ol>
+      <p>Si inserta imágenes, la app puede copiarlas a la carpeta del documento — así el archivo se abrirá bien en otro Mac también (ajuste en «Ajustes → Editor»).</p>
+
+      <h2 id="outline">Lista de títulos (Outline)</h2>
+      <p>Si el texto tiene títulos (<code>#</code>, <code>##</code>, …), abra en la barra el botón de <strong>estructura / títulos</strong>.</p>
+      <p>Aparecerá una lista de secciones. <strong>Pulse un nombre</strong> — el documento se desplazará hasta ese sitio. Puede arrastrar el borde del panel para hacerlo más ancho o estrecho.</p>
+
+      <h2 id="tabs">Varios documentos a la vez</h2>
+      <p>Puede abrir varios archivos en <strong>pestañas</strong> (como en el navegador). Cada pestaña tiene su propio texto. Al cambiar de pestaña no se borra el historial de «deshacer» de cada archivo.</p>
+
+      <h2 id="themes">Colores y tema</h2>
+      <p>¿Quiere pantalla oscura o clara? Abra la lista de temas en el menú o la barra (en la app puede llamarse «Themes»). Elija lo que sea más cómodo para la vista.</p>
+      <p>En este sitio, el botón ◐ arriba solo cambia el tema claro/oscuro de la web — no el de Beardy.</p>
+
+      <h2 id="settings">Ajustes — dónde está cada cosa</h2>
+      <p>Abra <strong>Ajustes</strong> en el menú de Beardy. Las secciones principales:</p>
+      <ul>
+        <li><strong>General</strong> — guardado automático: activado/desactivado y cada cuánto.</li>
+        <li><strong>Editor</strong> — tamaño de fuente, números de línea, tabulaciones o espacios.</li>
+        <li><strong>Entrada</strong> — corrección ortográfica; «comillas inteligentes» (para textos técnicos suele ir mejor desactivadas).</li>
+        <li><strong>Apariencia</strong> — en modo Split, desplazar texto y vista previa juntos.</li>
+        <li><strong>Exportar</strong> — opciones de PDF e imágenes.</li>
+      </ul>
+
+      <h2 id="shortcuts">Atajos de teclado (en Mac)</h2>
+      <p>La tecla <kbd>⌘</kbd> es <strong>Comando</strong> (símbolo ⌘, junto a la barra espaciadora). En Beardy hay combinaciones habituales:</p>
+      <ul>
+        <li><kbd>⌘N</kbd> — documento nuevo</li>
+        <li><kbd>⌘O</kbd> — abrir archivo</li>
+        <li><kbd>⌘S</kbd> — guardar</li>
+        <li><kbd>⌘Z</kbd> — deshacer · <kbd>⌘⇧Z</kbd> — rehacer</li>
+        <li><kbd>⌘B</kbd> negrita · <kbd>⌘I</kbd> cursiva</li>
+        <li><kbd>⌘K</kbd> — lista completa de atajos dentro de la app</li>
+      </ul>
+      <p>No hace falta memorizarlos — todo se puede hacer con el ratón y los menús.</p>
+
+      <h2 id="export">Exportar a PDF y otros formatos</h2>
+      <p>Cuando el texto esté listo:</p>
+      <ol class="guide-steps">
+        <li>Abra el menú <strong>Archivo</strong> (o «Compartir»).</li>
+        <li>Elija el formato: <strong>PDF</strong>, página web (<strong>HTML</strong>), <strong>imagen</strong> (PNG) o <strong>Word</strong> (DOCX).</li>
+      </ol>
+      <p>Para un archivo de libro (<strong>EPUB</strong>) hace falta el programa gratuito <a href="https://pandoc.org/" rel="noopener">Pandoc</a> en el Mac.</p>
+
+      <h2 id="extra">Fórmulas y diagramas (si los necesita)</h2>
+      <p>Es opcional. Para una fórmula en el texto se usan signos de dólar, por ejemplo <code>$E = mc^2$</code>. Para un diagrama sencillo — un bloque de código con la palabra <code>mermaid</code>. La app los muestra en la vista previa sin Internet.</p>
+      <p>Si no necesita fórmulas ni diagramas — puede saltarse esta sección.</p>
+
+      <p><a href="index.html">← Volver a la página principal de Beardy</a></p>
+    </article>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-bottom">
+      <span>© <span data-year></span> Konstantin Shkurko · Beardy</span>
+      <span><a href="index.html">Inicio</a></span>
+    </div>
+  </footer>
+  <script src="../assets/js/theme.js"></script>
+  <script src="../assets/js/lang-persist.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script>document.getElementById("mobile-nav").hidden=false;document.getElementById("mobile-nav-overlay").hidden=false;</script>
+</body>
+</html>

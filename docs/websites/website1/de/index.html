@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BlackBeard Editor — Piraten-Markdown-Editor für Mac</title>
+  <meta name="description" content="BlackBeard Editor — brutaler Piraten-Markdown-Editor für Mac. Zu teuer zum Kaufen? Hier kostenlos kapern. Von Konstantin Shkurko.">
+  <meta name="keywords" content="BlackBeard Editor, Markdown Editor, macOS, Pirat, Schwarzbart, Konstantin Shkurko, beardyeditor">
+  <meta name="author" content="Konstantin Shkurko">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="https://beardyeditor.com/de/">
+  <link rel="alternate" hreflang="en" href="https://beardyeditor.com/en/">
+  <link rel="alternate" hreflang="ru" href="https://beardyeditor.com/ru/">
+  <link rel="alternate" hreflang="de" href="https://beardyeditor.com/de/">
+  <link rel="alternate" hreflang="fr" href="https://beardyeditor.com/fr/">
+  <link rel="alternate" hreflang="es" href="https://beardyeditor.com/es/">
+  <link rel="alternate" hreflang="x-default" href="https://beardyeditor.com/en/">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://beardyeditor.com/de/">
+  <meta property="og:title" content="BlackBeard Editor — Piraten-Markdown für Mac">
+  <meta property="og:description" content="Zu teuer für ehrliche Kaufleute — der Preis: null Dublonen. Kapert es hier.">
+  <meta property="og:image" content="https://beardyeditor.com/assets/img/logo.png">
+  <meta property="og:locale" content="de_DE">
+  <meta property="og:site_name" content="BlackBeard Editor">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="BlackBeard Editor">
+  <meta name="twitter:description" content="Kostenloser Markdown-Editor für Mac. Schwarzbart nickt zustimmend.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/main.css">
+  <link rel="icon" href="../assets/img/logo.png" type="image/png">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "name": "BlackBeard Editor",
+        "url": "https://beardyeditor.com/de/",
+        "inLanguage": "de",
+        "description": "Piraten-Markdown-Editor für macOS.",
+        "author": { "@id": "https://beardyeditor.com/#author" }
+      },
+      {
+        "@type": "SoftwareApplication",
+        "name": "BlackBeard Editor",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "macOS",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "description": "Markdown-Editor für Mac mit Edit-, Live-, Split- und Preview-Modus.",
+        "author": { "@id": "https://beardyeditor.com/#author" }
+      },
+      {
+        "@type": "Person",
+        "@id": "https://beardyeditor.com/#author",
+        "name": "Konstantin Shkurko",
+        "alternateName": ["Константин Шкурко"]
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Zum Inhalt springen</a>
+
+  <div class="pirate-banner-wrap" aria-hidden="true">
+    <img src="../assets/img/pirate-banner.png" alt="" width="1200" height="72" loading="eager">
+  </div>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html" aria-label="BlackBeard Editor — Startseite">
+        <img class="brand-logo" src="../assets/img/logo.png" alt="" width="44" height="44">
+        <span class="brand-name">BlackBeard Editor</span>
+      </a>
+      <nav class="nav-desktop" aria-label="Hauptmenü">
+        <a href="#pirate-code">Kapitänsbefehl</a>
+        <a href="#how-it-works">Enterplan</a>
+        <a href="#features">Laderaum</a>
+        <a href="guide.html">Steuern lernen</a>
+      </nav>
+      <div class="header-controls">
+        <div class="lang-menu">
+          <button type="button" class="select-btn" id="lang-toggle" aria-expanded="false" aria-haspopup="listbox" aria-label="Sprache">DE</button>
+          <div class="lang-dropdown" id="lang-dropdown" role="listbox">
+            <a href="../en/" data-lang="en" hreflang="en">English</a>
+            <a href="../ru/" data-lang="ru" hreflang="ru">Русский</a>
+            <a href="../de/" data-lang="de" aria-current="page" hreflang="de">Deutsch</a>
+            <a href="../fr/" data-lang="fr" hreflang="fr">Français</a>
+            <a href="../es/" data-lang="es" hreflang="es">Español</a>
+          </div>
+        </div>
+        <button type="button" class="icon-btn" id="theme-toggle" aria-label="Darstellung">◐</button>
+        <button type="button" class="icon-btn menu-toggle" id="menu-toggle" aria-label="Menü">☰</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="mobile-nav-overlay" id="mobile-nav-overlay" hidden></div>
+  <nav class="mobile-nav" id="mobile-nav" hidden>
+    <a href="#pirate-code">Kapitänsbefehl</a>
+    <a href="#how-it-works">Enterplan</a>
+    <a href="#features">Laderaum</a>
+    <a href="guide.html">Steuern lernen</a>
+    <a href="#download">Beute</a>
+  </nav>
+
+  <main id="main">
+    <section class="hero">
+      <div class="container hero-grid">
+        <div class="reveal">
+          <p class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span> Ahoy, Mac · Schreibdeck des Schwarzbart</p>
+          <h1>Schreib deine Logbücher wie ein Kapitän</h1>
+          <p class="hero-lead"><strong>BlackBeard Editor</strong> ist ein Markdown-Editor für Mac — Klartext, der zu sauberen Dokumenten wird. Notizen, READMEs, Schiffsartikel… den Papagei fütterst du später; schreib jetzt.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#download">App kapern (kostenlos)</a>
+            <a class="btn btn-secondary" href="guide.html">Editor steuern lernen</a>
+          </div>
+          <p class="hero-note">Dateien bleiben auf deinem Mac. Autosave lässt die Beute nicht versinken. Vorschau funktioniert offline — kein Land in Sicht nötig.</p>
+        </div>
+        <div class="reveal hero-logo-wrap">
+          <img class="hero-logo" src="../assets/img/logo.png" alt="BlackBeard Editor — Piratenschädel mit Hut und Goldzahn" width="512" height="512">
+        </div>
+      </div>
+    </section>
+
+    <section id="pirate-code" class="pirate-plank">
+      <div class="container">
+        <div class="pirate-plank-inner reveal">
+          <img src="../assets/img/compass-rose.png" alt="" class="plank-deco" width="64" height="64" loading="lazy">
+          <h2>Kapitänsbefehl</h2>
+          <p class="pirate-lead">Diese App ist <em>viel zu teuer</em> für ehrliche Kaufleute — weil der Preis <strong>null Dublonen</strong> beträgt. Was nie verkauft wurde, kann man nicht kaufen. Also bleibt nur das Vernünftige:</p>
+          <p class="pirate-shout">Kapert sie hier. Legal. Für Mac.</p>
+          <ul class="pirate-jokes">
+            <li>Keine Acht-Reales-Stücke. Kein Abo. Keine königliche Steuer.</li>
+            <li>Wir sind nicht Schwarzbarts Geist — aber das Logo hat einen Goldzahn. Du bist gewarnt.</li>
+            <li>Über die Planke nur, wenn du ohne Speichern schließt.</li>
+            <li>Klau uns den Editor. Wir bestehen darauf.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="how-it-works" class="alt-bg">
+      <div class="container">
+        <header class="section-header reveal">
+          <h2>Enterplan in drei Schritten</h2>
+          <p>Selbst ein Landratte hisst in Minuten die Segel.</p>
+        </header>
+        <ol class="steps-list reveal">
+          <li><strong>Schiff übernehmen.</strong> BlackBeard Editor auf dem Mac installieren und öffnen — neues Logbuch, Datei öffnen oder per Drag &amp; Drop an Bord holen.</li>
+          <li><strong>Karten ritzen.</strong> Mit der Toolbar oder Markdown-Zeichen schreiben — Überschriften, Listen, Code für die Crew.</li>
+          <li><strong>Fernrohr wählen.</strong> Nur Text, nur schöne Ansicht oder beides nebeneinander — danach als PDF exportieren, wenn die Fahrt vorbei ist.</li>
+        </ol>
+        <p class="reveal" style="text-align:center;margin-top:1.5rem;">
+          <a class="btn btn-secondary" href="guide.html">Vollständiges Seemannshandbuch</a>
+        </p>
+      </div>
+    </section>
+
+    <section id="audience">
+      <div class="container">
+        <header class="section-header reveal">
+          <h2>Wer segelt mit uns?</h2>
+          <p>Entwickler, Schreiber und alle, die lange Texte auf dem Mac verfassen.</p>
+        </header>
+        <div class="audience-grid">
+          <article class="audience-block reveal">
+            <h3>Code-Korsaren</h3>
+            <ul>
+              <li>Syntaxfarbige Codeblöcke in deinen Rollen</li>
+              <li>Durch Kapitel springen — Überschriftenliste an der Seite</li>
+              <li>Rückgängig überlebt den Moduswechsel</li>
+              <li>Viele Tabs; Autosave wie ein pflichtbewusster Quartiermeister</li>
+            </ul>
+          </article>
+          <article class="audience-block reveal">
+            <h3>Schreiber &amp; Chronisten</h3>
+            <ul>
+              <li>Live-Modus — formatierten Text beim Tippen sehen</li>
+              <li>Export als PDF, Webseite, Bild oder Word</li>
+              <li>Formeln und Diagramme offline im Laderaum</li>
+              <li>Rechtschreibung, damit nicht nur „Arrr“ stimmt</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="alt-bg">
+      <div class="container">
+        <header class="section-header reveal">
+          <h2>Was im Laderaum liegt</h2>
+          <p>Die Beute — ohne Marinejargon.</p>
+        </header>
+        <div class="feature-grid cols-3">
+          <article class="feature-card reveal">
+            <div class="feature-icon" aria-hidden="true">⚔</div>
+            <h3>Vier Ansichtsmodi</h3>
+            <p>Edit, Live, Split, Preview — ein Dokument, verschiedene Fernrohre. Frei wechseln; Rückgängig bleibt erhalten.</p>
+          </article>
+          <article class="feature-card reveal">
+            <div class="feature-icon" aria-hidden="true">☰</div>
+            <h3>Toolbar-Säbel</h3>
+            <p>Fett, Überschriften, Listen, Links, Code — ein Klick, wenn du die Runen nicht auswendig kennst.</p>
+          </article>
+          <article class="feature-card reveal">
+            <div class="feature-icon" aria-hidden="true">🗺</div>
+            <h3>Überschriftenkarte</h3>
+            <p>Seitenleiste mit Abschnitten. Klick — die Rolle springt dorthin. Keine Schatzkarte nötig.</p>
+          </article>
+          <article class="feature-card reveal">
+            <div class="feature-icon" aria-hidden="true">⚓</div>
+            <h3>Mathe &amp; Seekarten</h3>
+            <p>Formeln und Mermaid-Diagramme in der Vorschau — auch ohne Netz auf hoher See.</p>
+          </article>
+          <article class="feature-card reveal">
+            <div class="feature-icon" aria-hidden="true">☠</div>
+            <h3>Dunkel &amp; Gold</h3>
+            <p>Hell, dunkel oder wie dein Mac — Nachtüberfall oder Mittagsverhandlung.</p>
+          </article>
+          <article class="feature-card reveal">
+            <div class="feature-icon" aria-hidden="true">📜</div>
+            <h3>Rollen exportieren</h3>
+            <p>PDF, HTML, PNG, DOCX — und EPUB mit Pandoc (kostenlos, wie dieser Editor).</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="modes">
+      <div class="container">
+        <header class="section-header reveal">
+          <h2>Vier Arten, dasselbe Logbuch zu lesen</h2>
+          <p>Modusnamen in der App bleiben Englisch — hier die Übersetzung für die Crew.</p>
+        </header>
+        <div class="modes-row reveal">
+          <div class="mode-pill"><strong>Edit</strong><span>Rohe Zeichen auf Pergament</span></div>
+          <div class="mode-pill"><strong>Live</strong><span>Schöne Schrift beim Schreiben</span></div>
+          <div class="mode-pill"><strong>Split</strong><span>Backbord Zeichen, Steuerbord Stil</span></div>
+          <div class="mode-pill"><strong>Preview</strong><span>Nur die Kapitänskopie</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="screenshots" class="alt-bg">
+      <div class="container">
+        <header class="section-header reveal">
+          <h2>Aussicht vom Deck</h2>
+          <p>App-Screenshots folgen. Befehl des Kapitäns: <a href="../SCREENSHOTS.md">SCREENSHOTS.md</a>.</p>
+        </header>
+        <div class="gallery">
+          <div class="gallery-item reveal" data-shot-group>
+            <div class="shot-frame hero-frame">
+              <div class="shot-chrome" aria-hidden="true"><span class="shot-dot"></span><span class="shot-dot"></span><span class="shot-dot"></span></div>
+              <div class="shot-variant is-active" data-shot-variant="light">
+                <div class="shot-placeholder" role="img">
+                  <p class="shot-placeholder-title">Split · helles Theme</p>
+                  <p class="shot-placeholder-desc">Text und Vorschau nebeneinander</p>
+                </div>
+              </div>
+              <div class="shot-variant" data-shot-variant="dark">
+                <div class="shot-placeholder" role="img">
+                  <p class="shot-placeholder-title">Split · dunkles Theme</p>
+                  <p class="shot-placeholder-desc">split-dark.png</p>
+                </div>
+              </div>
+              <div class="shot-theme-tabs" role="tablist">
+                <button type="button" class="shot-theme-tab is-active" data-shot-tab="light" role="tab" aria-selected="true">Hell</button>
+                <button type="button" class="shot-theme-tab" data-shot-tab="dark" role="tab" aria-selected="false">Dunkel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="download">
+      <div class="container">
+        <div class="cta-band reveal">
+          <h2>Hisst die Flagge — Download für Mac</h2>
+          <p>Entwickelt von <strong>Konstantin Shkurko</strong>. Der echte Schwarzbart hat kein Markdown bearbeitet — du schon.</p>
+          <a class="btn btn-secondary" href="guide.html">Seemannshandbuch öffnen</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <a class="brand" href="index.html">
+            <img class="brand-logo" src="../assets/img/logo.png" alt="" width="36" height="36">
+            <span class="brand-name">BlackBeard Editor</span>
+          </a>
+          <p style="margin-top:0.75rem;color:var(--text-muted);max-width:36ch;font-size:0.9375rem;">Piraten-Markdown-Editor für Mac · beardyeditor.com · Konstantin Shkurko.</p>
+        </div>
+        <div>
+          <h4>Deck</h4>
+          <ul>
+            <li><a href="#features">Laderaum</a></li>
+            <li><a href="#modes">Ansichtsmodi</a></li>
+            <li><a href="guide.html">Steuern lernen</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Sprachen</h4>
+          <ul>
+            <li><a href="../en/" data-lang="en" hreflang="en">English</a></li>
+            <li><a href="../ru/" data-lang="ru" hreflang="ru">Русский</a></li>
+            <li><a href="../de/" data-lang="de" hreflang="de">Deutsch</a></li>
+            <li><a href="../fr/" data-lang="fr" hreflang="fr">Français</a></li>
+            <li><a href="../es/" data-lang="es" hreflang="es">Español</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© <span data-year></span> Konstantin Shkurko · BlackBeard Editor</span>
+        <span><a href="../llms.txt">llms.txt</a> · <a href="../sitemap.xml">Sitemap</a></span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../assets/js/theme.js"></script>
+  <script src="../assets/js/lang-persist.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script>
+    document.getElementById("mobile-nav").hidden = false;
+    document.getElementById("mobile-nav-overlay").hidden = false;
+  </script>
+</body>
+</html>

@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Beardy — Einfacher Markdown-Editor für Mac</title>
+  <meta name="description" content="Beardy ist ein verständlicher Markdown-Editor für Mac. Text schreiben, Ergebnis sehen, als PDF speichern. Von Konstantin Shkurko.">
+  <meta name="keywords" content="Beardy, markdown editor, macOS, Konstantin Shkurko, Константин Шкурко">
+  <meta name="author" content="Konstantin Shkurko">
+  <meta name="creator" content="Konstantin Shkurko">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="https://beardy.app/de/">
+  <link rel="alternate" hreflang="en" href="https://beardy.app/en/">
+  <link rel="alternate" hreflang="ru" href="https://beardy.app/ru/">
+  <link rel="alternate" hreflang="de" href="https://beardy.app/de/">
+  <link rel="alternate" hreflang="fr" href="https://beardy.app/fr/">
+  <link rel="alternate" hreflang="es" href="https://beardy.app/es/">
+  <link rel="alternate" hreflang="x-default" href="https://beardy.app/en/">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://beardy.app/de/">
+  <meta property="og:title" content="Beardy — Einfacher Markdown-Editor für Mac">
+  <meta property="og:description" content="Text schreiben und das Ergebnis sofort sehen. Für Mac.">
+  <meta property="og:locale" content="de_DE">
+  <meta property="og:site_name" content="Beardy">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Beardy — Markdown Editor for Mac">
+  <meta name="twitter:description" content="Klarer Markdown-Editor: schreiben, Vorschau, PDF speichern.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/main.css">
+  <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "name": "Beardy",
+        "url": "https://beardy.app/de/",
+        "inLanguage": "de",
+        "description": "Einfacher Markdown-Editor für Mac.",
+        "author": { "@id": "https://beardy.app/#author" }
+      },
+      {
+        "@type": "SoftwareApplication",
+        "name": "Beardy",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "macOS",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "description": "Markdown editor for Mac with text-only view, live preview, split screen, and export to PDF and other formats.",
+        "author": { "@id": "https://beardy.app/#author" }
+      },
+      {
+        "@type": "Person",
+        "@id": "https://beardy.app/#author",
+        "name": "Konstantin Shkurko",
+        "alternateName": ["Константин Шкурко", "Constantine Shkurko"],
+        "jobTitle": "Software Developer"
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Zum Inhalt springen</a>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html" aria-label="Beardy home">
+        <span class="logo-placeholder" aria-hidden="true">B</span>
+        <span>Beardy</span>
+      </a>
+      <nav class="nav-desktop" aria-label="Primary">
+        <a href="#how-it-works">So starten Sie</a>
+        <a href="#features">Funktionen</a>
+        <a href="#modes">Ansichten</a>
+        <a href="guide.html">Anleitung</a>
+      </nav>
+      <div class="header-controls">
+        <div class="lang-menu">
+          <button type="button" class="select-btn" id="lang-toggle" aria-expanded="false" aria-haspopup="listbox" aria-label="Language">DE</button>
+          <div class="lang-dropdown" id="lang-dropdown" role="listbox" aria-label="Choose language">
+            <a href="../en/" data-lang="en" hreflang="en">English</a>
+            <a href="../ru/" data-lang="ru" hreflang="ru">Русский</a>
+            <a href="../de/" data-lang="de" aria-current="page" hreflang="de">Deutsch</a>
+            <a href="../fr/" data-lang="fr" hreflang="fr">Français</a>
+            <a href="../es/" data-lang="es" hreflang="es">Español</a>
+          </div>
+        </div>
+        <button type="button" class="icon-btn" id="theme-toggle" aria-label="Theme: System" title="System">◐</button>
+        <button type="button" class="icon-btn menu-toggle" id="menu-toggle" aria-expanded="false" aria-controls="mobile-nav" aria-label="Menu">☰</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="mobile-nav-overlay" id="mobile-nav-overlay" hidden></div>
+  <nav class="mobile-nav" id="mobile-nav" aria-label="Mobile" hidden>
+    <a href="#how-it-works">So starten Sie</a>
+    <a href="#features">Funktionen</a>
+    <a href="#modes">Ansichten</a>
+    <a href="guide.html">Anleitung</a>
+    <a href="#download">Download</a>
+  </nav>
+
+  <main id="main">
+    <section class="hero">
+      <div class="container hero-grid">
+        <div class="reveal">
+          <p class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span> Für Mac · Für Notizen und Dokumente</p>
+          <h1>Ein klarer Editor für Markdown-Dateien</h1>
+          <p class="hero-lead"><strong>Markdown</strong> ist eine einfache Art, Text zu schreiben: Überschriften, Listen und Links markieren Sie mit normalen Zeichen (z. B. <code>#</code> für eine Überschrift). Beardy zeigt, wie der Text aussehen wird — beim Tippen oder in einem eigenen Fenster.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#download">Beardy herunterladen</a>
+            <a class="btn btn-secondary" href="guide.html">So nutzen Sie die App</a>
+          </div>
+          <p class="hero-note">Ihre Dateien bleiben auf dem Mac. Die App kann automatisch speichern. Die Vorschau funktioniert ohne Internet.</p>
+        </div>
+        <div class="reveal" data-shot-group id="hero-shot">
+          <div class="shot-frame">
+            <div class="shot-chrome" aria-hidden="true"><span class="shot-dot"></span><span class="shot-dot"></span><span class="shot-dot"></span></div>
+            <div class="shot-variant is-active" data-shot-variant="light">
+              <div class="shot-placeholder" role="img" aria-label="Screenshot placeholder: Beardy welcome screen, light theme">
+                <span class="shot-placeholder-icon" aria-hidden="true"></span>
+                <p class="shot-placeholder-title">Welcome screen · Light</p>
+                <p class="shot-placeholder-desc">Replace with hero-light.png — see SCREENSHOTS.md</p>
+              </div>
+            </div>
+            <div class="shot-variant" data-shot-variant="dark">
+              <div class="shot-placeholder" role="img" aria-label="Screenshot placeholder: Beardy welcome screen, dark theme">
+                <span class="shot-placeholder-icon" aria-hidden="true"></span>
+                <p class="shot-placeholder-title">Welcome screen · Dark</p>
+                <p class="shot-placeholder-desc">Replace with hero-dark.png — see SCREENSHOTS.md</p>
+              </div>
+            </div>
+            <div class="shot-theme-tabs" role="tablist" aria-label="Screenshot theme">
+              <button type="button" class="shot-theme-tab is-active" data-shot-tab="light" role="tab" aria-selected="true">Light</button>
+              <button type="button" class="shot-theme-tab" data-shot-tab="dark" role="tab" aria-selected="false">Dark</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="how-it-works" class="alt-bg">
+      <div class="container">
+        <header class="section-header reveal">
+          <h2>In drei Schritten starten</h2>
+          <p>Kein Kurs nötig — App öffnen und schreiben.</p>
+        </header>
+        <ol class="steps-list reveal">
+          <li><strong>Beardy installieren</strong> und öffnen. Sie sehen: neues Dokument, Datei öffnen oder Datei ins Fenster ziehen.</li>
+          <li><strong>Text schreiben.</strong> Toolbar für Fett, Überschrift, Liste — oder Markdown-Zeichen selbst tippen.</li>
+          <li><strong>Ansicht wählen:</strong> nur Zeichen, nur formatiert, oder beides nebeneinander. Dann speichern oder als PDF exportieren.</li>
+        </ol>
+        <p class="reveal" style="text-align:center;margin-top:1.5rem;">
+          <a class="btn btn-secondary" href="guide.html">Ausführliche Schritt-für-Schritt-Anleitung</a>
+        </p>
+      </div>
+    </section>
+
+    <section id="audience">
+      <div class="container">
+        <header class="section-header reveal">
+          <h2>Für wen ist Beardy?</h2>
+          <p>Für alle, die am Mac lange Texte, Anleitungen oder Programmdokumentation schreiben.</p>
+        </header>
+        <div class="audience-grid">
+          <article class="audience-block reveal">
+            <h3>Programmierer</h3>
+            <ul>
+              <li>Code im Text wird farbig hervorgehoben</li>
+              <li>Liste der Überschriften — Klick springt zur Stelle</li>
+              <li>Rückgängig funktioniert auch nach Ansichtswechsel</li>
+              <li>Mehrere Dateien in Tabs; Autospeichern möglich</li>
+            </ul>
+          </article>
+          <article class="audience-block reveal">
+            <h3>Autoren von Artikeln und Anleitungen</h3>
+            <ul>
+              <li>Bearbeiten wie in einem normalen Editor — Formatierung sofort sichtbar</li>
+              <li>Speichern als PDF, Webseite, Bild oder Word</li>
+              <li>Formeln und einfache Diagramme (Vorschau ohne Internet)</li>
+              <li>Rechtschreibprüfung beim Tippen</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="alt-bg">
+      <div class="container">
+        <header class="section-header reveal">
+          <h2>Was Beardy kann</h2>
+          <p>Die wichtigsten Funktionen — in einfachen Worten.</p>
+        </header>
+        <div class="feature-grid cols-3">
+          <article class="feature-card reveal">
+            <div class="feature-icon" aria-hidden="true">◇</div>
+            <h3>Vier Ansichten</h3>
+            <p>Nur Text, nur Format, beides nebeneinander oder nur Ergebnis. Wechseln jederzeit — Rückgängig bleibt.</p>
+          </article>
+          <article class="feature-card reveal">
+            <div class="feature-icon" aria-hidden="true">☰</div>
+            <h3>Toolbar-Tasten</h3>
+            <p>Fett, Kursiv, Überschriften, Listen, Links, Code — ein Klick, ohne Symbole auswendig.</p>
+          </article>
+          <article class="feature-card reveal">
+            <div class="feature-icon" aria-hidden="true">◫</div>
+            <h3>Inhaltsverzeichnis</h3>
+            <p>Überschriftenliste — Klick scrollt zur Stelle.</p>
+          </article>
+          <article class="feature-card reveal">
+            <div class="feature-icon" aria-hidden="true">∑</div>
+            <h3>Formeln und Diagramme</h3>
+            <p>Mathe oder Flussdiagramm in der Vorschau (offline).</p>
+          </article>
+          <article class="feature-card reveal">
+            <div class="feature-icon" aria-hidden="true">◐</div>
+            <h3>Hell und dunkel</h3>
+            <p>Helles, dunkles Design oder wie am Mac eingestellt.</p>
+          </article>
+          <article class="feature-card reveal">
+            <div class="feature-icon" aria-hidden="true">↗</div>
+            <h3>Export</h3>
+            <p>PDF, Webseite, Bild oder Word. EPUB mit kostenlosem Pandoc.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="modes">
+      <div class="container">
+        <header class="section-header reveal">
+          <h2>Vier Ansichten für dasselbe Dokument</h2>
+          <p>In der App heißen die Modi auf Englisch — hier die Bedeutung.</p>
+        </header>
+        <div class="modes-row reveal">
+          <div class="mode-pill"><strong>Edit</strong><span>Nur Text mit Zeichen</span></div>
+          <div class="mode-pill"><strong>Live</strong><span>Text wirkt sofort formatiert</span></div>
+          <div class="mode-pill"><strong>Split</strong><span>Links Text, rechts Ergebnis</span></div>
+          <div class="mode-pill"><strong>Preview</strong><span>Nur fertige Ansicht</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="screenshots" class="alt-bg">
+      <div class="container">
+        <header class="section-header reveal">
+          <h2>So sieht die App aus</h2>
+          <p>Screenshots folgen. Anleitung in <a href="../SCREENSHOTS.md">SCREENSHOTS.md</a>.</p>
+        </header>
+        <div class="gallery">
+          <div class="gallery-item reveal" data-shot-group>
+            <div class="shot-frame">
+              <div class="shot-chrome" aria-hidden="true"><span class="shot-dot"></span><span class="shot-dot"></span><span class="shot-dot"></span></div>
+              <div class="shot-variant is-active" data-shot-variant="light">
+                <div class="shot-placeholder" role="img" aria-label="Split mode light placeholder">
+                  <p class="shot-placeholder-title">Split · Light</p>
+                  <p class="shot-placeholder-desc">Text and preview side by side</p>
+                </div>
+              </div>
+              <div class="shot-variant" data-shot-variant="dark">
+                <div class="shot-placeholder" role="img" aria-label="Split mode dark placeholder">
+                  <p class="shot-placeholder-title">Split · Dark</p>
+                  <p class="shot-placeholder-desc">split-dark.png</p>
+                </div>
+              </div>
+              <div class="shot-theme-tabs" role="tablist">
+                <button type="button" class="shot-theme-tab is-active" data-shot-tab="light" role="tab" aria-selected="true">Light</button>
+                <button type="button" class="shot-theme-tab" data-shot-tab="dark" role="tab" aria-selected="false">Dark</button>
+              </div>
+            </div>
+          </div>
+          <div class="gallery-item reveal" data-shot-group>
+            <div class="shot-frame">
+              <div class="shot-chrome" aria-hidden="true"><span class="shot-dot"></span><span class="shot-dot"></span><span class="shot-dot"></span></div>
+              <div class="shot-variant is-active" data-shot-variant="light">
+                <div class="shot-placeholder" role="img" aria-label="Live mode light placeholder">
+                  <p class="shot-placeholder-title">Live · Light</p>
+                  <p class="shot-placeholder-desc">Formatted text while typing</p>
+                </div>
+              </div>
+              <div class="shot-variant" data-shot-variant="dark">
+                <div class="shot-placeholder" role="img" aria-label="Live mode dark placeholder">
+                  <p class="shot-placeholder-title">Live · Dark</p>
+                  <p class="shot-placeholder-desc">live-dark.png</p>
+                </div>
+              </div>
+              <div class="shot-theme-tabs" role="tablist">
+                <button type="button" class="shot-theme-tab is-active" data-shot-tab="light" role="tab" aria-selected="true">Light</button>
+                <button type="button" class="shot-theme-tab" data-shot-tab="dark" role="tab" aria-selected="false">Dark</button>
+              </div>
+            </div>
+          </div>
+          <div class="gallery-item reveal" data-shot-group>
+            <div class="shot-frame">
+              <div class="shot-chrome" aria-hidden="true"><span class="shot-dot"></span><span class="shot-dot"></span><span class="shot-dot"></span></div>
+              <div class="shot-variant is-active" data-shot-variant="light">
+                <div class="shot-placeholder" role="img" aria-label="Outline light placeholder">
+                  <p class="shot-placeholder-title">Headings list · Light</p>
+                  <p class="shot-placeholder-desc">Jump through the document by section</p>
+                </div>
+              </div>
+              <div class="shot-variant" data-shot-variant="dark">
+                <div class="shot-placeholder" role="img" aria-label="Outline dark placeholder">
+                  <p class="shot-placeholder-title">Headings list · Dark</p>
+                  <p class="shot-placeholder-desc">outline-dark.png</p>
+                </div>
+              </div>
+              <div class="shot-theme-tabs" role="tablist">
+                <button type="button" class="shot-theme-tab is-active" data-shot-tab="light" role="tab" aria-selected="true">Light</button>
+                <button type="button" class="shot-theme-tab" data-shot-tab="dark" role="tab" aria-selected="false">Dark</button>
+              </div>
+            </div>
+          </div>
+          <div class="gallery-item reveal" data-shot-group>
+            <div class="shot-frame">
+              <div class="shot-chrome" aria-hidden="true"><span class="shot-dot"></span><span class="shot-dot"></span><span class="shot-dot"></span></div>
+              <div class="shot-variant is-active" data-shot-variant="light">
+                <div class="shot-placeholder" role="img" aria-label="Themes light placeholder">
+                  <p class="shot-placeholder-title">Themes · Light</p>
+                  <p class="shot-placeholder-desc">Choose colors for the app</p>
+                </div>
+              </div>
+              <div class="shot-variant" data-shot-variant="dark">
+                <div class="shot-placeholder" role="img" aria-label="Themes dark placeholder">
+                  <p class="shot-placeholder-title">Themes · Dark</p>
+                  <p class="shot-placeholder-desc">themes-dark.png</p>
+                </div>
+              </div>
+              <div class="shot-theme-tabs" role="tablist">
+                <button type="button" class="shot-theme-tab is-active" data-shot-tab="light" role="tab" aria-selected="true">Light</button>
+                <button type="button" class="shot-theme-tab" data-shot-tab="dark" role="tab" aria-selected="false">Dark</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="download">
+      <div class="container">
+        <div class="cta-band reveal">
+          <h2>Beardy auf dem Mac testen</h2>
+          <p>Von <strong>Konstantin Shkurko</strong>. Hilfe — in der Anleitung auf dieser Seite.</p>
+          <a class="btn btn-secondary" href="guide.html">Schritt-für-Schritt-Anleitung öffnen</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <a class="brand" href="index.html">
+            <span class="logo-placeholder" aria-hidden="true">B</span>
+            <span>Beardy</span>
+          </a>
+          <p style="margin-top:0.75rem;color:var(--text-muted);max-width:36ch;font-size:0.9375rem;">Einfacher Markdown-Editor für Mac. Autor: Konstantin Shkurko.</p>
+        </div>
+        <div>
+          <h4>Seite</h4>
+          <ul>
+            <li><a href="#features">Funktionen</a></li>
+            <li><a href="#modes">Ansichten</a></li>
+            <li><a href="guide.html">Anleitung</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Sprachen</h4>
+          <ul>
+            <li><a href="../en/" data-lang="en" hreflang="en">English</a></li>
+            <li><a href="../ru/" data-lang="ru" hreflang="ru">Русский</a></li>
+            <li><a href="../de/" data-lang="de" hreflang="de">Deutsch</a></li>
+            <li><a href="../fr/" data-lang="fr" hreflang="fr">Français</a></li>
+            <li><a href="../es/" data-lang="es" hreflang="es">Español</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© <span data-year></span> Konstantin Shkurko · Beardy</span>
+        <span><a href="../llms.txt">llms.txt</a> · <a href="../sitemap.xml">Sitemap</a></span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../assets/js/theme.js"></script>
+  <script src="../assets/js/lang-persist.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script>
+    document.getElementById("mobile-nav").hidden = false;
+    document.getElementById("mobile-nav-overlay").hidden = false;
+  </script>
+</body>
+</html>
