@@ -4,7 +4,7 @@ Reference document with common Markdown / GFM elements supported in Beardy2.
 
 **Added standalone paragraph after the intro.**
 
-## Headings
+## Headings666555
 
 ### Third level
 
@@ -110,9 +110,9 @@ flowchart LR
 
 ## Image
 
-![Sample diagram](assets/sample-diagram.png "Diagram title")
+![Sample diagram](<assets/sample-diagram.png "Diagram title">)
 
-![Added image](assets/sample-diagram.png "Added title")
+![Added image](<assets/sample-diagram.png "Added title">)
 
 ## Math
 
@@ -122,13 +122,9 @@ Inline added: $a^2 + b^2 = c^2$
 
 Display:
 
-$$
-\sum_{i=1}^{n} i = \frac{n(n+1)}{2}
-$$
+$$\sum_{i=1}^{n} i = \frac{n(n+1)}{2}$$
 
-$$
-\int_0^1 x^2 \, dx = \frac{1}{3}
-$$
+$$\int_0^1 x^2 \, dx = \frac{1}{3}$$
 
 ## Raw HTML snippet
 

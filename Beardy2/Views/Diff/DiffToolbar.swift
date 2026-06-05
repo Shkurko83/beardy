@@ -66,15 +66,28 @@ struct DiffToolbar: View {
             Button {
                 documentManager.selectDiffSnapshot(id: nil)
             } label: {
-                Text("Previous version (auto)")
+                Label("Previous version (auto)", systemImage: isAutoComparison ? "checkmark" : "")
             }
 
             if !historySnapshots.isEmpty {
                 Section("Version history") {
                     ForEach(historySnapshots) { snapshot in
-                        Button(snapshotMenuTitle(snapshot)) {
+                        Button {
                             documentManager.selectDiffSnapshot(id: snapshot.id)
+                        } label: {
+                            Label(
+                                snapshotMenuTitle(snapshot),
+                                systemImage: isSelectedSnapshot(snapshot.id) ? "checkmark" : ""
+                            )
                         }
+                    }
+
+                    Divider()
+
+                    Button(role: .destructive) {
+                        documentManager.clearVersionHistory()
+                    } label: {
+                        Label("Clear Version History", systemImage: "trash")
                     }
                 }
             }
@@ -114,7 +127,24 @@ struct DiffToolbar: View {
     }
 
     private func snapshotMenuTitle(_ snapshot: DocumentSnapshot) -> String {
-        snapshot.menuLabel
+        var title = snapshot.menuLabel
+        if let current = documentManager.currentDocument?.content,
+           snapshot.content == current {
+            title += " (matches editor)"
+        }
+        return title
+    }
+
+    private var isAutoComparison: Bool {
+        if case .previousVersion = diff.comparisonSource { return true }
+        return false
+    }
+
+    private func isSelectedSnapshot(_ id: UUID) -> Bool {
+        if case .snapshot(let selectedID) = diff.comparisonSource {
+            return selectedID == id
+        }
+        return diff.selectedSnapshotID == id
     }
 }
 

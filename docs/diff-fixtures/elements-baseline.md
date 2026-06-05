@@ -2,12 +2,11 @@
 
 Reference document with common Markdown / GFM elements supported in Beardy2.
 
-## Headings
-
+## Headings4444
+## Headings6666
 ### Third level
 
 #### Fourth level
-
 ##### Fifth level
 
 ###### Sixth level
@@ -49,7 +48,7 @@ Second line after soft break.
 ## Task list
 
 - [x] Completed task
-- [ ] Open task
+- [x] Open task
 - [ ] Another open task
 
 ## Fenced code (Swift)
@@ -88,7 +87,7 @@ flowchart LR
 
 ## Image
 
-![Sample diagram](assets/sample-diagram.png "Diagram title")
+![Sample diagram](<assets/sample-diagram.png "Diagram title">)
 
 ## Math
 
@@ -96,9 +95,7 @@ Inline: $E = mc^2$
 
 Display:
 
-$$
-\sum_{i=1}^{n} i = \frac{n(n+1)}{2}
-$$
+$$\sum_{i=1}^{n} i = \frac{n(n+1)}{2}$$
 
 ## Raw HTML snippet
 

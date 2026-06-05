@@ -60,6 +60,7 @@ class DocumentManager: ObservableObject {
     private var undoHistories: [UUID: DocumentUndoHistory] = [:]
     private var isApplyingUndoRedo = false
     private var lastUndoRedoActionTime: Date?
+    private var editorFlushHandler: ((String) -> Void)?
 
     @Published private(set) var canUndo = false
     @Published private(set) var canRedo = false
@@ -305,7 +306,12 @@ class DocumentManager: ObservableObject {
 
     // MARK: - Document Operations
     func createNewDocument() {
-        let newDoc = MarkdownDocument(fileName: nextUntitledFileName())
+        var newDoc = MarkdownDocument(fileName: nextUntitledFileName())
+        diffCoordinator.snapshots = SnapshotStore.append(
+            content: newDoc.content,
+            label: SnapshotStore.onOpenLabel,
+            to: newDoc
+        )
         openInNewTab(newDoc)
     }
 
@@ -339,7 +345,12 @@ class DocumentManager: ObservableObject {
                 content: content,
                 url: resolved
             )
-            _ = SnapshotStore.append(content: content, label: SnapshotStore.onOpenLabel, to: doc)
+            _ = SnapshotStore.append(
+                content: content,
+                label: SnapshotStore.onOpenLabel,
+                to: doc,
+                carryingForward: SnapshotStore.load(for: doc)
+            )
             if inNewTab {
                 openInNewTab(doc)
             } else {
@@ -354,7 +365,6 @@ class DocumentManager: ObservableObject {
     
     func saveDocument() {
         guard let doc = currentDocument else { return }
-        
         if let url = doc.url {
             saveDocument(to: url)
         } else {
@@ -383,25 +393,46 @@ class DocumentManager: ObservableObject {
         }
     }
     
-    private func saveDocument(to url: URL) {
+    private func saveDocument(to url: URL, content explicitContent: String? = nil) {
         guard let id = selectedTabID,
               let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+
+        if explicitContent == nil {
+            flushEditorContent(forSave: true) { [weak self] content in
+                self?.saveDocument(to: url, content: content)
+            }
+            return
+        }
+
         var doc = tabs[index].document
+        let previousDocumentID = doc.id
+        let hadURL = doc.url != nil
+        let text = explicitContent!
 
         do {
-            try doc.content.write(to: url, atomically: true, encoding: .utf8)
-            doc.url = url
-            doc.fileName = url.lastPathComponent
+            Self.grantAccessAndSaveBookmarks(for: url)
+            if doc.content != text {
+                doc.content = text
+                doc.updateStatistics()
+            }
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            let resolved = SecurityBookmarkStore.resolveURL(path: url.path) ?? url.standardizedFileURL
+            doc.url = resolved
+            doc.fileName = resolved.lastPathComponent
             doc.hasUnsavedChanges = false
             doc.lastSavedDate = Date()
             tabs[index].document = doc
+            if !hadURL {
+                SnapshotStore.migrateFromUntitled(documentID: previousDocumentID, to: doc)
+            }
+            // Snapshot must match bytes on disk, not a stale in-memory copy.
+            let snapshotContent = (try? String(contentsOf: resolved, encoding: .utf8)) ?? text
             diffCoordinator.snapshots = SnapshotStore.append(
-                content: doc.content,
+                content: snapshotContent,
                 label: SnapshotStore.saveLabel,
-                to: doc
+                to: doc,
+                carryingForward: diffCoordinator.snapshots
             )
-
-            Self.grantAccessAndSaveBookmarks(for: url)
             DocumentSecurityAccess.activate(document: url)
             saveToRecent(doc)
 
@@ -435,10 +466,14 @@ class DocumentManager: ObservableObject {
     func prepareDiffMode(enteringFrom mode: ViewMode) {
         diffCoordinator.previousMode = mode
         diffCoordinator.isActive = true
-        if let tabID = selectedTabID {
-            applyDiffSettings(forTabID: tabID)
+        flushEditorContent(allowDuringDiffTransition: true) { [weak self] content in
+            guard let self else { return }
+            self.applyEditorContentForDiff(content)
+            if let tabID = self.selectedTabID {
+                self.applyDiffSettings(forTabID: tabID)
+            }
+            self.reloadDiffModeForCurrentTab(resetSnapshotSelection: false)
         }
-        reloadDiffModeForCurrentTab(resetSnapshotSelection: false)
     }
 
     private func captureDiffSettings(forTabID tabID: UUID) {
@@ -476,13 +511,6 @@ class DocumentManager: ObservableObject {
         }
 
         var snapshots = SnapshotStore.load(for: doc)
-        if snapshots.isEmpty {
-            snapshots = SnapshotStore.append(
-                content: doc.content,
-                label: SnapshotStore.onOpenLabel,
-                to: doc
-            )
-        }
         if doc.hasUnsavedChanges {
             let needsUnsavedSnapshot = snapshots.first?.label != "Unsaved"
                 || snapshots.first?.content != doc.content
@@ -491,12 +519,36 @@ class DocumentManager: ObservableObject {
                     content: doc.content,
                     label: "Unsaved",
                     to: doc,
-                    skipIfSameAsLatest: true
+                    skipIfSameAsLatest: true,
+                    carryingForward: snapshots
                 )
             }
         }
         diffCoordinator.snapshots = snapshots
         refreshDiffRender()
+    }
+
+    func clearVersionHistory() {
+        guard let doc = currentDocument else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "Clear Version History?"
+        alert.informativeText =
+            "This removes all saved snapshots for this document. The markdown file itself is not changed."
+        alert.addButton(withTitle: "Clear Version History")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        SnapshotStore.clearHistory(for: doc)
+        diffCoordinator.snapshots = []
+        diffCoordinator.comparisonSource = .previousVersion
+        diffCoordinator.selectedSnapshotID = nil
+        diffCoordinator.externalBaseline = nil
+        persistDiffSettingsForCurrentTab()
+
+        if viewMode == .diff {
+            reloadDiffModeForCurrentTab(resetSnapshotSelection: true)
+        }
     }
 
     func selectDiffSnapshot(id: UUID?) {
@@ -507,8 +559,11 @@ class DocumentManager: ObservableObject {
             diffCoordinator.comparisonSource = .previousVersion
             diffCoordinator.selectedSnapshotID = nil
         }
+        if let doc = currentDocument {
+            diffCoordinator.snapshots = SnapshotStore.load(for: doc)
+        }
         persistDiffSettingsForCurrentTab()
-        refreshDiffRender()
+        refreshDiffRender(baselineSnapshotID: id)
     }
 
     func pickExternalComparisonFile() {
@@ -564,11 +619,7 @@ class DocumentManager: ObservableObject {
         refreshDiffRender(bumpViewIdentity: false)
     }
 
-    func refreshDiffRender(bumpViewIdentity: Bool = true) {
-        if let doc = currentDocument {
-            diffCoordinator.snapshots = SnapshotStore.load(for: doc)
-        }
-
+    func refreshDiffRender(bumpViewIdentity: Bool = true, baselineSnapshotID: UUID? = nil) {
         guard let doc = currentDocument else {
             diffCoordinator.diffResult = nil
             diffCoordinator.resetNavigation(changeCount: 0)
@@ -576,7 +627,8 @@ class DocumentManager: ObservableObject {
             return
         }
 
-        guard let baseline = diffBaselineContent(for: doc) else {
+        let baseline = resolveDiffBaseline(for: doc, snapshotID: baselineSnapshotID)
+        guard let baseline else {
             diffCoordinator.diffResult = nil
             switch diffCoordinator.comparisonSource {
             case .externalFile:
@@ -628,19 +680,90 @@ class DocumentManager: ObservableObject {
 
     /// Baseline text for comparison; `nil` when nothing suitable exists.
     func diffBaselineContent(for doc: MarkdownDocument) -> String? {
+        resolveDiffBaseline(for: doc, snapshotID: nil)
+    }
+
+    private func resolveDiffBaseline(for doc: MarkdownDocument, snapshotID: UUID?) -> String? {
+        if let snapshotID {
+            return snapshotContent(id: snapshotID, document: doc)
+        }
         switch diffCoordinator.comparisonSource {
         case .externalFile:
             return diffCoordinator.externalBaseline?.content
-
         case .snapshot(let id):
-            return diffCoordinator.snapshots.first(where: { $0.id == id })?.content
-
+            return snapshotContent(id: id, document: doc)
         case .previousVersion:
             return SnapshotStore.previousDifferentSnapshot(
                 in: diffCoordinator.snapshots,
                 current: doc.content
             )?.content
         }
+    }
+
+    private func snapshotContent(id: UUID, document: MarkdownDocument) -> String? {
+        if let snap = diffCoordinator.snapshots.first(where: { $0.id == id }) {
+            return snap.content
+        }
+        return SnapshotStore.load(for: document).first(where: { $0.id == id })?.content
+    }
+
+    /// Pulls the latest text from CodeMirror before save / entering Diff.
+    func flushEditorContent(
+        allowDuringDiffTransition: Bool = false,
+        forSave: Bool = false,
+        then completion: @escaping (String) -> Void
+    ) {
+        if viewMode == .diff && !allowDuringDiffTransition {
+            completion(currentDocument?.content ?? "")
+            return
+        }
+
+        var finished = false
+        let finish: (String) -> Void = { content in
+            guard !finished else { return }
+            finished = true
+            self.editorFlushHandler = nil
+            completion(content)
+        }
+
+        editorFlushHandler = { content in
+            finish(content)
+        }
+
+        execEditorJS(
+            """
+            (function() {
+                var c = window.cmEditor?.getContent?.() || '';
+                if (window.webkit?.messageHandlers?.editorContentFlush) {
+                    window.webkit.messageHandlers.editorContentFlush.postMessage(c);
+                }
+            })();
+            """
+        )
+
+        let timeout = forSave ? 2.0 : 0.35
+        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) { [weak self] in
+            guard !finished else { return }
+            let fallback = self?.currentDocument?.content ?? ""
+            if forSave {
+                NSLog("SnapshotStore: editor flush timed out; using in-memory document content")
+            }
+            finish(fallback)
+        }
+    }
+
+    func deliverFlushedEditorContent(_ content: String) {
+        editorFlushHandler?(content)
+    }
+
+    private func applyEditorContentForDiff(_ content: String) {
+        guard let id = selectedTabID,
+              let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        guard tabs[index].document.content != content else { return }
+        var doc = tabs[index].document
+        doc.content = content
+        doc.updateStatistics()
+        tabs[index].document = doc
     }
 
     func diffNextChange() {

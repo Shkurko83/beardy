@@ -4,16 +4,17 @@ import Foundation
 enum StructuredDiffEngine {
 
     /// - Parameters:
-    ///   - current: Text in the editor (starting point).
-    ///   - comparison: The other version (e.g. external file or snapshot). Insertions = in `comparison` but not `current`; deletions = in `current` but not `comparison`.
+    ///   - current: Text in the editor (the new version).
+    ///   - comparison: Baseline to compare against (snapshot, external file, etc.).
+    ///   Red / deleted = removed since `comparison`; green / inserted = added in `current`.
     static func compute(
         current: String,
         comparison: String,
         granularity: DiffGranularity,
         documentURL: URL? = nil
     ) -> [DiffChunk] {
-        let oldBlocks = MarkdownBlockExtractor.extract(from: current)
-        let newBlocks = MarkdownBlockExtractor.extract(from: comparison)
+        let oldBlocks = MarkdownBlockExtractor.extract(from: comparison)
+        let newBlocks = MarkdownBlockExtractor.extract(from: current)
         let ops = BlockDiffLCS.diff(
             old: oldBlocks.map(\.fingerprint),
             new: newBlocks.map(\.fingerprint)

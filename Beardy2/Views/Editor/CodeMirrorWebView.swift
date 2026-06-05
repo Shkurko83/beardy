@@ -39,6 +39,7 @@ struct CodeMirrorWebView: NSViewRepresentable {
         contentController.add(context.coordinator, name: "processImageFile")
         contentController.add(context.coordinator, name: "outlineHeadings")
         contentController.add(context.coordinator, name: "editorUndoRedo")
+        contentController.add(context.coordinator, name: "editorContentFlush")
 
         #if DEBUG
         webView.configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
@@ -241,6 +242,12 @@ struct CodeMirrorWebView: NSViewRepresentable {
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             if message.name == "logging" { return }
+
+            if message.name == "editorContentFlush", let content = message.body as? String {
+                DispatchQueue.main.async {
+                    DocumentManager.shared?.deliverFlushedEditorContent(content)
+                }
+            }
 
             if message.name == "contentChanged", let newText = message.body as? String {
                 isUpdatingFromJS = true

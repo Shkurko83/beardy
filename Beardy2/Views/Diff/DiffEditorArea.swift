@@ -6,6 +6,19 @@ struct DiffEditorArea: View {
 
     private var diff: DiffModeCoordinator { documentManager.diffCoordinator }
 
+    private var diffViewIdentity: String {
+        let sourceKey: String
+        switch diff.comparisonSource {
+        case .previousVersion:
+            sourceKey = "auto"
+        case .snapshot(let id):
+            sourceKey = id.uuidString
+        case .externalFile:
+            sourceKey = diff.externalBaseline?.url.standardizedFileURL.path ?? "external"
+        }
+        return "\(documentManager.diffRenderRevision)-\(sourceKey)"
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             DiffToolbar()
@@ -18,7 +31,7 @@ struct DiffEditorArea: View {
                         html: result.html,
                         focusedChangeIndex: diff.currentChangeIndex
                     )
-                    .id(documentManager.diffRenderRevision)
+                    .id(diffViewIdentity)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                     DiffMinimap(
@@ -26,7 +39,7 @@ struct DiffEditorArea: View {
                         currentChangeIndex: diff.currentChangeIndex,
                         onSelect: { documentManager.focusDiffChange($0) }
                     )
-                    .id(documentManager.diffRenderRevision)
+                    .id(diffViewIdentity)
                 } else {
                     ContentUnavailableView(
                         "No comparison",
