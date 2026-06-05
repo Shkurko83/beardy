@@ -95,6 +95,16 @@ enum DiffHTMLBuilder {
             margin: 0.25em 0;
             line-height: 1.5;
         }
+        #diff-content .diff-nested-list {
+            margin: 0.35em 0 0.2em;
+            padding-left: 1.5em;
+        }
+        #diff-content li > .diff-list,
+        #diff-content li > ul,
+        #diff-content li > ol {
+            margin-top: 0.35em;
+            margin-bottom: 0.15em;
+        }
         #diff-content ul.task-list,
         #diff-content .diff-list.task-list {
             list-style: none;
