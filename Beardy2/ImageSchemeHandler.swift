@@ -48,29 +48,13 @@ class ImageSchemeHandler: NSObject, WKURLSchemeHandler {
     func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {}
 
     private func loadImageData(from fileURL: URL) -> Data? {
-        let bookmarkKey = "bookmark_\(fileURL.path)"
-        if let bookmarkData = UserDefaults.standard.data(forKey: bookmarkKey) {
-            var isStale = false
-            if let resolvedURL = try? URL(
-                resolvingBookmarkData: bookmarkData,
-                options: .withSecurityScope,
-                relativeTo: nil,
-                bookmarkDataIsStale: &isStale
-            ) {
-                let accessed = resolvedURL.startAccessingSecurityScopedResource()
-                defer {
-                    if accessed { resolvedURL.stopAccessingSecurityScopedResource() }
-                }
-                if let data = try? Data(contentsOf: resolvedURL) {
-                    if isStale, let newBookmark = try? resolvedURL.bookmarkData(
-                        options: .withSecurityScope,
-                        includingResourceValuesForKeys: nil,
-                        relativeTo: nil
-                    ) {
-                        UserDefaults.standard.set(newBookmark, forKey: bookmarkKey)
-                    }
-                    return data
-                }
+        if let resolvedURL = SecurityBookmarkStore.resolveURL(path: fileURL.path) {
+            let accessed = resolvedURL.startAccessingSecurityScopedResource()
+            defer {
+                if accessed { resolvedURL.stopAccessingSecurityScopedResource() }
+            }
+            if let data = try? Data(contentsOf: resolvedURL) {
+                return data
             }
         }
 

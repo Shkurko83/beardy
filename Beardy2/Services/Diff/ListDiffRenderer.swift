@@ -37,6 +37,12 @@ enum ListDiffRenderer {
         return renderParsedListDiff(old: oldList, new: newList, documentURL: documentURL)
     }
 
+    /// Line-based list HTML (preserves nested ordered/unordered items). Returns nil if `markdown` is not a list.
+    static func renderListPreservingNesting(_ markdown: String, documentURL: URL?) -> String? {
+        guard let list = parseListBlock(markdown) else { return nil }
+        return renderParsedListDiff(old: list, new: list, documentURL: documentURL)
+    }
+
     // MARK: - Render
 
     private static func renderParsedListDiff(

@@ -474,6 +474,7 @@ class ThemeService: NSObject, ObservableObject {
             --md-code-text: \(codeText);
             --md-selection: \(selection);
             --md-border: \(border);
+            --md-divider: \(secondary);
             --md-table-header: \(tableHeader);
             --md-table-stripe: \(tableStripe);
         }
@@ -631,10 +632,12 @@ class ThemeService: NSObject, ObservableObject {
         }
 
         #preview-content blockquote,
-        #live-editor blockquote {
+        #live-editor blockquote,
+        #diff-content blockquote,
+        #diff-content .diff-blockquote {
             margin: 0.5em 0;
             padding: 0.25em 0 0.25em 1em;
-            border-left: 4px solid var(--md-border);
+            border-left: 4px solid var(--md-divider);
             color: var(--md-secondary);
         }
 
@@ -646,10 +649,24 @@ class ThemeService: NSObject, ObservableObject {
 
         #preview-content li { margin: 0.25em 0; }
 
-        #preview-content hr {
+        #preview-content hr,
+        #live-editor hr,
+        #diff-content hr {
             border: none;
-            border-top: 1px solid var(--md-border);
+            border-top: 1px solid var(--md-divider);
             margin: 2em 0;
+        }
+
+        .live-block[data-type="blockquote"] {
+            border-left: 4px solid var(--md-divider);
+        }
+
+        .live-block[data-type="blockquote"] .bq-nested {
+            border-left-color: var(--md-divider);
+        }
+
+        .live-block[data-type="hr"] {
+            border-top-color: var(--md-divider);
         }
 
         #preview-content table.md-table {

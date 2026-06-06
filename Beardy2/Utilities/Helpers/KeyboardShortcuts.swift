@@ -167,17 +167,25 @@ class KeyboardShortcutsManager: ObservableObject {
         case "\\" where !hasShift && !hasOption:
             documentManager.toggleSidebar()
             return true
-            
+
+        case "o" where hasShift && !hasOption:
+            documentManager.showOutline.toggle()
+            return true
+
         case "/" where !hasShift && !hasOption:
-            documentManager.toggleSourceMode()
+            documentManager.viewMode = .edit
             return true
-            
-        case "f" where hasShift && !hasOption:
-            documentManager.toggleFocusMode()
+
+        case "l" where hasShift && !hasOption:
+            documentManager.viewMode = .live
             return true
-            
-        case "t" where hasShift && !hasOption:
-            documentManager.toggleTypewriterMode()
+
+        case "p" where hasShift && !hasOption:
+            documentManager.viewMode = .preview
+            return true
+
+        case "s" where modifiers.contains(.control) && !hasShift && !hasOption:
+            documentManager.viewMode = .split
             return true
             
         default:
@@ -264,12 +272,12 @@ struct ShortcutsHelpPanel: View {
         ]),
         ("View", [
             ("⌘\\", "Toggle Sidebar"),
-            ("⌘/", "Toggle Source Mode"),
-            ("⇧⌘F", "Focus Mode"),
-            ("⇧⌘T", "Typewriter Mode"),
-            ("⌘0", "Actual Size"),
-            ("⌘+", "Zoom In"),
-            ("⌘-", "Zoom Out")
+            ("⇧⌘O", "Toggle Outline"),
+            ("⌘/", "Edit Mode"),
+            ("⇧⌘L", "Live Mode"),
+            ("⇧⌘P", "Preview Mode"),
+            ("⌃⌘S", "Split Mode"),
+            ("⌥⌘D", "Diff Mode")
         ]),
         ("Other", [
             ("⌘,", "Preferences"),

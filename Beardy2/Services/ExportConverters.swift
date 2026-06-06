@@ -15,7 +15,7 @@ enum ExportError: LocalizedError {
         case .conversionFailed(let detail):
             return detail
         case .pandocNotInstalled:
-            return "Pandoc is not installed. Install it with Homebrew (brew install pandoc) to export EPUB or LaTeX."
+            return "Pandoc is not installed. Install it with Homebrew (brew install pandoc) for best EPUB, LaTeX, or DOCX export."
         case .unsupportedFormat:
             return "This export format is not supported."
         }
@@ -55,7 +55,12 @@ enum PandocConverter {
 
     static var isAvailable: Bool { executablePath != nil }
 
-    static func convert(markdown: String, to outputURL: URL, format: String) throws {
+    static func convert(
+        markdown: String,
+        to outputURL: URL,
+        format: String,
+        resourcePath: URL? = nil
+    ) throws {
         guard let pandoc = executablePath else {
             throw ExportError.pandocNotInstalled
         }
@@ -66,9 +71,19 @@ enum PandocConverter {
 
         try markdown.write(to: tempMD, atomically: true, encoding: .utf8)
 
+        var arguments = [
+            tempMD.path,
+            "-o", outputURL.path,
+            "-f", "gfm+tex_math_dollars",
+            "-t", format
+        ]
+        if let resourcePath {
+            arguments += ["--resource-path", resourcePath.path]
+        }
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: pandoc)
-        process.arguments = [tempMD.path, "-o", outputURL.path, "-t", format]
+        process.arguments = arguments
 
         try process.run()
         process.waitUntilExit()

@@ -12,6 +12,11 @@ enum DiffMarkupRenderer {
             return renderMathDisplayHTML(trimmed)
         }
 
+        // Swift Markdown flattens nested ordered lists; use indentation-aware parser instead.
+        if let listHTML = ListDiffRenderer.renderListPreservingNesting(trimmed, documentURL: documentURL) {
+            return listHTML
+        }
+
         let processed = trimmed.components(separatedBy: "\n")
             .map { $0.isEmpty ? "\u{00A0}" : $0 }
             .joined(separator: "\n")

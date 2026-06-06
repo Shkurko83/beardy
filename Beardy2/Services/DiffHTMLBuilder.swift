@@ -73,7 +73,7 @@ enum DiffHTMLBuilder {
         #diff-content .diff-blockquote {
             margin: 0.75em 0;
             padding: 0.35em 0 0.35em 1em;
-            border-left: 4px solid var(--md-border, #d0d7de);
+            border-left: 4px solid var(--md-divider, var(--md-secondary, #8c959f));
             color: var(--md-secondary, #57606a);
             background: transparent;
         }

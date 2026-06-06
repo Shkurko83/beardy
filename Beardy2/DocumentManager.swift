@@ -867,6 +867,7 @@ class DocumentManager: ObservableObject {
         document doc: MarkdownDocument
     ) {
         let options = makeExportOptions(for: format)
+        let destinationAccess = url.startAccessingSecurityScopedResource()
         ExportService.shared.export(
             markdown: doc.content,
             to: url,
@@ -874,6 +875,9 @@ class DocumentManager: ObservableObject {
             format: format,
             options: options
         ) { [weak self] result in
+            if destinationAccess {
+                url.stopAccessingSecurityScopedResource()
+            }
             DispatchQueue.main.async {
                 switch result {
                 case .success(let savedURL):
@@ -1281,30 +1285,51 @@ class DocumentManager: ObservableObject {
     private func countMarkdownFiles(in url: URL) -> Int {
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-        guard let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: nil) else {
+        guard let enumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
             return 0
         }
-        
+
         var count = 0
         for case let fileURL as URL in enumerator {
-            if fileURL.pathExtension == "md" || fileURL.pathExtension == "markdown" {
+            if fileURL.hasDirectoryPath {
+                if SecurityBookmarkStore.shouldSkipFolderName(fileURL.lastPathComponent) {
+                    enumerator.skipDescendants()
+                }
+                continue
+            }
+            let ext = fileURL.pathExtension.lowercased()
+            if ext == "md" || ext == "markdown" {
                 count += 1
             }
         }
         return count
     }
-    
+
     private func loadFiles(from url: URL) -> [FileItem] {
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-        guard let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: nil) else {
+        guard let enumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
             return []
         }
-        
+
         var files: [FileItem] = []
         for case let fileURL as URL in enumerator {
-            if fileURL.pathExtension == "md" || fileURL.pathExtension == "markdown" {
-                SecurityBookmarkStore.saveBookmark(for: fileURL)
+            if fileURL.hasDirectoryPath {
+                if SecurityBookmarkStore.shouldSkipFolderName(fileURL.lastPathComponent) {
+                    enumerator.skipDescendants()
+                }
+                continue
+            }
+            let ext = fileURL.pathExtension.lowercased()
+            if ext == "md" || ext == "markdown" {
                 files.append(FileItem(name: fileURL.lastPathComponent, url: fileURL))
             }
         }

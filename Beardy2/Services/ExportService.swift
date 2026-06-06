@@ -16,6 +16,7 @@ class ExportService {
     static let shared = ExportService()
     
     private var activePDFSession: PDFExportSession?
+    private var activeDocxSession: DocxExportSession?
     
     private init() {}
     
@@ -68,18 +69,18 @@ class ExportService {
             }
         }
         
-        /// Uses macOS textutil (HTML → Office formats).
+        /// Uses macOS textutil (HTML → Office formats). DOCX uses native writer instead.
         var usesTextUtil: Bool {
             switch self {
-            case .docx, .odt, .rtf: return true
+            case .odt, .rtf: return true
             default: return false
             }
         }
         
-        /// Uses Pandoc when installed.
+        /// Uses Pandoc when installed (preferred for DOCX if available).
         var usesPandoc: Bool {
             switch self {
-            case .epub, .latex: return true
+            case .docx, .epub, .latex: return true
             default: return false
             }
         }
@@ -140,7 +141,9 @@ class ExportService {
             exportToPDF(markdown: markdown, url: url, documentURL: documentURL, options: opts, completion: completion)
         case .html, .htmlPlain:
             exportToHTML(markdown: markdown, url: url, documentURL: documentURL, options: opts, completion: completion)
-        case .docx, .odt, .rtf:
+        case .docx:
+            exportToDOCX(markdown: markdown, url: url, documentURL: documentURL, options: opts, completion: completion)
+        case .odt, .rtf:
             exportViaTextUtil(markdown: markdown, url: url, documentURL: documentURL, options: opts, completion: completion)
         case .epub:
             exportToEPUB(markdown: markdown, url: url, completion: completion)
@@ -231,7 +234,6 @@ class ExportService {
     ) {
         let textUtilFormat: String
         switch options.format {
-        case .docx: textUtilFormat = "docx"
         case .odt: textUtilFormat = "odt"
         case .rtf: textUtilFormat = "rtf"
         default:
@@ -241,11 +243,10 @@ class ExportService {
         
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
-            let html = self.buildPreparedHTML(
+            let html = self.buildOfficeHTML(
                 markdown: markdown,
                 documentURL: documentURL,
-                options: options,
-                forPDF: false
+                options: options
             )
             do {
                 try TextUtilConverter.convert(html: html, to: url, format: textUtilFormat)
@@ -254,6 +255,88 @@ class ExportService {
                 completion(.failure(error))
             }
         }
+    }
+
+    func exportToDOCX(
+        markdown: String,
+        url: URL,
+        documentURL: URL?,
+        options: ExportOptions,
+        completion: @escaping (Result<URL, Error>) -> Void
+    ) {
+        let title = documentURL?.deletingPathExtension().lastPathComponent ?? "Exported Document"
+        let usePandoc = UserDefaults.standard.bool(forKey: AppConstants.Keys.usePandocForDocxExport)
+
+        if usePandoc && PandocConverter.isAvailable {
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try PandocConverter.convert(
+                        markdown: markdown,
+                        to: url,
+                        format: "docx",
+                        resourcePath: documentURL?.deletingLastPathComponent()
+                    )
+                    completion(.success(url))
+                } catch {
+                    completion(.failure(error))
+                }
+            }
+            return
+        }
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.activeDocxSession = DocxExportSession(
+                markdown: markdown,
+                documentURL: documentURL,
+                outputURL: url,
+                title: title
+            ) { [weak self] result in
+                self?.activeDocxSession = nil
+                completion(result)
+            }
+        }
+    }
+
+    /// Full export HTML (KaTeX + Mermaid + themed CSS) for DOCX raster capture.
+    func preparedHTMLForDocxExport(markdown: String, documentURL: URL?) -> String {
+        var options = ExportOptions()
+        options.includeCSS = true
+        options.format = .docx
+        return buildPreparedHTML(
+            markdown: markdown,
+            documentURL: documentURL,
+            options: options,
+            forPDF: false
+        )
+    }
+
+    /// Semantic HTML for textutil (no JS/CSS). Better than full export HTML, but still limited.
+    private func buildOfficeHTML(
+        markdown: String,
+        documentURL: URL?,
+        options: ExportOptions
+    ) -> String {
+        let renderedMarkdown = renderMarkdownBodyForOffice(markdown, documentURL: documentURL)
+        let title = documentURL?.deletingPathExtension().lastPathComponent ?? "Exported Document"
+        return """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <title>\(escapeHTML(title))</title>
+        </head>
+        <body>
+            \(renderedMarkdown)
+        </body>
+        </html>
+        """
+    }
+
+    private func renderMarkdownBodyForOffice(_ markdown: String, documentURL: URL?) -> String {
+        let document = Document(parsing: markdown)
+        var visitor = HTMLVisitor(sourceMarkdown: markdown, documentURL: documentURL)
+        return visitor.visit(document)
     }
     
     func exportToEPUB(
@@ -335,6 +418,9 @@ class ExportService {
             if let hljsCSS = BundledHighlightJS.loadThemeCSS(for: theme) {
                 html = injectCSS(hljsCSS, into: html)
             }
+            if let katexCSS = BundledKaTeX.loadCSS() {
+                html = injectCSS(katexCSS, into: html)
+            }
             if let hljsJS = BundledHighlightJS.loadScriptSource() {
                 html = injectScript(hljsJS, into: html, beforeClosingHead: true)
             }
@@ -360,9 +446,8 @@ class ExportService {
         let title = documentURL?.deletingPathExtension().lastPathComponent ?? "Exported Document"
         let highlightScript = options.includeCSS ? exportCodeHighlightScript : ""
         let mathScript = options.includeCSS ? exportMathTypesetScript : ""
-        let katexLink = options.includeCSS
-            ? "<link rel=\"stylesheet\" href=\"\(BundledKaTeX.relativeCSSPath())\">"
-            : ""
+        let isDark = ThemeService.shared.isDarkMode
+        let bodyClass = isDark ? " class=\"dark\"" : ""
         
         return """
         <!DOCTYPE html>
@@ -371,17 +456,16 @@ class ExportService {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>\(escapeHTML(title))</title>
-            \(katexLink)
             \(options.includeCSS ? "<style>\(themedCSS)</style>" : "")
         </head>
-        <body>
+        <body\(bodyClass)>
             \(toc)
             <article class="markdown-body" id="main-content">
                 \(renderedMarkdown)
             </article>
             \(mathScript)
             \(highlightScript)
-            \(options.includeCSS ? exportMermaidRenderScript : "")
+            \(options.includeCSS ? exportMermaidRenderScript(isDark: isDark) : "")
         </body>
         </html>
         """
@@ -399,7 +483,8 @@ class ExportService {
                         displayMode: !!displayMode,
                         throwOnError: false,
                         strict: 'ignore',
-                        trust: true
+                        trust: true,
+                        output: 'html'
                     });
                 } catch (e) {
                     return null;
@@ -539,8 +624,9 @@ class ExportService {
     }
 
     /// Mermaid: блоки ```mermaid из Swift-Markdown (code.language-mermaid).
-    private var exportMermaidRenderScript: String {
-        """
+    private func exportMermaidRenderScript(isDark: Bool) -> String {
+        let theme = isDark ? "dark" : "default"
+        return """
         <script>
         (function() {
             async function renderExportMermaid() {
@@ -561,8 +647,7 @@ class ExportService {
                     nodes.push(div);
                 });
                 try {
-                    const theme = document.body.classList.contains('dark') ? 'dark' : 'default';
-                    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: theme });
+                    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: '\(theme)' });
                     await mermaid.run({ nodes: nodes });
                 } catch (e) {
                     nodes.forEach(function(n) {
@@ -687,7 +772,7 @@ class ExportService {
             .map { $0.isEmpty ? "\u{00A0}" : $0 }
             .joined(separator: "\n")
         let document = Document(parsing: processed)
-        var visitor = HTMLVisitor(documentURL: documentURL)
+        var visitor = HTMLVisitor(sourceMarkdown: markdown, documentURL: documentURL)
         return visitor.visit(document)
     }
     
@@ -867,6 +952,15 @@ class ExportService {
         }
         .math-display > .katex-display { margin: 0; }
         .math-inline .katex { font-size: 1.05em; }
+        .katex-mathml {
+            position: absolute;
+            clip: rect(1px, 1px, 1px, 1px);
+            height: 1px;
+            width: 1px;
+            overflow: hidden;
+            padding: 0;
+            border: 0;
+        }
         .mermaid-diagram, .export-mermaid {
             margin: 1em 0;
             text-align: center;
@@ -874,6 +968,7 @@ class ExportService {
         }
         .mermaid-diagram svg { max-width: 100%; height: auto; }
         .mermaid-error { color: \(secondary); font-family: monospace; font-size: 12px; }
+        \(ThemeService.shared.isDarkMode ? mermaidDarkExportCSS(text: text, secondary: secondary) : "")
         .toc {
             background: \(codeBg);
             padding: 20px 24px;
@@ -887,6 +982,25 @@ class ExportService {
             .toc { page-break-after: always; }
             pre, pre.hljs { page-break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             img { page-break-inside: avoid; }
+        }
+        """
+    }
+
+    /// Fallback CSS so Mermaid edges/labels stay visible when the dark theme SVG still uses dark strokes.
+    private func mermaidDarkExportCSS(text: String, secondary: String) -> String {
+        """
+        .mermaid-diagram svg .edgePath .path,
+        .mermaid-diagram svg path.flowchart-link,
+        .mermaid-diagram svg .flowchart-link {
+            stroke: \(text) !important;
+        }
+        .mermaid-diagram svg marker path,
+        .mermaid-diagram svg .arrowheadPath {
+            fill: \(text) !important;
+            stroke: \(text) !important;
+        }
+        .mermaid-diagram svg .edgeLabel text {
+            fill: \(secondary) !important;
         }
         """
     }

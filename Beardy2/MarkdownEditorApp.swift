@@ -18,6 +18,7 @@ struct MarkdownEditorApp: App {
             AppConstants.Keys.focusHideSidebar: true,
             AppConstants.Keys.focusHideOutline: true,
         ])
+        SecurityBookmarkStore.performStartupMaintenance()
         _ = KeyboardShortcutsManager.shared
     }
     
@@ -211,32 +212,15 @@ struct MarkdownEditorApp: App {
             
             // View menu
             CommandMenu("View") {
-                Button("Toggle Sidebar") {
-                    documentManager.toggleSidebar()
-                }
-                .keyboardShortcut("\\", modifiers: .command)
-                
-                Button("Toggle Source Code Mode") {
-                    documentManager.toggleSourceMode()
-                }
-                .keyboardShortcut("/", modifiers: .command)
-                
-                Button("Live Preview Mode") {
-                    documentManager.viewMode = .live
-                }
-                .keyboardShortcut("l", modifiers: [.command, .shift])
-                
+                Toggle("Sidebar", isOn: $documentManager.showSidebar)
+                    .keyboardShortcut("\\", modifiers: .command)
+
+                Toggle("Outline", isOn: $documentManager.showOutline)
+                    .keyboardShortcut("o", modifiers: [.command, .shift])
+
                 Divider()
-                
-                Button("Focus Mode") {
-                    documentManager.toggleFocusMode()
-                }
-                .keyboardShortcut("f", modifiers: [.command, .shift])
-                
-                Button("Typewriter Mode") {
-                    documentManager.toggleTypewriterMode()
-                }
-                .keyboardShortcut("t", modifiers: [.command, .shift])
+
+                ViewModeMenuCommands(documentManager: documentManager)
             }
         }
         
@@ -249,5 +233,41 @@ struct MarkdownEditorApp: App {
                 .environmentObject(themeService)
         }
         .windowResizability(.contentSize)
+    }
+}
+
+// MARK: - View menu mode items (checkmarks match toolbar picker)
+
+private struct ViewModeMenuCommands: View {
+    @ObservedObject var documentManager: DocumentManager
+
+    var body: some View {
+        Group {
+            modeButton(.edit, shortcut: "/", modifiers: .command)
+            modeButton(.live, shortcut: "l", modifiers: [.command, .shift])
+            modeButton(.preview, shortcut: "p", modifiers: [.command, .shift])
+            modeButton(.split, shortcut: "s", modifiers: [.control, .command])
+            modeButton(.diff, shortcut: "d", modifiers: [.command, .option])
+        }
+    }
+
+    @ViewBuilder
+    private func modeButton(
+        _ mode: ViewMode,
+        shortcut: KeyEquivalent,
+        modifiers: EventModifiers
+    ) -> some View {
+        Button {
+            documentManager.viewMode = mode
+        } label: {
+            HStack {
+                Text(mode.rawValue)
+                Spacer(minLength: 12)
+                if documentManager.viewMode == mode {
+                    Image(systemName: "checkmark")
+                }
+            }
+        }
+        .keyboardShortcut(shortcut, modifiers: modifiers)
     }
 }

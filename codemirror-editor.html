@@ -307,8 +307,8 @@
                     #preview-content blockquote {
                         margin: 0;
                         padding-left: 1em;
-                        border-left: 4px solid #d0d7de;
-                        color: #57606a;
+                        border-left: 4px solid var(--md-divider, #8c959f);
+                        color: var(--md-secondary, #57606a);
                     }
                     #preview-content ul,
                     #preview-content ol {
@@ -320,14 +320,14 @@
                     }
                     #preview-content hr {
                         border: none;
-                        border-top: 1px solid #d0d7de;
+                        border-top: 1px solid var(--md-divider, #8c959f);
                         margin: 2em 0;
                     }
                     body.dark #preview-content hr {
-                        border-top-color: #30363d;
+                        border-top-color: var(--md-divider, #8b949e);
                     }
                     body.dark #preview-content blockquote {
-                        border-left-color: #30363d;
+                        border-left-color: var(--md-divider, #8b949e);
                         color: #8b949e;
                     }
                     
@@ -402,23 +402,23 @@
                     
                     /* Цитата */
                     .live-block[data-type="blockquote"] {
-                        border-left: 4px solid #d0d7de;
+                        border-left: 4px solid var(--md-divider, #8c959f);
                         padding-left: 1em;
                         color: #57606a;
                         margin: 0.3em 0;
                     }
                     body.dark .live-block[data-type="blockquote"] {
-                        border-left-color: #30363d;
+                        border-left-color: var(--md-divider, #8b949e);
                         color: #8b949e;
                     }
                     .live-block[data-type="blockquote"] .bq-nested {
-                        border-left: 3px solid #d0d7de;
+                        border-left: 3px solid var(--md-divider, #8c959f);
                         padding-left: 1em;
                         margin: 0.35em 0;
                         color: inherit;
                     }
                     body.dark .live-block[data-type="blockquote"] .bq-nested {
-                        border-left-color: #484f58;
+                        border-left-color: var(--md-divider, #8b949e);
                     }
                     .live-block[data-type="blockquote"] ul,
                     .live-block[data-type="blockquote"] ol {
@@ -627,11 +627,11 @@
                     /* Горизонтальная линия */
                     .live-block[data-type="hr"] {
                         border: none;
-                        border-top: 2px solid #d0d7de;
+                        border-top: 2px solid var(--md-divider, #8c959f);
                         margin: 1em 0;
                         height: 2px;
                     }
-                    body.dark .live-block[data-type="hr"] { border-top-color: #30363d; }
+                    body.dark .live-block[data-type="hr"] { border-top-color: var(--md-divider, #8b949e); }
                     
                     /* Код блок — одна рамка через .code-fence-wrap */
                     .live-block[data-type="code-fence"] {
@@ -1172,13 +1172,22 @@
                 }
             }, 180);
 
-            function getEditorSnapshotForUndo() {
-                if (isLiveActive() && liveBlocks.length) {
-                    currentContent = liveBlocks.map((block) => blockToMarkdownSource(block)).join('\n');
-                    textarea.value = currentContent;
-                } else {
+            function flushAllPendingLiveEdits() {
+                if (!isLiveActive()) {
                     flushPendingEditorUpdates();
+                    return;
                 }
+                finishActiveListSourceEdit(null);
+                if (activeBlockIndex >= 0) {
+                    deactivateCurrentBlock();
+                } else if (liveBlocks.length) {
+                    syncLiveContentToModel();
+                }
+                scheduleContentSync.flush(currentContent);
+            }
+
+            function getEditorSnapshotForUndo() {
+                flushAllPendingLiveEdits();
                 scheduleContentSync.cancel();
                 return textarea.value || currentContent || '';
             }
@@ -2287,7 +2296,8 @@
 
 
                 getContent() {
-                    return currentContent;
+                    flushAllPendingLiveEdits();
+                    return textarea.value || currentContent || '';
                 },
 
                 scrollToHeading(options) {

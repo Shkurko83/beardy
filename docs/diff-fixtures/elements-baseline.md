@@ -2,13 +2,11 @@
 
 Reference document with common Markdown / GFM elements supported in Beardy2.
 
-## Headings4444
-## Headings6666
+## Headings455444
+## Headings9999
 ### Third level
-
 #### Fourth level
 ##### Fifth level
-
 ###### Sixth level
 
 ## Inline text
@@ -104,3 +102,4 @@ $$\sum_{i=1}^{n} i = \frac{n(n+1)}{2}$$
 ## Closing
 
 Final paragraph. Fixture label: **baseline**.
+[link text]([url]([url]([url](url))))

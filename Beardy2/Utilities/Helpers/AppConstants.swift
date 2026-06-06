@@ -99,6 +99,7 @@ struct AppConstants {
         // Export
         static let exportImageFormat = "exportImageFormat"
         static let exportPDFMargins = "exportPDFMargins"
+        static let usePandocForDocxExport = "usePandocForDocxExport"
         
         // View State
         static let sidebarVisible = "sidebarVisible"
@@ -196,9 +197,12 @@ struct AppConstants {
         
         // View
         static let toggleSidebar = "⌘\\"
-        static let toggleSourceMode = "⌘/"
-        static let focusMode = "⇧⌘F"
-        static let typewriterMode = "⇧⌘T"
+        static let toggleOutline = "⇧⌘O"
+        static let editMode = "⌘/"
+        static let liveMode = "⇧⌘L"
+        static let previewMode = "⇧⌘P"
+        static let splitMode = "⌃⌘S"
+        static let diffMode = "⌥⌘D"
         
         // Other
         static let preferences = "⌘,"

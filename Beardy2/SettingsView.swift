@@ -467,6 +467,7 @@ struct ExportSettingsView: View {
     @Binding var imageFormat: String
     @Binding var pdfMargins: Double
     @Binding var copyImagesToDocumentFolder: Bool
+    @AppStorage(AppConstants.Keys.usePandocForDocxExport) private var usePandocForDocxExport = false
     
     let imageFormats = ["PNG", "JPEG", "SVG", "WebP"]
     
@@ -478,6 +479,20 @@ struct ExportSettingsView: View {
                         .font(.title2)
                         .fontWeight(.bold)
                     
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Word (.docx)")
+                            .font(.headline)
+
+                        Text("Beardy2 uses a built-in exporter with embedded images, tables, lists, OMML math, and prerendered Mermaid diagrams.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        Toggle("Use Pandoc for DOCX when installed", isOn: $usePandocForDocxExport)
+                            .help("Optional. Requires Pandoc (brew install pandoc). Off by default.")
+                    }
+
                     Divider()
                     
                     // PDF Export
