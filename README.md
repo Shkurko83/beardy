@@ -1,2 +1,3 @@
-# beardy
-Beardy - simple markdown editor
+# Black Beard Editor
+
+Native macOS markdown editor (technical name: `BlackBeardEditor`).

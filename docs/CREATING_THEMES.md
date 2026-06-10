@@ -1,6 +1,6 @@
-# Как создать новую тему оформления в Beardy2
+# Как создать новую тему оформления в Black Beard Editor
 
-Подробная инструкция для начинающих. Beardy2 использует **две связанные, но разные** системы оформления:
+Подробная инструкция для начинающих. Black Beard Editor использует **две связанные, но разные** системы оформления:
 
 | Система | За что отвечает | Где настраивается в приложении |
 |--------|------------------|--------------------------------|
@@ -15,7 +15,7 @@
 
 ### Инструменты
 
-- **Xcode** (та же версия, что для сборки Beardy2)
+- **Xcode** (та же версия, что для сборки Black Beard Editor)
 - **Cursor** или любой редактор текста
 - По желанию: [SF Symbols](https://developer.apple.com/sf-symbols/) не нужен для тем; полезен **Digital Color Meter** (macOS) — снять HEX с экрана
 
@@ -28,12 +28,12 @@
 ### Главные файлы (запомните пути)
 
 ```
-Beardy2/
-├── Beardy2/Services/ThemeService.swift    ← Editor Theme + Code Theme (главный файл)
-├── Beardy2/Services/BundledHighlightJS.swift
-├── Beardy2/Services/EditorAppearanceSync.swift
-├── Beardy2/SettingsView.swift             ← UI настроек тем
-├── Beardy2/Utilities/Extensions/Color+Extensions.swift
+Black Beard Editor/
+├── Black Beard Editor/Services/ThemeService.swift    ← Editor Theme + Code Theme (главный файл)
+├── Black Beard Editor/Services/BundledHighlightJS.swift
+├── Black Beard Editor/Services/EditorAppearanceSync.swift
+├── Black Beard Editor/SettingsView.swift             ← UI настроек тем
+├── Black Beard Editor/Utilities/Extensions/Color+Extensions.swift
 ├── HighlightJS/styles/*.min.css           ← CSS подсветки кода
 └── codemirror-editor.html                 ← редактор (получает CSS из ThemeService)
 ```
@@ -53,7 +53,7 @@ Beardy2/
 
 ### Шаг 2. Откройте `ThemeService.swift`
 
-Файл: `Beardy2/Services/ThemeService.swift`
+Файл: `Black Beard Editor/Services/ThemeService.swift`
 
 Найдите enum **`ThemeFamily`** (примерно строка 97):
 
@@ -178,7 +178,7 @@ enum ThemeFamily: String, CaseIterable, Identifiable {
 
 1. В Xcode: **Product → Clean Build Folder** (⇧⌘K)
 2. **Product → Run** (⌘R)
-3. Откройте **Beardy2 → Settings** (⌘,)
+3. Откройте **Black Beard Editor → Settings** (⌘,)
 4. Раздел с **Editor Theme** — должна появиться **Ocean**
 5. Выберите тему, переключите **Dark appearance**
 6. Откройте документ, проверьте режимы **Edit**, **Live**, **Split**, **Preview**
@@ -307,7 +307,7 @@ CodeTheme.bundledThemeURL
     → <link id="highlight-theme" href="...">
 ```
 
-Если Editor Theme «не меняется» — смотрите консоль WebView (Safari → Develop → ваш Mac → Beardy2).
+Если Editor Theme «не меняется» — смотрите консоль WebView (Safari → Develop → ваш Mac → Black Beard Editor).
 
 ---
 
@@ -377,4 +377,4 @@ CodeTheme.bundledThemeURL
 
 ---
 
-*Документ актуален для структуры репозитория Beardy2 с `ThemeService.swift` и офлайн-папкой `HighlightJS/`.*
+*Документ актуален для структуры репозитория Black Beard Editor с `ThemeService.swift` и офлайн-папкой `HighlightJS/`.*

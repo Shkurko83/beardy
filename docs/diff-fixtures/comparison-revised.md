@@ -1,4 +1,4 @@
-# Beardy2 Diff Test — Revised
+# Black Beard Editor Diff Test — Revised
 
 Short intro paragraph for **diff testing**. This is the *revised* version returned from the editor.
 

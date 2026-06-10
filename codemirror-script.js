@@ -1,6 +1,6 @@
 //
 //  codemirror-script.js
-//  Beardy2
+//  BlackBeardEditor
 //
 //  Created by Butt Simpson on 07.01.2026.
 //

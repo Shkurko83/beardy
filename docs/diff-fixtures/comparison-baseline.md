@@ -1,4 +1,4 @@
-# Beardy2 Diff Test — Baseline
+# Black Beard Editor Diff Test — Baseline
 
 Short intro paragraph for **diff testing**. This is the *original* version sent to the editor.
 

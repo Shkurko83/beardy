@@ -1,6 +1,6 @@
 # Markdown Elements — Baseline
 
-Reference document with common Markdown / GFM elements supported in Beardy2.
+Reference document with common Markdown / GFM elements supported in Black Beard Editor.
 
 ## Headings455444
 ## Headings9999

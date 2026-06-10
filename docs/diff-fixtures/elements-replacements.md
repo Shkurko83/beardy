@@ -1,6 +1,6 @@
 # Markdown Elements — Revised Catalog
 
-Reference document with common Markdown / GFM elements supported in Beardy2 (title replaced).
+Reference document with common Markdown / GFM elements supported in Black Beard Editor (title replaced).
 
 ## Headings
 

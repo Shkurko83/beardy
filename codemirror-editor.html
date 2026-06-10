@@ -71,7 +71,7 @@
                         flex: 1 1 0;
                         min-width: 0;
                         height: 100%;
-                        overflow: auto;
+                        overflow: hidden;
                         position: relative;
                     }
                     
@@ -112,6 +112,8 @@
                         width: 100% !important;
                         border-left: none;
                         border-right: none;
+                        overflow-x: hidden;
+                        overflow-y: auto;
                     }
                     body.mode-preview #swap-button { display: none; }
 
@@ -124,6 +126,8 @@
                     body.mode-split #preview-pane {
                         display: block;
                         width: 50% !important;
+                        overflow-x: hidden;
+                        overflow-y: auto;
                     }
 
                     body.mode-live #live-editor { display: block; }
@@ -141,6 +145,91 @@
                     body.editor-focus-mode.focus-dim-lines #preview-content,
                     body.editor-focus-mode.focus-dim-lines #live-editor {
                         opacity: 0.96;
+                    }
+
+                    .markdown-editor-wrap {
+                        width: 100%;
+                        height: 100%;
+                        min-height: 0;
+                        overflow-x: hidden;
+                        overflow-y: auto;
+                    }
+                    .markdown-editor-body {
+                        display: flex;
+                        align-items: flex-start;
+                        position: relative;
+                        width: 100%;
+                        min-height: 100%;
+                    }
+                    :root {
+                        --editor-font-family: 'SF Mono', Menlo, Monaco, monospace;
+                        --editor-font-size: 14px;
+                        --editor-line-height: 22.4px;
+                        --editor-tab-size: 4;
+                    }
+                    .editor-source-metrics {
+                        font-family: var(--editor-font-family);
+                        font-size: var(--editor-font-size);
+                        line-height: var(--editor-line-height);
+                        tab-size: var(--editor-tab-size);
+                        -moz-tab-size: var(--editor-tab-size);
+                    }
+                    #markdown-textarea {
+                        flex: 1 1 0;
+                        min-width: 0;
+                        width: auto;
+                        height: auto;
+                        overflow: hidden;
+                        resize: none;
+                        box-sizing: border-box;
+                        white-space: pre-wrap;
+                        word-wrap: break-word;
+                        overflow-wrap: break-word;
+                    }
+                    #markdown-line-gutter {
+                        display: none;
+                        flex: 0 0 auto;
+                        overflow: hidden;
+                        box-sizing: border-box;
+                        text-align: right;
+                        color: rgba(128, 128, 128, 0.75);
+                        user-select: none;
+                        pointer-events: none;
+                        flex-shrink: 0;
+                        padding: 0;
+                        min-width: 2.25rem;
+                    }
+                    body.editor-line-numbers #markdown-line-gutter {
+                        display: block;
+                    }
+                    #markdown-line-gutter .gutter-inner {
+                        box-sizing: border-box;
+                    }
+                    #markdown-line-gutter .gutter-inner,
+                    #markdown-line-gutter .gutter-line {
+                        font-family: var(--editor-font-family);
+                        font-size: var(--editor-font-size);
+                        line-height: var(--editor-line-height);
+                        tab-size: var(--editor-tab-size);
+                        -moz-tab-size: var(--editor-tab-size);
+                    }
+                    #markdown-line-gutter .gutter-line {
+                        box-sizing: border-box;
+                        display: block;
+                        margin: 0;
+                        padding: 0 4px 0 2px;
+                        overflow: hidden;
+                        text-align: right;
+                        white-space: nowrap;
+                        pointer-events: none;
+                    }
+                    #markdown-line-gutter .gutter-line-wrap {
+                        padding: 0;
+                    }
+                    body.highlight-current-line #markdown-line-gutter .gutter-line.is-current {
+                        color: #007aff;
+                        background: rgba(0, 122, 255, 0.12);
+                        border-radius: 3px;
                     }
 
                     /* Стили превью */
@@ -932,12 +1021,16 @@
                 </svg>
             </button>
             <div class="editor-pane" id="markdown-pane">
-                <textarea id="markdown-textarea" lang="en" autocorrect="off" autocomplete="off" autocapitalize="off" spellcheck="false" data-gramm="false" style="
-                width: 100%; height: 100%; border: none; outline: none;
-                font-family: 'SF Mono', Monaco, monospace; font-size: 14px;
-                padding: 40px 60px; background: transparent;
-                resize: none; color: inherit; line-height: 1.6;
-            "></textarea>
+                <div class="markdown-editor-wrap" id="markdown-editor-scroll">
+                    <div class="markdown-editor-body">
+                        <div id="markdown-line-gutter" aria-hidden="true"></div>
+                        <textarea id="markdown-textarea" class="editor-source-metrics" wrap="soft" lang="en" autocorrect="off" autocomplete="off" autocapitalize="off" spellcheck="false" data-gramm="false" style="
+                        border: none; outline: none;
+                        padding: 40px 60px; background: transparent;
+                        resize: none; color: inherit;
+                    "></textarea>
+                    </div>
+                </div>
             </div>
             <div class="editor-pane" id="preview-pane">
                 <div id="preview-content"></div>
@@ -955,6 +1048,15 @@
             let currentContent = '';
             let isInitialized = false;
             let syncScroll = true;
+            let editorPrefs = {
+                fontFamily: 'SF Mono',
+                fontSize: 14,
+                lineHeight: 1.6,
+                showLineNumbers: false,
+                highlightCurrentLine: true,
+                indentSize: 4,
+                useSpacesForTabs: true
+            };
             let isSwapped = false;
             let isLiveMode = false;
             let lastScrollTime = { markdown: 0, preview: 0 };
@@ -1151,10 +1253,10 @@
                 });
             }
 
-            const schedulePreviewRender = debounce((text) => {
-                if (isPreviewActive()) {
-                    renderPreview(text, { preserveScroll: true });
-                }
+            const schedulePreviewRender = debounce(() => {
+                if (!isPreviewActive()) return;
+                const text = textarea?.value ?? currentContent ?? '';
+                renderPreview(text, { preserveScroll: true });
             }, 280);
 
             const scheduleLiveRebuild = debounce((text) => {
@@ -1207,7 +1309,7 @@
 
             function flushPendingEditorUpdates() {
                 const text = textarea.value;
-                schedulePreviewRender.flush(text);
+                schedulePreviewRender.flush();
                 if (isLiveActive()) {
                     scheduleLiveRebuild.cancel();
                 } else {
@@ -1218,20 +1320,19 @@
 
             function captureScrollState() {
                 return {
-                    markdown: markdownPane ? markdownPane.scrollTop : 0,
+                    markdown: markdownEditorScroll ? markdownEditorScroll.scrollTop : 0,
                     preview: previewPane ? previewPane.scrollTop : 0,
                     live: liveEditor ? liveEditor.scrollTop : 0,
-                    textarea: textarea ? textarea.scrollTop : 0,
+                    textarea: markdownEditorScroll ? markdownEditorScroll.scrollTop : 0,
                 };
             }
 
             function restoreScrollState(state) {
                 if (!state) return;
                 requestAnimationFrame(() => {
-                    if (markdownPane) markdownPane.scrollTop = state.markdown;
+                    if (markdownEditorScroll) markdownEditorScroll.scrollTop = state.markdown;
                     if (previewPane) previewPane.scrollTop = state.preview;
                     if (liveEditor) liveEditor.scrollTop = state.live;
-                    if (textarea) textarea.scrollTop = state.textarea;
                 });
             }
 
@@ -1334,11 +1435,11 @@
                 if (liveEditor) highlightCodeBlocks(liveEditor);
             }
 
-            function toBeardyURL(filePath) {
+            function toBlackBeardURL(filePath) {
                 if (!filePath) return filePath;
-                if (filePath.startsWith('beardy://')) return filePath;
+                if (/^(blackbeard|beardy):\/\//i.test(filePath)) return filePath;
                 const encoded = filePath.split('/').map(part => encodeURIComponent(part)).join('/');
-                return 'beardy://localhost' + encoded;
+                return 'blackbeard://localhost' + encoded;
             }
 
             function unwrapMarkdownURL(src) {
@@ -1370,7 +1471,7 @@
             function resolveImageSrc(src) {
                 if (!src) return src;
                 src = unwrapMarkdownURL(src);
-                if (/^(https?:|data:|beardy:)/i.test(src)) return src;
+                if (/^(https?:|data:|blackbeard:|beardy:)/i.test(src)) return src;
 
                 let absolutePath;
                 if (src.startsWith('./') && documentBasePath) {
@@ -1382,7 +1483,7 @@
                 } else {
                     return src;
                 }
-                return toBeardyURL(absolutePath);
+                return toBlackBeardURL(absolutePath);
             }
 
             function rewriteImagesInContainer(container) {
@@ -1428,11 +1529,372 @@
             }
 
             const textarea = document.getElementById('markdown-textarea');
+            const markdownEditorScroll = document.getElementById('markdown-editor-scroll');
             const preview = document.getElementById('preview-content');
             const markdownPane = document.getElementById('markdown-pane');
             const previewPane = document.getElementById('preview-pane');
             const editorContainer = document.getElementById('editor-container');
             const swapButton = document.getElementById('swap-button');
+
+            function editorFontStack(name) {
+                const stacks = {
+                    'SF Mono': "'SF Mono', Menlo, Monaco, monospace",
+                    'Menlo': 'Menlo, Monaco, monospace',
+                    'Monaco': 'Monaco, monospace',
+                    'Courier New': "'Courier New', Courier, monospace",
+                    'Source Code Pro': "'Source Code Pro', Menlo, monospace",
+                    'Fira Code': "'Fira Code', Menlo, monospace"
+                };
+                return stacks[name] || stacks['SF Mono'];
+            }
+
+            function getTextareaLineIndex(ta) {
+                if (!ta) return 0;
+                const pos = typeof ta.selectionStart === 'number' ? ta.selectionStart : 0;
+                const text = ta.value.slice(0, pos);
+                if (!text.length) return 0;
+                return text.split('\n').length - 1;
+            }
+
+            function getTextareaMetrics(ta) {
+                const computed = window.getComputedStyle(ta);
+                const fontSize = parseFloat(computed.fontSize) || editorPrefs.fontSize || 14;
+                const parsedLH = parseFloat(computed.lineHeight);
+                const lineHeight = Number.isFinite(parsedLH) && parsedLH > 0
+                    ? parsedLH
+                    : fontSize * (editorPrefs.lineHeight || 1.6);
+                return {
+                    fontSize,
+                    lineHeight,
+                    paddingTop: parseFloat(computed.paddingTop) || 0,
+                    paddingRight: parseFloat(computed.paddingRight) || 0,
+                    paddingBottom: parseFloat(computed.paddingBottom) || 0,
+                    paddingLeft: parseFloat(computed.paddingLeft) || 0
+                };
+            }
+
+            function applyEditorTypographyVariables() {
+                const fontSize = Number(editorPrefs.fontSize) || 14;
+                const lineHeightPx = fontSize * (Number(editorPrefs.lineHeight) || 1.6);
+                const root = document.documentElement;
+                root.style.setProperty('--editor-font-family', editorFontStack(editorPrefs.fontFamily));
+                root.style.setProperty('--editor-font-size', fontSize + 'px');
+                root.style.setProperty('--editor-line-height', lineHeightPx + 'px');
+                root.style.setProperty('--editor-tab-size', String(editorPrefs.indentSize || 4));
+            }
+
+            function getGutterTypographyMetrics(ta) {
+                const computed = window.getComputedStyle(ta);
+                const root = getComputedStyle(document.documentElement);
+                const fontSize = parseFloat(root.getPropertyValue('--editor-font-size'))
+                    || parseFloat(computed.fontSize)
+                    || Number(editorPrefs.fontSize)
+                    || 14;
+                const lineHeight = parseFloat(root.getPropertyValue('--editor-line-height'))
+                    || parseFloat(computed.lineHeight)
+                    || fontSize * (Number(editorPrefs.lineHeight) || 1.6);
+                return {
+                    fontSize,
+                    lineHeight,
+                    lineHeightRatio: Number(editorPrefs.lineHeight) || 1.6,
+                    fontFamily: root.getPropertyValue('--editor-font-family').trim()
+                        || computed.fontFamily
+                        || editorFontStack(editorPrefs.fontFamily),
+                    paddingTop: parseFloat(computed.paddingTop) || 0,
+                    paddingRight: parseFloat(computed.paddingRight) || 0,
+                    paddingBottom: parseFloat(computed.paddingBottom) || 0,
+                    paddingLeft: parseFloat(computed.paddingLeft) || 0
+                };
+            }
+
+            function gutterTypographySignature() {
+                return [
+                    editorPrefs.fontFamily,
+                    editorPrefs.fontSize,
+                    editorPrefs.lineHeight,
+                    editorPrefs.indentSize
+                ].join('\u0001');
+            }
+
+            let textareaMirror = null;
+            let gutterMeasureCache = {
+                value: null,
+                width: -1,
+                signature: null,
+                lines: null,
+                tops: null,
+                heights: null
+            };
+
+            function invalidateGutterMeasureCache() {
+                gutterMeasureCache = {
+                    value: null,
+                    width: -1,
+                    signature: null,
+                    lines: null,
+                    tops: null,
+                    heights: null
+                };
+            }
+
+            function ensureTextareaMirror() {
+                if (textareaMirror) return textareaMirror;
+                textareaMirror = document.createElement('div');
+                textareaMirror.setAttribute('aria-hidden', 'true');
+                textareaMirror.style.cssText = [
+                    'position:absolute',
+                    'left:-99999px',
+                    'top:0',
+                    'visibility:hidden',
+                    'overflow:hidden',
+                    'margin:0',
+                    'border:0',
+                    'white-space:pre-wrap',
+                    'word-wrap:break-word',
+                    'overflow-wrap:break-word'
+                ].join(';');
+                document.body.appendChild(textareaMirror);
+                return textareaMirror;
+            }
+
+            function copyTextareaMirrorStyles(source, target) {
+                const computed = window.getComputedStyle(source);
+                const paddingLeft = parseFloat(computed.paddingLeft) || 0;
+                const paddingRight = parseFloat(computed.paddingRight) || 0;
+                target.style.boxSizing = computed.boxSizing || 'border-box';
+                target.style.width = Math.max(1, source.clientWidth - paddingLeft - paddingRight) + 'px';
+                target.style.padding = '0';
+                target.style.margin = '0';
+                target.style.border = '0';
+                target.style.font = computed.font;
+                target.style.letterSpacing = computed.letterSpacing;
+                target.style.wordSpacing = computed.wordSpacing;
+                target.style.textTransform = computed.textTransform;
+                target.style.tabSize = computed.tabSize || '';
+                target.style.direction = computed.direction;
+                target.style.textAlign = computed.textAlign;
+                target.style.wordBreak = computed.wordBreak;
+                target.style.overflowWrap = computed.overflowWrap;
+            }
+
+            function syncTextareaEditorHeight() {
+                const ta = textarea;
+                const wrap = markdownEditorScroll;
+                if (!ta || !wrap) return;
+                ta.style.height = 'auto';
+                const minHeight = wrap.clientHeight;
+                const nextHeight = Math.max(ta.scrollHeight, minHeight);
+                ta.style.height = nextHeight + 'px';
+            }
+
+            function getTextareaContentWidth(ta) {
+                const style = window.getComputedStyle(ta);
+                const paddingLeft = parseFloat(style.paddingLeft) || 0;
+                const paddingRight = parseFloat(style.paddingRight) || 0;
+                return Math.max(1, ta.clientWidth - paddingLeft - paddingRight);
+            }
+
+            function normalizeEditorText(text) {
+                return String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+            }
+
+            function getLogicalLines(text) {
+                const normalized = normalizeEditorText(text);
+                if (!normalized.length) return [''];
+                return normalized.split('\n');
+            }
+
+            function estimateVisualRowCount(blockHeight, lineHeight) {
+                if (blockHeight <= lineHeight * 1.2) return 1;
+                return Math.max(1, Math.round(blockHeight / lineHeight));
+            }
+
+            function measureLogicalLineLayout(ta) {
+                const value = normalizeEditorText(ta.value);
+                const contentWidth = ta.offsetWidth;
+                const signature = gutterTypographySignature();
+                if (gutterMeasureCache.value === value
+                    && gutterMeasureCache.width === contentWidth
+                    && gutterMeasureCache.signature === signature
+                    && gutterMeasureCache.tops
+                    && gutterMeasureCache.heights) {
+                    return {
+                        lines: gutterMeasureCache.lines,
+                        tops: gutterMeasureCache.tops,
+                        heights: gutterMeasureCache.heights
+                    };
+                }
+
+                const mirror = ensureTextareaMirror();
+                copyTextareaMirrorStyles(ta, mirror);
+                const metrics = getGutterTypographyMetrics(ta);
+                const lines = getLogicalLines(value);
+                const minHeight = metrics.lineHeight;
+                const verticalChrome = metrics.paddingTop + metrics.paddingBottom;
+                const contentHeight = Math.max(0, ta.scrollHeight - verticalChrome);
+
+                mirror.replaceChildren();
+                const markers = [];
+                for (let i = 0; i < lines.length; i++) {
+                    const marker = document.createElement('span');
+                    marker.style.display = 'inline';
+                    marker.style.width = '0';
+                    marker.style.overflow = 'hidden';
+                    mirror.appendChild(marker);
+                    markers.push(marker);
+                    mirror.appendChild(document.createTextNode(lines[i].length ? lines[i] : '\u200b'));
+                    if (i < lines.length - 1) {
+                        mirror.appendChild(document.createTextNode('\n'));
+                    }
+                }
+
+                const tops = markers.map((marker) => marker.offsetTop);
+                const heights = [];
+                for (let i = 0; i < tops.length; i++) {
+                    const nextTop = i + 1 < tops.length ? tops[i + 1] : contentHeight;
+                    heights.push(Math.max(minHeight, nextTop - tops[i]));
+                }
+
+                const measuredSum = heights.reduce((sum, height) => sum + height, 0);
+                const drift = contentHeight - measuredSum;
+                if (heights.length > 0 && Math.abs(drift) >= 0.5) {
+                    heights[heights.length - 1] = Math.max(minHeight, heights[heights.length - 1] + drift);
+                }
+
+                gutterMeasureCache = { value, width: contentWidth, signature, lines, tops, heights };
+                return { lines, tops, heights };
+            }
+
+            function measureLogicalLineHeights(ta) {
+                return measureLogicalLineLayout(ta).heights;
+            }
+
+            function updateGutterWidth(gutter, lineCount) {
+                const digits = Math.max(2, String(Math.max(1, lineCount)).length);
+                const widthPx = Math.ceil(digits * 9 + 14);
+                gutter.style.flex = `0 0 ${widthPx}px`;
+                gutter.style.width = `${widthPx}px`;
+                gutter.style.maxWidth = `${widthPx}px`;
+            }
+
+            function scheduleGutterRefresh() {
+                syncTextareaEditorHeight();
+                updateLineGutter();
+            }
+
+            function scheduleGutterRefreshAfterLayout() {
+                invalidateGutterMeasureCache();
+                requestAnimationFrame(() => {
+                    invalidateGutterMeasureCache();
+                    syncTextareaEditorHeight();
+                    updateLineGutter();
+                    requestAnimationFrame(() => {
+                        invalidateGutterMeasureCache();
+                        syncTextareaEditorHeight();
+                        updateLineGutter();
+                    });
+                });
+            }
+
+            function updateLineGutter() {
+                const gutter = document.getElementById('markdown-line-gutter');
+                const ta = textarea;
+                if (!gutter || !ta || !editorPrefs.showLineNumbers) {
+                    if (gutter) gutter.innerHTML = '';
+                    return;
+                }
+                syncTextareaEditorHeight();
+                const metrics = getGutterTypographyMetrics(ta);
+                const layout = measureLogicalLineLayout(ta);
+                const current = editorPrefs.highlightCurrentLine ? getTextareaLineIndex(ta) : -1;
+                updateGutterWidth(gutter, layout.lines.length);
+                let linesHtml = '';
+                for (let i = 0; i < layout.lines.length; i++) {
+                    const blockHeight = layout.heights[i];
+                    const visualCount = estimateVisualRowCount(blockHeight, metrics.lineHeight);
+                    const rowHeight = blockHeight / visualCount;
+                    for (let v = 0; v < visualCount; v++) {
+                        const parts = ['gutter-line', 'editor-source-metrics'];
+                        if (v > 0) parts.push('gutter-line-wrap');
+                        if (i === current) parts.push('is-current');
+                        const label = v === 0 ? (i + 1) : '';
+                        linesHtml += `<div class="${parts.join(' ')}" data-logical-line="${i}" style="height:${rowHeight}px">${label}</div>`;
+                    }
+                }
+                gutter.innerHTML = `
+                    <div class="gutter-inner editor-source-metrics" style="
+                        padding-top:${metrics.paddingTop}px;
+                        padding-bottom:${metrics.paddingBottom}px;
+                        min-height:${ta.offsetHeight}px;
+                    ">${linesHtml}</div>`;
+                gutter.style.minHeight = ta.offsetHeight + 'px';
+            }
+
+            function refreshGutterHighlight() {
+                const gutter = document.getElementById('markdown-line-gutter');
+                const ta = textarea;
+                if (!gutter || !ta || !editorPrefs.showLineNumbers) return;
+                const current = editorPrefs.highlightCurrentLine ? getTextareaLineIndex(ta) : -1;
+                gutter.querySelectorAll('.gutter-line').forEach((el) => {
+                    const logical = Number(el.dataset.logicalLine);
+                    el.classList.toggle('is-current', logical === current);
+                });
+            }
+
+            function refreshGutterAfterCaretMove() {
+                requestAnimationFrame(refreshGutterHighlight);
+            }
+
+            function applyEditorPreferences() {
+                const ta = textarea;
+                if (!ta) return;
+                invalidateGutterMeasureCache();
+                applyEditorTypographyVariables();
+                ta.classList.add('editor-source-metrics');
+                const showNumbers = !!editorPrefs.showLineNumbers;
+                const highlightLine = showNumbers && !!editorPrefs.highlightCurrentLine;
+                document.body.classList.toggle('editor-line-numbers', showNumbers);
+                document.body.classList.toggle('highlight-current-line', highlightLine);
+                scheduleGutterRefreshAfterLayout();
+            }
+
+            function insertTextAtSelection(ta, text) {
+                const start = ta.selectionStart;
+                const end = ta.selectionEnd;
+                const value = ta.value;
+                ta.value = value.slice(0, start) + text + value.slice(end);
+                const pos = start + text.length;
+                ta.selectionStart = ta.selectionEnd = pos;
+                ta.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+
+            function handleEditorIndentKeydown(e) {
+                if (e.key !== 'Tab' || e.ctrlKey || e.metaKey || e.altKey) return false;
+                if (isLiveActive()) return false;
+                const ta = textarea;
+                const indentUnit = editorPrefs.useSpacesForTabs
+                    ? ' '.repeat(Math.max(2, editorPrefs.indentSize || 4))
+                    : '\t';
+                e.preventDefault();
+
+                if (e.shiftKey) {
+                    const start = ta.selectionStart;
+                    const lineStart = ta.value.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+                    const linePrefix = ta.value.slice(lineStart, start);
+                    const trimmed = linePrefix.replace(new RegExp(`^${indentUnit}`), '');
+                    if (trimmed.length < linePrefix.length) {
+                        const removeCount = linePrefix.length - trimmed.length;
+                        ta.value = ta.value.slice(0, lineStart) + trimmed + ta.value.slice(start);
+                        const newPos = Math.max(lineStart, start - removeCount);
+                        ta.selectionStart = ta.selectionEnd = newPos;
+                        ta.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
+                    return true;
+                }
+
+                insertTextAtSelection(ta, indentUnit);
+                return true;
+            }
             
             // Проверка наличия элементов
             console.log('🔍 Проверка элементов:');
@@ -1804,10 +2266,7 @@
             }
 
             function getMarkdownScrollElement() {
-                if (!textarea) return markdownPane;
-                if (textarea.scrollHeight > textarea.clientHeight + 1) return textarea;
-                if (markdownPane && markdownPane.scrollHeight > markdownPane.clientHeight + 1) return markdownPane;
-                return textarea;
+                return markdownEditorScroll || markdownPane || textarea;
             }
 
             function scrollSourceToLine(lineNumber) {
@@ -1820,13 +2279,10 @@
                     offset += lines[i].length + 1;
                 }
 
-                const style = window.getComputedStyle(ta);
-                let lineHeight = parseFloat(style.lineHeight);
-                if (!lineHeight || Number.isNaN(lineHeight)) {
-                    lineHeight = (parseFloat(style.fontSize) || 14) * 1.6;
-                }
-                const padTop = parseFloat(style.paddingTop) || 0;
-                const targetScroll = Math.max(0, lineNumber * lineHeight - padTop + OUTLINE_SCROLL_TOP_INSET);
+                const metrics = getGutterTypographyMetrics(ta);
+                const layout = measureLogicalLineLayout(ta);
+                const lineTop = layout.tops[lineNumber] || 0;
+                let targetScroll = Math.max(0, metrics.paddingTop + lineTop + OUTLINE_SCROLL_TOP_INSET);
 
                 const scrollEl = getMarkdownScrollElement();
                 smoothScrollToTop(scrollEl, targetScroll);
@@ -1983,9 +2439,11 @@
             
             window.cmEditor = {
                 updateContent(text) {
-                    if (isSyncing || isApplyingHistory) return;
+                    if (isApplyingHistory) return;
                     const incoming = text ?? '';
-                    if (incoming === currentContent) return;
+                    // Ignore echoes from the debounced contentChanged round-trip only.
+                    if (isSyncing && incoming === textarea.value) return;
+                    if (incoming === currentContent && incoming === textarea.value) return;
                     currentContent = incoming;
                     textarea.value = incoming;
                     schedulePreviewRender.cancel();
@@ -1997,6 +2455,7 @@
                     if (isLiveActive()) {
                         initLiveEditor(incoming);
                     }
+                    scheduleGutterRefreshAfterLayout();
                 },
 
                 setTheme(isDark) {
@@ -2022,13 +2481,21 @@
 
                     isLiveMode = (mode === 'live');
 
-                    const keepDark = document.body.classList.contains('dark');
+                    const preserved = new Set();
+                    document.body.classList.forEach((cls) => {
+                        if (cls === 'dark'
+                            || cls === 'editor-line-numbers'
+                            || cls === 'highlight-current-line'
+                            || cls === 'editor-focus-mode'
+                            || cls === 'focus-dim-lines') {
+                            preserved.add(cls);
+                        }
+                    });
+
                     document.body.className = document.body.className
                         .replace(/mode-\w+/g, '')
                         .trim();
-                    if (keepDark) {
-                        document.body.classList.add('dark');
-                    }
+                    preserved.forEach((cls) => document.body.classList.add(cls));
                     document.body.classList.add(`mode-${mode}`);
 
                     flushPendingEditorUpdates();
@@ -2048,13 +2515,25 @@
                             renderPreview(currentContent);
                         }
                     }
+                    invalidateGutterMeasureCache();
                     requestAnimationFrame(() => {
+                        invalidateGutterMeasureCache();
                         scheduleMermaidRenderAfterLayout(getActiveMermaidRoots());
+                        applyEditorPreferences();
                     });
                 },
 
                 setSyncScroll(enabled) {
                     syncScroll = enabled;
+                },
+
+                setEditorPreferences(prefs) {
+                    if (!prefs || typeof prefs !== 'object') return;
+                    editorPrefs = { ...editorPrefs, ...prefs };
+                    if (!editorPrefs.showLineNumbers) {
+                        editorPrefs.highlightCurrentLine = false;
+                    }
+                    applyEditorPreferences();
                 },
 
                 setSwapped(swapped) {
@@ -2064,6 +2543,8 @@
                     } else {
                         editorContainer.classList.remove('swapped');
                     }
+                    invalidateGutterMeasureCache();
+                    requestAnimationFrame(scheduleGutterRefresh);
                 },
 
                 setPreviewTheme(themeName, themeCSS) {
@@ -2348,6 +2829,8 @@
                         initLiveEditor(incoming);
                     }
 
+                    scheduleGutterRefreshAfterLayout();
+
                     setTimeout(() => {
                         isApplyingHistory = false;
                         isSyncing = false;
@@ -2363,6 +2846,7 @@
                 currentContent = initialText;
                 textarea.value = initialText;
                 renderPreview(initialText);
+                scheduleGutterRefreshAfterLayout();
 
                 if (!isInitialized) {
                     document.addEventListener('keydown', handleGlobalUndoRedoKeydown, true);
@@ -2374,11 +2858,18 @@
                         const text = textarea.value;
                         currentContent = text;
                         rememberTextareaSelection();
-                        schedulePreviewRender(text);
+                        schedulePreviewRender();
                         scheduleContentSync(text);
                         if (isLiveActive()) {
                             scheduleLiveRebuild(text);
                         }
+                    });
+
+                    textarea.addEventListener('compositionend', () => {
+                        if (isSyncing || isApplyingHistory) return;
+                        currentContent = textarea.value;
+                        schedulePreviewRender.flush();
+                        scheduleContentSync.flush(textarea.value);
                     });
 
                     ['keyup', 'mouseup', 'select', 'click'].forEach((eventName) => {
@@ -2390,7 +2881,7 @@
                         if (isLiveActive()) {
                             scheduleLiveRebuild.cancel();
                             const text = textarea.value;
-                            schedulePreviewRender.flush(text);
+                            schedulePreviewRender.flush();
                             scheduleContentSync.flush(text);
                             return;
                         }
@@ -2399,8 +2890,38 @@
 
                     textarea.addEventListener('keydown', (e) => {
                         if (handleListKeydown(e)) return;
-                        handleEditModeTableKeydown(e);
+                        if (handleEditModeTableKeydown(e)) return;
+                        handleEditorIndentKeydown(e);
                     });
+
+                    textarea.addEventListener('input', () => {
+                        invalidateGutterMeasureCache();
+                        requestAnimationFrame(scheduleGutterRefresh);
+                    });
+
+                    ['click', 'keyup', 'mouseup'].forEach((evt) => {
+                        textarea.addEventListener(evt, refreshGutterAfterCaretMove);
+                    });
+
+                    document.addEventListener('selectionchange', () => {
+                        if (document.activeElement === textarea) {
+                            refreshGutterAfterCaretMove();
+                        }
+                    });
+
+                    applyEditorPreferences();
+
+                    if (window.ResizeObserver && textarea) {
+                        const onTextareaResize = debounce(() => {
+                            invalidateGutterMeasureCache();
+                            scheduleGutterRefreshAfterLayout();
+                        }, 80);
+                        const gutterResizeObserver = new ResizeObserver(onTextareaResize);
+                        gutterResizeObserver.observe(textarea);
+                        if (markdownEditorScroll) {
+                            gutterResizeObserver.observe(markdownEditorScroll);
+                        }
+                    }
 
                     swapButton.addEventListener('click', () => {
                         isSwapped = !isSwapped;
@@ -2414,8 +2935,16 @@
                     // ===== SCROLL SYNC (процентная синхронизация) =====
                     let isInternalScroll = false;
 
+                    function getEditorScrollElement() {
+                        return getMarkdownScrollElement();
+                    }
+
+                    function getPreviewScrollElement() {
+                        return previewPane || preview;
+                    }
+
                     function syncScrollPercent(source, target) {
-                        if (isInternalScroll) return;
+                        if (!source || !target || isInternalScroll) return;
                         isInternalScroll = true;
 
                         const maxScrollSource = source.scrollHeight - source.clientHeight;
@@ -2432,26 +2961,36 @@
                         setTimeout(() => { isInternalScroll = false; }, 20);
                     }
 
-                    textarea.addEventListener('scroll', () => {
+                    function onEditorScroll() {
                         if (!syncScroll) return;
                         const now = Date.now();
                         if (now - lastScrollTime.preview < 50) return;
                         lastScrollTime.markdown = now;
-                        syncScrollPercent(textarea, previewPane);
-                    });
+                        syncScrollPercent(getEditorScrollElement(), getPreviewScrollElement());
+                    }
 
-                    previewPane.addEventListener('scroll', () => {
+                    function onPreviewScroll() {
                         if (!syncScroll) return;
                         const now = Date.now();
                         if (now - lastScrollTime.markdown < 50) return;
                         lastScrollTime.preview = now;
-                        syncScrollPercent(previewPane, textarea);
-                    });
+                        syncScrollPercent(getPreviewScrollElement(), getEditorScrollElement());
+                    }
+
+                    if (markdownEditorScroll) {
+                        markdownEditorScroll.addEventListener('scroll', onEditorScroll, { passive: true });
+                    }
+
+                    if (previewPane) {
+                        previewPane.addEventListener('scroll', onPreviewScroll);
+                    }
 
                     window.addEventListener('resize', () => {
+                        invalidateGutterMeasureCache();
                         if (syncScroll && document.body.classList.contains('mode-split')) {
-                            syncScrollPercent(textarea, previewPane);
+                            syncScrollPercent(getEditorScrollElement(), getPreviewScrollElement());
                         }
+                        scheduleGutterRefresh();
                     });
 
                     console.log('✅ Синхронизация скролла включена');
@@ -2801,7 +3340,7 @@
                     requestAnimationFrame(() => activateCodeBlockAtCursor());
                 } else {
                     ta.dispatchEvent(new Event('input'));
-                    schedulePreviewRender.flush(ta.value);
+                    schedulePreviewRender.flush();
                     highlightCodeBlocks(preview);
                 }
                 ta.focus();
@@ -6479,7 +7018,7 @@
                 if (isApplyingHistory) return;
                 currentContent = liveBlocks.map((block) => blockToMarkdownSource(block)).join('\n');
                 textarea.value = currentContent;
-                schedulePreviewRender(currentContent);
+                schedulePreviewRender();
                 scheduleContentSync(currentContent);
             }
 
