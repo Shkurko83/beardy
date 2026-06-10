@@ -116,7 +116,6 @@ struct CodeMirrorWebView: NSViewRepresentable {
             context.coordinator.lastViewMode = viewMode
             let mode = jsViewModeName(viewMode)
             webView.evaluateJavaScript("window.cmEditor?.setViewMode('\(mode)');", completionHandler: nil)
-            EditorSettingsSync.pushToEditor()
         }
     }
 

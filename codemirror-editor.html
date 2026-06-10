@@ -98,6 +98,7 @@
                     body.mode-edit #markdown-pane {
                         display: block;
                         width: 100% !important;
+                        height: 100%;
                         border-right: none;
                         border-left: none;
                     }
@@ -122,6 +123,7 @@
                     body.mode-split #markdown-pane {
                         display: block;
                         width: 50% !important;
+                        height: 100%;
                     }
                     body.mode-split #preview-pane {
                         display: block;
@@ -155,11 +157,10 @@
                         overflow-y: auto;
                     }
                     .markdown-editor-body {
-                        display: flex;
-                        align-items: flex-start;
                         position: relative;
                         width: 100%;
                         min-height: 100%;
+                        box-sizing: border-box;
                     }
                     :root {
                         --editor-font-family: 'SF Mono', Menlo, Monaco, monospace;
@@ -175,29 +176,34 @@
                         -moz-tab-size: var(--editor-tab-size);
                     }
                     #markdown-textarea {
-                        flex: 1 1 0;
-                        min-width: 0;
-                        width: auto;
+                        display: block;
+                        width: 100%;
+                        min-height: 100%;
                         height: auto;
                         overflow: hidden;
                         resize: none;
                         box-sizing: border-box;
+                        padding: 40px 60px;
                         white-space: pre-wrap;
                         word-wrap: break-word;
                         overflow-wrap: break-word;
                     }
+                    body.editor-line-numbers #markdown-textarea {
+                        padding-left: calc(var(--editor-gutter-width, 2.75rem) + 60px);
+                    }
                     #markdown-line-gutter {
                         display: none;
-                        flex: 0 0 auto;
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        z-index: 2;
                         overflow: hidden;
                         box-sizing: border-box;
                         text-align: right;
                         color: rgba(128, 128, 128, 0.75);
                         user-select: none;
                         pointer-events: none;
-                        flex-shrink: 0;
-                        padding: 0;
-                        min-width: 2.25rem;
+                        width: var(--editor-gutter-width, 2.75rem);
                     }
                     body.editor-line-numbers #markdown-line-gutter {
                         display: block;
@@ -222,9 +228,6 @@
                         text-align: right;
                         white-space: nowrap;
                         pointer-events: none;
-                    }
-                    #markdown-line-gutter .gutter-line-wrap {
-                        padding: 0;
                     }
                     body.highlight-current-line #markdown-line-gutter .gutter-line.is-current {
                         color: #007aff;
@@ -1026,8 +1029,8 @@
                         <div id="markdown-line-gutter" aria-hidden="true"></div>
                         <textarea id="markdown-textarea" class="editor-source-metrics" wrap="soft" lang="en" autocorrect="off" autocomplete="off" autocapitalize="off" spellcheck="false" data-gramm="false" style="
                         border: none; outline: none;
-                        padding: 40px 60px; background: transparent;
-                        resize: none; color: inherit;
+                        background: transparent;
+                        color: inherit;
                     "></textarea>
                     </div>
                 </div>
@@ -1704,9 +1707,22 @@
                 return normalized.split('\n');
             }
 
-            function estimateVisualRowCount(blockHeight, lineHeight) {
-                if (blockHeight <= lineHeight * 1.2) return 1;
-                return Math.max(1, Math.round(blockHeight / lineHeight));
+            function isMarkdownGutterActive() {
+                return !!editorPrefs.showLineNumbers
+                    && (document.body.classList.contains('mode-edit')
+                        || document.body.classList.contains('mode-split'));
+            }
+
+            function lineLikelyWraps(lineText, contentWidth, fontSize) {
+                if (!lineText.length) return false;
+                const avgCharWidth = Math.max(4, fontSize * 0.58);
+                return lineText.length * avgCharWidth > contentWidth * 0.92;
+            }
+
+            function measureSingleLineBlockHeight(mirror, lineText, minHeight) {
+                mirror.replaceChildren();
+                mirror.appendChild(document.createTextNode(lineText.length ? lineText : '\u200b'));
+                return Math.max(minHeight, mirror.offsetHeight);
             }
 
             function measureLogicalLineLayout(ta) {
@@ -1732,27 +1748,20 @@
                 const minHeight = metrics.lineHeight;
                 const verticalChrome = metrics.paddingTop + metrics.paddingBottom;
                 const contentHeight = Math.max(0, ta.scrollHeight - verticalChrome);
-
-                mirror.replaceChildren();
-                const markers = [];
-                for (let i = 0; i < lines.length; i++) {
-                    const marker = document.createElement('span');
-                    marker.style.display = 'inline';
-                    marker.style.width = '0';
-                    marker.style.overflow = 'hidden';
-                    mirror.appendChild(marker);
-                    markers.push(marker);
-                    mirror.appendChild(document.createTextNode(lines[i].length ? lines[i] : '\u200b'));
-                    if (i < lines.length - 1) {
-                        mirror.appendChild(document.createTextNode('\n'));
-                    }
-                }
-
-                const tops = markers.map((marker) => marker.offsetTop);
+                const contentTextWidth = getTextareaContentWidth(ta);
                 const heights = [];
-                for (let i = 0; i < tops.length; i++) {
-                    const nextTop = i + 1 < tops.length ? tops[i + 1] : contentHeight;
-                    heights.push(Math.max(minHeight, nextTop - tops[i]));
+                const tops = [];
+                let runningTop = 0;
+
+                for (let i = 0; i < lines.length; i++) {
+                    tops.push(runningTop);
+                    const line = lines[i];
+                    let blockHeight = minHeight;
+                    if (lineLikelyWraps(line, contentTextWidth, metrics.fontSize)) {
+                        blockHeight = measureSingleLineBlockHeight(mirror, line, minHeight);
+                    }
+                    heights.push(blockHeight);
+                    runningTop += blockHeight;
                 }
 
                 const measuredSum = heights.reduce((sum, height) => sum + height, 0);
@@ -1769,65 +1778,106 @@
                 return measureLogicalLineLayout(ta).heights;
             }
 
+            function resetGutterLayout(gutter) {
+                if (!gutter) return;
+                gutter.replaceChildren();
+                gutter.style.minHeight = '';
+                document.documentElement.style.removeProperty('--editor-gutter-width');
+            }
+
             function updateGutterWidth(gutter, lineCount) {
                 const digits = Math.max(2, String(Math.max(1, lineCount)).length);
                 const widthPx = Math.ceil(digits * 9 + 14);
-                gutter.style.flex = `0 0 ${widthPx}px`;
-                gutter.style.width = `${widthPx}px`;
-                gutter.style.maxWidth = `${widthPx}px`;
+                const widthValue = `${widthPx}px`;
+                document.documentElement.style.setProperty('--editor-gutter-width', widthValue);
+                if (gutter) gutter.style.width = widthValue;
             }
 
-            function scheduleGutterRefresh() {
+            function ensureTextareaLayout() {
                 syncTextareaEditorHeight();
-                updateLineGutter();
+            }
+
+            let lastGutterObservedWidth = -1;
+            let gutterRefreshPending = false;
+            let gutterRefreshRunning = false;
+
+            const runGutterRefresh = () => {
+                ensureTextareaLayout();
+                if (!isMarkdownGutterActive()) {
+                    resetGutterLayout(document.getElementById('markdown-line-gutter'));
+                    return;
+                }
+                if (gutterRefreshRunning) {
+                    gutterRefreshPending = true;
+                    return;
+                }
+                gutterRefreshRunning = true;
+                try {
+                    updateLineGutter();
+                } finally {
+                    gutterRefreshRunning = false;
+                    if (gutterRefreshPending) {
+                        gutterRefreshPending = false;
+                        scheduleGutterRefresh();
+                    }
+                }
+            };
+
+            const debouncedGutterRefresh = debounce(runGutterRefresh, 160);
+
+            function scheduleGutterRefresh() {
+                if (!editorPrefs.showLineNumbers) return;
+                debouncedGutterRefresh();
             }
 
             function scheduleGutterRefreshAfterLayout() {
-                invalidateGutterMeasureCache();
-                requestAnimationFrame(() => {
+                if (!editorPrefs.showLineNumbers) return;
+                debouncedGutterRefresh.cancel();
+                const runLater = window.requestIdleCallback
+                    ? (cb) => window.requestIdleCallback(cb, { timeout: 300 })
+                    : (cb) => window.setTimeout(cb, 0);
+                runLater(() => {
                     invalidateGutterMeasureCache();
-                    syncTextareaEditorHeight();
-                    updateLineGutter();
-                    requestAnimationFrame(() => {
-                        invalidateGutterMeasureCache();
-                        syncTextareaEditorHeight();
-                        updateLineGutter();
-                    });
+                    ensureTextareaLayout();
+                    if (!isMarkdownGutterActive()) return;
+                    debouncedGutterRefresh();
                 });
+            }
+
+            function buildGutterInner(layout, metrics, current, minHeightPx) {
+                const inner = document.createElement('div');
+                inner.className = 'gutter-inner editor-source-metrics';
+                inner.style.paddingTop = `${metrics.paddingTop}px`;
+                inner.style.paddingBottom = `${metrics.paddingBottom}px`;
+                inner.style.minHeight = `${minHeightPx}px`;
+                const fragment = document.createDocumentFragment();
+                for (let i = 0; i < layout.lines.length; i++) {
+                    const row = document.createElement('div');
+                    row.className = 'gutter-line editor-source-metrics';
+                    row.dataset.logicalLine = String(i);
+                    row.style.height = `${layout.heights[i]}px`;
+                    if (i === current) row.classList.add('is-current');
+                    row.textContent = String(i + 1);
+                    fragment.appendChild(row);
+                }
+                inner.appendChild(fragment);
+                return inner;
             }
 
             function updateLineGutter() {
                 const gutter = document.getElementById('markdown-line-gutter');
                 const ta = textarea;
-                if (!gutter || !ta || !editorPrefs.showLineNumbers) {
-                    if (gutter) gutter.innerHTML = '';
+                if (!gutter || !ta || !isMarkdownGutterActive()) {
+                    resetGutterLayout(gutter);
                     return;
                 }
-                syncTextareaEditorHeight();
                 const metrics = getGutterTypographyMetrics(ta);
                 const layout = measureLogicalLineLayout(ta);
                 const current = editorPrefs.highlightCurrentLine ? getTextareaLineIndex(ta) : -1;
                 updateGutterWidth(gutter, layout.lines.length);
-                let linesHtml = '';
-                for (let i = 0; i < layout.lines.length; i++) {
-                    const blockHeight = layout.heights[i];
-                    const visualCount = estimateVisualRowCount(blockHeight, metrics.lineHeight);
-                    const rowHeight = blockHeight / visualCount;
-                    for (let v = 0; v < visualCount; v++) {
-                        const parts = ['gutter-line', 'editor-source-metrics'];
-                        if (v > 0) parts.push('gutter-line-wrap');
-                        if (i === current) parts.push('is-current');
-                        const label = v === 0 ? (i + 1) : '';
-                        linesHtml += `<div class="${parts.join(' ')}" data-logical-line="${i}" style="height:${rowHeight}px">${label}</div>`;
-                    }
-                }
-                gutter.innerHTML = `
-                    <div class="gutter-inner editor-source-metrics" style="
-                        padding-top:${metrics.paddingTop}px;
-                        padding-bottom:${metrics.paddingBottom}px;
-                        min-height:${ta.offsetHeight}px;
-                    ">${linesHtml}</div>`;
-                gutter.style.minHeight = ta.offsetHeight + 'px';
+                gutter.replaceChildren(buildGutterInner(layout, metrics, current, ta.offsetHeight));
+                gutter.style.minHeight = `${ta.offsetHeight}px`;
+                lastGutterObservedWidth = ta.offsetWidth;
             }
 
             function refreshGutterHighlight() {
@@ -1848,14 +1898,18 @@
             function applyEditorPreferences() {
                 const ta = textarea;
                 if (!ta) return;
-                invalidateGutterMeasureCache();
                 applyEditorTypographyVariables();
                 ta.classList.add('editor-source-metrics');
                 const showNumbers = !!editorPrefs.showLineNumbers;
                 const highlightLine = showNumbers && !!editorPrefs.highlightCurrentLine;
                 document.body.classList.toggle('editor-line-numbers', showNumbers);
                 document.body.classList.toggle('highlight-current-line', highlightLine);
-                scheduleGutterRefreshAfterLayout();
+                debouncedGutterRefresh.cancel();
+                if (showNumbers) {
+                    scheduleGutterRefreshAfterLayout();
+                } else {
+                    resetGutterLayout(document.getElementById('markdown-line-gutter'));
+                }
             }
 
             function insertTextAtSelection(ta, text) {
@@ -2455,7 +2509,10 @@
                     if (isLiveActive()) {
                         initLiveEditor(incoming);
                     }
-                    scheduleGutterRefreshAfterLayout();
+                    if (isMarkdownGutterActive()) {
+                        invalidateGutterMeasureCache();
+                        scheduleGutterRefreshAfterLayout();
+                    }
                 },
 
                 setTheme(isDark) {
@@ -2515,11 +2572,16 @@
                             renderPreview(currentContent);
                         }
                     }
+                    debouncedGutterRefresh.cancel();
                     invalidateGutterMeasureCache();
                     requestAnimationFrame(() => {
-                        invalidateGutterMeasureCache();
                         scheduleMermaidRenderAfterLayout(getActiveMermaidRoots());
-                        applyEditorPreferences();
+                        ensureTextareaLayout();
+                        if (isMarkdownGutterActive()) {
+                            scheduleGutterRefreshAfterLayout();
+                        } else {
+                            resetGutterLayout(document.getElementById('markdown-line-gutter'));
+                        }
                     });
                 },
 
@@ -2829,7 +2891,10 @@
                         initLiveEditor(incoming);
                     }
 
-                    scheduleGutterRefreshAfterLayout();
+                    if (isMarkdownGutterActive()) {
+                        invalidateGutterMeasureCache();
+                        scheduleGutterRefreshAfterLayout();
+                    }
 
                     setTimeout(() => {
                         isApplyingHistory = false;
@@ -2846,7 +2911,7 @@
                 currentContent = initialText;
                 textarea.value = initialText;
                 renderPreview(initialText);
-                scheduleGutterRefreshAfterLayout();
+                requestAnimationFrame(ensureTextareaLayout);
 
                 if (!isInitialized) {
                     document.addEventListener('keydown', handleGlobalUndoRedoKeydown, true);
@@ -2896,7 +2961,7 @@
 
                     textarea.addEventListener('input', () => {
                         invalidateGutterMeasureCache();
-                        requestAnimationFrame(scheduleGutterRefresh);
+                        scheduleGutterRefresh();
                     });
 
                     ['click', 'keyup', 'mouseup'].forEach((evt) => {
@@ -2910,18 +2975,6 @@
                     });
 
                     applyEditorPreferences();
-
-                    if (window.ResizeObserver && textarea) {
-                        const onTextareaResize = debounce(() => {
-                            invalidateGutterMeasureCache();
-                            scheduleGutterRefreshAfterLayout();
-                        }, 80);
-                        const gutterResizeObserver = new ResizeObserver(onTextareaResize);
-                        gutterResizeObserver.observe(textarea);
-                        if (markdownEditorScroll) {
-                            gutterResizeObserver.observe(markdownEditorScroll);
-                        }
-                    }
 
                     swapButton.addEventListener('click', () => {
                         isSwapped = !isSwapped;
@@ -2985,13 +3038,16 @@
                         previewPane.addEventListener('scroll', onPreviewScroll);
                     }
 
-                    window.addEventListener('resize', () => {
+                    window.addEventListener('resize', debounce(() => {
+                        if (!isMarkdownGutterActive()) return;
+                        const nextWidth = textarea ? textarea.offsetWidth : -1;
+                        if (Math.abs(nextWidth - lastGutterObservedWidth) < 2) return;
                         invalidateGutterMeasureCache();
                         if (syncScroll && document.body.classList.contains('mode-split')) {
                             syncScrollPercent(getEditorScrollElement(), getPreviewScrollElement());
                         }
                         scheduleGutterRefresh();
-                    });
+                    }, 200));
 
                     console.log('✅ Синхронизация скролла включена');
 
