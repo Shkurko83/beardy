@@ -288,7 +288,56 @@ struct HTMLVisitor: MarkupVisitor {
     }
 
     mutating func visitHTMLBlock(_ html: HTMLBlock) -> String {
-        rewriteImageSources(in: html.rawHTML)
+        let raw = html.rawHTML
+        let enriched = raw.range(of: "<details", options: .caseInsensitive) != nil
+            ? reparsedDetailsHTML(raw)
+            : raw
+        return rewriteImageSources(in: enriched)
+    }
+
+    /// HTML blocks (e.g. `<details>`) can contain Markdown source; re-parse body like preview does with marked.
+    private mutating func reparsedDetailsHTML(_ html: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: #"(?is)(<details(\s[^>]*)?>)([\s\S]*?)(</details>)"#) else {
+            return html
+        }
+        let nsHTML = html as NSString
+        var result = html
+        let matches = regex.matches(in: html, range: NSRange(location: 0, length: nsHTML.length)).reversed()
+        for match in matches {
+            guard match.numberOfRanges >= 5,
+                  let openRange = Range(match.range(at: 1), in: html),
+                  let innerRange = Range(match.range(at: 3), in: html),
+                  let closeRange = Range(match.range(at: 4), in: html) else { continue }
+            let openTag = String(html[openRange])
+            let inner = String(html[innerRange])
+            let closeTag = String(html[closeRange])
+            let parsedInner = parseHTMLBlockMixedContent(inner)
+            let replacement = openTag + parsedInner + closeTag
+            result = (result as NSString).replacingCharacters(in: match.range, with: replacement)
+        }
+        return result
+    }
+
+    private mutating func parseHTMLBlockMixedContent(_ inner: String) -> String {
+        if let sumRegex = try? NSRegularExpression(pattern: #"(?is)^(\s*<summary[^>]*>[\s\S]*?</summary>)([\s\S]*)$"#),
+           let sumMatch = sumRegex.firstMatch(in: inner, range: NSRange(inner.startIndex..., in: inner)),
+           sumMatch.numberOfRanges >= 3,
+           let summaryRange = Range(sumMatch.range(at: 1), in: inner),
+           let bodyRange = Range(sumMatch.range(at: 2), in: inner) {
+            let summary = String(inner[summaryRange])
+            let bodyMD = String(inner[bodyRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !bodyMD.isEmpty else { return inner }
+            return summary + "\n" + renderMarkdownFragment(bodyMD)
+        }
+        let trimmed = inner.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return inner }
+        return renderMarkdownFragment(trimmed)
+    }
+
+    private mutating func renderMarkdownFragment(_ markdown: String) -> String {
+        let document = Document(parsing: markdown)
+        var visitor = HTMLVisitor(sourceMarkdown: markdown, documentURL: documentURL)
+        return visitor.visit(document)
     }
 
     mutating func visitInlineHTML(_ html: InlineHTML) -> String {

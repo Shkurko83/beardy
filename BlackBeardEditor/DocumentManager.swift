@@ -643,7 +643,10 @@ class DocumentManager: ObservableObject {
     
     private func saveDocument(to url: URL, content explicitContent: String? = nil) {
         guard let id = selectedTabID,
-              let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+              let index = tabs.firstIndex(where: { $0.id == id }) else {
+            showError("Failed to save document: no active document.")
+            return
+        }
 
         if explicitContent == nil {
             flushEditorContent(forSave: true) { [weak self] content in
@@ -1107,13 +1110,7 @@ class DocumentManager: ObservableObject {
     }
     
     private func makeExportOptions(for format: ExportService.ExportFormat) -> ExportService.ExportOptions {
-        var options = ExportService.ExportOptions()
-        let margins = UserDefaults.standard.double(forKey: AppConstants.Keys.exportPDFMargins)
-        options.margins = margins >= 36 ? CGFloat(margins) : AppConstants.Export.defaultPDFMargins
-        options.includeCSS = format.includesStyles
-        options.includePageNumbers = false
-        options.paperSize = .a4
-        return options
+        ExportOptionsBuilder.make(for: format)
     }
     
     private func performExport(
@@ -1121,24 +1118,28 @@ class DocumentManager: ObservableObject {
         to url: URL,
         document doc: MarkdownDocument
     ) {
-        let options = makeExportOptions(for: format)
-        let destinationAccess = url.startAccessingSecurityScopedResource()
-        ExportService.shared.export(
-            markdown: doc.content,
-            to: url,
-            documentURL: doc.url,
-            format: format,
-            options: options
-        ) { [weak self] result in
-            if destinationAccess {
-                url.stopAccessingSecurityScopedResource()
-            }
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let savedURL):
-                    self?.showExportSuccess(savedURL, format: format)
-                case .failure(let error):
-                    self?.showError("Export failed: \(error.localizedDescription)")
+        flushEditorContent(forSave: true) { [weak self] content in
+            guard let self else { return }
+            let options = self.makeExportOptions(for: format)
+            Self.grantAccessAndSaveBookmarks(for: url)
+            let destinationAccess = url.startAccessingSecurityScopedResource()
+            ExportService.shared.export(
+                markdown: content,
+                to: url,
+                documentURL: doc.url,
+                format: format,
+                options: options
+            ) { [weak self] result in
+                if destinationAccess {
+                    url.stopAccessingSecurityScopedResource()
+                }
+                DispatchQueue.main.async {
+                    switch result {
+                    case .success(let savedURL):
+                        self?.showExportSuccess(savedURL, format: format)
+                    case .failure(let error):
+                        self?.showError("Export failed: \(error.localizedDescription)")
+                    }
                 }
             }
         }

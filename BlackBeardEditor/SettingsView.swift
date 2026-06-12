@@ -30,8 +30,6 @@ struct SettingsView: View {
     @AppStorage("indentSize") private var indentSize: Int = 4
     @AppStorage("useSpacesForTabs") private var useSpacesForTabs: Bool = true
     @AppStorage(AppConstants.Keys.previewSyncScroll) private var previewSyncScroll: Bool = true
-    @AppStorage("exportImageFormat") private var exportImageFormat: String = "png"
-    @AppStorage("exportPDFMargins") private var exportPDFMargins: Double = 72
     @AppStorage(ImageInsertionHelper.copyImagesToDocumentFolderKey) private var copyImagesToDocumentFolder: Bool = true
     @AppStorage(AppConstants.Keys.startupAction) private var startupAction: String = AppConstants.StartupAction.welcome.rawValue
     @AppStorage(AppConstants.Keys.recoveryBackupEnabled) private var recoveryBackupEnabled: Bool = true
@@ -95,17 +93,13 @@ struct SettingsView: View {
             }
             .tag(SettingsTab.appearance)
             
-            ExportSettingsView(
-                imageFormat: $exportImageFormat,
-                pdfMargins: $exportPDFMargins,
-                copyImagesToDocumentFolder: $copyImagesToDocumentFolder
-            )
+            ExportSettingsView()
             .tabItem {
                 Label("Export", systemImage: "square.and.arrow.up")
             }
             .tag(SettingsTab.export)
         }
-        .frame(width: 600, height: 520)
+        .frame(width: 600, height: 580)
     }
 }
 
@@ -615,125 +609,133 @@ struct AppearanceSettingsView: View {
 
 // MARK: - Export Settings
 struct ExportSettingsView: View {
-    @Binding var imageFormat: String
-    @Binding var pdfMargins: Double
-    @Binding var copyImagesToDocumentFolder: Bool
     @AppStorage(AppConstants.Keys.usePandocForDocxExport) private var usePandocForDocxExport = false
-    
-    let imageFormats = ["PNG", "JPEG", "SVG", "WebP"]
-    
+    @AppStorage(AppConstants.Keys.exportPDFMarginTop) private var marginTop: Double = 72
+    @AppStorage(AppConstants.Keys.exportPDFMarginBottom) private var marginBottom: Double = 72
+    @AppStorage(AppConstants.Keys.exportPDFMarginLeft) private var marginLeft: Double = 72
+    @AppStorage(AppConstants.Keys.exportPDFMarginRight) private var marginRight: Double = 72
+    @AppStorage(AppConstants.Keys.exportPDFPaperSize) private var paperSize: String = "letter"
+    @AppStorage(AppConstants.Keys.exportPDFIncludePageNumbers) private var includePageNumbers = false
+    @AppStorage(AppConstants.Keys.exportPDFIncludeTOC) private var includeTOC = false
+    @AppStorage(AppConstants.Keys.exportPDFIncludeThemeBackground) private var includeThemeBackground = false
+    @AppStorage(AppConstants.Keys.exportHTMLStandalone) private var htmlStandalone = true
+    @AppStorage(AppConstants.Keys.exportRemoveYAMLFrontmatter) private var removeYAMLFrontmatter = false
+    @AppStorage(AppConstants.Keys.exportPreserveEmptyLines) private var preserveEmptyLines = true
+
     var body: some View {
         Form {
             Section {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Export")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                    
-                    Divider()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Export")
+                            .font(.title2)
+                            .fontWeight(.bold)
 
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Word (.docx)")
-                            .font(.headline)
+                        Divider()
 
-                        Text("Black Beard Editor uses a built-in exporter with embedded images, tables, lists, OMML math, and prerendered Mermaid diagrams.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Word (.docx)")
+                                .font(.headline)
 
-                        Toggle("Use Pandoc for DOCX when installed", isOn: $usePandocForDocxExport)
-                            .help("Optional. Requires Pandoc (brew install pandoc). Off by default.")
-                    }
+                            settingCaption("Black Beard Editor uses a built-in exporter with embedded images, tables, lists, OMML math, and prerendered Mermaid diagrams.")
 
-                    Divider()
-                    
-                    // PDF Export
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("PDF Export")
-                            .font(.headline)
-                        
-                        HStack {
-                            Text("Page margins:")
-                            Spacer()
-                            Slider(value: $pdfMargins, in: 36...144, step: 18)
-                                .frame(width: 200)
-                            Text("\(Int(pdfMargins))pt")
-                                .frame(width: 50, alignment: .trailing)
-                                .foregroundColor(.secondary)
+                            Toggle("Use Pandoc for DOCX when installed", isOn: $usePandocForDocxExport)
+                            settingCaption("When enabled and Pandoc is available, Word export uses Pandoc instead of the built-in writer. Requires Pandoc (brew install pandoc).")
                         }
-                        
-                        HStack {
-                            Text("Paper size:")
-                            Spacer()
-                            Picker("", selection: .constant("letter")) {
-                                Text("Letter").tag("letter")
-                                Text("A4").tag("a4")
-                                Text("Legal").tag("legal")
+
+                        Divider()
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("PDF Export")
+                                .font(.headline)
+
+                            settingCaption("Page margins in points (72 pt = 1 inch). Content stays inside these margins.")
+
+                            marginRow("Top", value: $marginTop)
+                            marginRow("Bottom", value: $marginBottom)
+                            marginRow("Left", value: $marginLeft)
+                            marginRow("Right", value: $marginRight)
+
+                            Button("Reset margins to 72 pt") {
+                                marginTop = 72
+                                marginBottom = 72
+                                marginLeft = 72
+                                marginRight = 72
                             }
-                            .frame(width: 150)
-                        }
-                        
-                        Toggle("Include page numbers", isOn: .constant(true))
-                        Toggle("Include table of contents", isOn: .constant(false))
-                    }
-                    
-                    Divider()
-                    
-                    // HTML Export
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("HTML Export")
-                            .font(.headline)
-                        
-                        Toggle("Include CSS styles", isOn: .constant(true))
-                        Toggle("Embed images beside document", isOn: $copyImagesToDocumentFolder)
-                        Toggle("Generate standalone HTML", isOn: .constant(true))
-                    }
-                    
-                    Divider()
-                    
-                    // Image Export
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Image Export")
-                            .font(.headline)
-                        
-                        HStack {
-                            Text("Default format:")
-                            Spacer()
-                            Picker("", selection: $imageFormat) {
-                                ForEach(imageFormats, id: \.self) { format in
-                                    Text(format).tag(format.lowercased())
+                            .buttonStyle(.link)
+
+                            HStack {
+                                Text("Paper size")
+                                Spacer()
+                                Picker("", selection: $paperSize) {
+                                    Text("Letter").tag("letter")
+                                    Text("A4").tag("a4")
+                                    Text("Legal").tag("legal")
                                 }
+                                .labelsHidden()
+                                .frame(width: 150)
                             }
-                            .frame(width: 150)
+                            settingCaption("Physical page size used when saving a PDF.")
+
+                            Toggle("Include page numbers", isOn: $includePageNumbers)
+                            settingCaption("Adds centered page numbers in the bottom margin of each page.")
+
+                            Toggle("Include table of contents", isOn: $includeTOC)
+                            settingCaption("Inserts a linked table of contents from document headings at the start of the PDF.")
+
+                            Toggle("Use editor theme background", isOn: $includeThemeBackground)
+                            settingCaption("Extends the editor background into the page margins; text still follows your margin settings. When off, the PDF uses a white page and switches to dark print-friendly text colors so light editor themes remain readable.")
                         }
-                        
-                        HStack {
-                            Text("Image quality:")
-                            Spacer()
-                            Slider(value: .constant(90), in: 50...100, step: 5)
-                                .frame(width: 200)
-                            Text("90%")
-                                .frame(width: 50, alignment: .trailing)
-                                .foregroundColor(.secondary)
+
+                        Divider()
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("HTML Export")
+                                .font(.headline)
+
+                            settingCaption("Styled vs plain HTML is chosen from the Export menu (HTML vs HTML without styles).")
+
+                            Toggle("Standalone HTML file", isOn: $htmlStandalone)
+                            settingCaption("When on, images are embedded in the HTML file. When off, images are copied into a sibling folder and linked with relative paths.")
                         }
-                        
-                        Toggle("Copy images to export folder", isOn: .constant(true))
+
+                        Divider()
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Advanced")
+                                .font(.headline)
+
+                            Toggle("Remove YAML frontmatter on export", isOn: $removeYAMLFrontmatter)
+                            settingCaption("Strips a leading --- … --- metadata block before exporting to any format.")
+
+                            Toggle("Preserve empty lines", isOn: $preserveEmptyLines)
+                            settingCaption("Keeps blank lines in plain text export. HTML and PDF always use normal Markdown blank-line rules so structure matches preview.")
+                        }
                     }
-                    
-                    Divider()
-                    
-                    // Advanced
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Advanced")
-                            .font(.headline)
-                        
-                        Toggle("Remove YAML frontmatter on export", isOn: .constant(false))
-                        Toggle("Preserve empty lines", isOn: .constant(true))
-                    }
+                    .padding()
                 }
-                .padding()
             }
         }
         .formStyle(.grouped)
+    }
+
+    private func marginRow(_ label: String, value: Binding<Double>) -> some View {
+        HStack {
+            Text(label)
+                .frame(width: 56, alignment: .leading)
+            Slider(value: value, in: 18...144, step: 6)
+            Text("\(Int(value.wrappedValue)) pt")
+                .frame(width: 52, alignment: .trailing)
+                .foregroundColor(.secondary)
+                .monospacedDigit()
+        }
+    }
+
+    private func settingCaption(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundColor(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

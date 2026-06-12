@@ -690,6 +690,60 @@
                         white-space: pre-wrap;
                     }
                     body.dark .mermaid-error { color: #f85149; }
+
+                    /* PDF export: preview-only layout (same renderer as Split/Preview) */
+                    body.pdf-export-mode {
+                        height: auto !important;
+                        min-height: 0 !important;
+                        overflow: visible !important;
+                    }
+                    body.pdf-export-mode #editor-container {
+                        display: block !important;
+                        width: 100% !important;
+                        height: auto !important;
+                        min-height: 0 !important;
+                    }
+                    body.pdf-export-mode #markdown-pane,
+                    body.pdf-export-mode #swap-button,
+                    body.pdf-export-mode #live-editor,
+                    body.pdf-export-mode #markdown-line-gutter,
+                    body.pdf-export-mode #markdown-spell-overlay {
+                        display: none !important;
+                    }
+                    body.pdf-export-mode #preview-pane {
+                        display: block !important;
+                        width: 100% !important;
+                        height: auto !important;
+                        min-height: 0 !important;
+                        overflow: visible !important;
+                        border: none !important;
+                    }
+                    body.pdf-export-mode #preview-content {
+                        overflow: visible !important;
+                        height: auto !important;
+                        min-height: 0 !important;
+                        padding: 20px;
+                    }
+                    body.pdf-export-mode .live-block {
+                        break-inside: avoid-page;
+                    }
+                    body.pdf-export-mode img.export-mermaid-raster {
+                        max-width: 100%;
+                        height: auto;
+                        display: block;
+                        margin: 0 auto;
+                    }
+                    body.pdf-export-print-root {
+                        height: auto !important;
+                        min-height: 0 !important;
+                        overflow: visible !important;
+                    }
+                    body.pdf-export-print-root .pdf-export-root {
+                        padding: 20px;
+                        overflow: visible !important;
+                        height: auto !important;
+                    }
+
                     .special-block-editor {
                         display: none;
                         border-bottom: 1px solid #d0d7de;
@@ -1115,6 +1169,7 @@
             let documentBasePath = null;
             let showCodeLineNumbers = false;
             let linkReferenceMap = {};
+            let footnoteMap = {};
             let anchorHighlightTimer = null;
             let loadedCodeThemeURLs = new Set();
             let focusModeActive = false;
@@ -1861,6 +1916,9 @@
                     return;
                 }
                 finishActiveListSourceEdit(null);
+                liveBlocks.forEach((block, index) => {
+                    if (block.type === 'list') syncListBlockFromDOM(index);
+                });
                 if (activeBlockIndex >= 0) {
                     deactivateCurrentBlock();
                 } else if (liveBlocks.length) {
@@ -2087,7 +2145,7 @@
                     const nextDark = !!options.isDark;
                     const wasDark = document.body.classList.contains('dark');
                     document.body.classList.toggle('dark', nextDark);
-                    [textarea, markdownPane, previewPane, liveEditor].forEach((el) => {
+                    [textarea, markdownPane, previewPane, liveEditor || document.getElementById('live-editor')].forEach((el) => {
                         if (!el) return;
                         el.style.backgroundColor = 'transparent';
                         el.style.color = 'inherit';
@@ -2233,7 +2291,7 @@
                     pre.classList.remove('has-line-numbers');
                     if (showCodeLineNumbers && typeof hljs.lineNumbersBlock === 'function') {
                         try {
-                            hljs.lineNumbersBlock(restored);
+                            hljs.lineNumbersBlock(restored, { singleLine: true });
                             pre.classList.add('has-line-numbers');
                         } catch (e) {
                             console.warn('lineNumbersBlock failed', e);
@@ -2346,6 +2404,7 @@
             const preview = document.getElementById('preview-content');
             const markdownPane = document.getElementById('markdown-pane');
             const previewPane = document.getElementById('preview-pane');
+            const liveEditor = document.getElementById('live-editor');
             const editorContainer = document.getElementById('editor-container');
             const swapButton = document.getElementById('swap-button');
 
@@ -2810,9 +2869,44 @@
                 }
             }
 
+            function isFootnoteDefinitionLine(line) {
+                return /^\s*\[\^[^\]]+\]:/.test(line || '');
+            }
+
+            function footnoteSlug(id) {
+                return (id || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+            }
+
+            function consumeFootnoteDefinitionLines(lines, startIndex) {
+                const m = lines[startIndex].match(/^\s*\[\^([^\]]+)\]:\s*(.*)$/);
+                if (!m) return null;
+
+                const id = m[1].trim();
+                const chunks = [];
+                if (m[2].trim()) chunks.push(m[2].trim());
+
+                let consumed = 1;
+                let j = startIndex + 1;
+                while (j < lines.length) {
+                    const cont = lines[j];
+                    if (cont.trim() === '') break;
+                    if (isFootnoteDefinitionLine(cont) || isLinkReferenceDefinitionLine(cont)) break;
+                    if (/^\s+(?:\S|\[\^)/.test(cont)) {
+                        chunks.push(cont.replace(/^\s{4}/, '').trim());
+                        consumed++;
+                        j++;
+                        continue;
+                    }
+                    break;
+                }
+
+                return { consumed, id, content: chunks.join(' ').trim() };
+            }
+
             const LINK_REF_DEF_RE = /^\s*\[([^\]]+)\]:\s*(?:<([^>]+)>|(\S+))(?:\s+(?:"([^"]*)"|'([^']*)'))?\s*$/;
 
             function isLinkReferenceDefinitionLine(line) {
+                if (isFootnoteDefinitionLine(line)) return false;
                 return /^\s*\[[^\]]+\]:/.test(line || '');
             }
 
@@ -2892,11 +2986,20 @@
             function extractLinkReferenceDefinitions(text) {
                 const lines = (text || '').split('\n');
                 const refs = {};
+                const footnotes = {};
                 const out = [];
                 const lineMap = [];
                 let i = 0;
 
                 while (i < lines.length) {
+                    if (isFootnoteDefinitionLine(lines[i])) {
+                        const entry = consumeFootnoteDefinitionLines(lines, i);
+                        if (entry) {
+                            footnotes[entry.id.toLowerCase()] = { id: entry.id, content: entry.content };
+                            i += entry.consumed;
+                            continue;
+                        }
+                    }
                     if (isLinkReferenceDefinitionLine(lines[i])) {
                         const entry = consumeReferenceDefinitionLines(lines, i);
                         if (entry) {
@@ -2909,7 +3012,7 @@
                     out.push(lines[i]);
                     i++;
                 }
-                return { text: out.join('\n'), refs, lineMap };
+                return { text: out.join('\n'), refs, footnotes, lineMap };
             }
 
             function getEditorSource() {
@@ -2923,7 +3026,29 @@
             }
 
             function ensureLinkReferenceMap() {
-                linkReferenceMap = extractLinkReferenceDefinitions(getEditorSource()).refs;
+                const extracted = extractLinkReferenceDefinitions(getEditorSource());
+                linkReferenceMap = extracted.refs;
+                footnoteMap = extracted.footnotes;
+            }
+
+            function renderFootnotesSectionHTML(footnotes) {
+                const entries = Object.values(footnotes || {});
+                if (!entries.length) return '';
+                const items = entries.map((fn) => {
+                    const slug = footnoteSlug(fn.id);
+                    const content = fn.content ? renderInline(fn.content) : '';
+                    return `<li id="fn-${slug}"><span class="footnote-content">${content}</span> <a href="#fnref-${slug}" class="footnote-backref" aria-label="Back to reference">↩</a></li>`;
+                }).join('');
+                return `<section class="footnotes"><hr class="footnotes-sep"><ol class="footnotes-list">${items}</ol></section>`;
+            }
+
+            function appendFootnotesSection(container, footnotes) {
+                container.querySelectorAll(':scope > .footnotes').forEach((el) => el.remove());
+                const html = renderFootnotesSectionHTML(footnotes);
+                if (!html) return;
+                const wrap = document.createElement('div');
+                wrap.innerHTML = html;
+                if (wrap.firstElementChild) container.appendChild(wrap.firstElementChild);
             }
 
             function parseLinkTarget(raw) {
@@ -3262,8 +3387,9 @@
                 const readOnly = !!options.readOnly;
                 const incremental = options.incremental !== false && readOnly;
                 const normalized = normalizeMarkdownImages(text || '');
-                const { text: withoutRefs, refs, lineMap } = extractLinkReferenceDefinitions(normalized);
+                const { text: withoutRefs, refs, footnotes, lineMap } = extractLinkReferenceDefinitions(normalized);
                 linkReferenceMap = refs;
+                footnoteMap = footnotes;
                 let blocks = parseMarkdownBlocks(withoutRefs, lineMap);
                 blocks = coalesceHTMLBlocks(blocks);
 
@@ -3290,6 +3416,7 @@
                         if (anyChange) {
                             rewriteImagesInContainer(container);
                         }
+                        appendFootnotesSection(container, footnotes);
                         return;
                     }
                 }
@@ -3304,6 +3431,7 @@
                 if (isElementVisibleForLayout(container)) {
                     scheduleMermaidRenderAfterLayout([container]);
                 }
+                appendFootnotesSection(container, footnotes);
             }
             
             window.cmEditor = {
@@ -3664,6 +3792,206 @@
                         isApplyingHistory = false;
                         isSyncing = false;
                     }, 60);
+                },
+
+                async preparePDFExport(options = {}) {
+                    try {
+                    const markdown = String(options.markdown ?? '');
+                    const documentPath = options.documentPath || null;
+                    const printCSS = options.printCSS || '';
+
+                    document.body.classList.add('pdf-export-mode');
+                    document.documentElement.style.height = 'auto';
+                    document.documentElement.style.overflow = 'visible';
+                    document.body.style.height = 'auto';
+                    document.body.style.overflow = 'visible';
+
+                    document.body.classList.remove('mode-edit', 'mode-split', 'mode-live');
+                    document.body.classList.add('mode-preview');
+
+                    ['swap-button', 'markdown-pane', 'live-editor'].forEach((id) => {
+                        const el = document.getElementById(id);
+                        if (el) el.style.display = 'none';
+                    });
+
+                    const editorContainer = document.getElementById('editor-container');
+                    if (editorContainer) {
+                        editorContainer.style.display = 'block';
+                        editorContainer.style.width = '100%';
+                        editorContainer.style.height = 'auto';
+                    }
+
+                    const previewPane = document.getElementById('preview-pane');
+                    const previewContent = document.getElementById('preview-content');
+                    if (previewPane) {
+                        previewPane.style.display = 'block';
+                        previewPane.style.width = '100%';
+                        previewPane.style.height = 'auto';
+                        previewPane.style.overflow = 'visible';
+                        previewPane.style.border = 'none';
+                    }
+
+                    if (printCSS) {
+                        let styleEl = document.getElementById('pdf-export-print-style');
+                        if (!styleEl) {
+                            styleEl = document.createElement('style');
+                            styleEl.id = 'pdf-export-print-style';
+                            document.head.appendChild(styleEl);
+                        }
+                        styleEl.textContent = printCSS;
+                    }
+
+                    if (documentPath) {
+                        documentBasePath = documentPath;
+                    }
+
+                    currentContent = markdown;
+                    if (previewContent) {
+                        previewContent.classList.add('markdown-body');
+                        mountDocumentBlocks(previewContent, markdown, { readOnly: true });
+                    }
+
+                    async function waitForPDFPreviewRender(container) {
+                        if (!container) return;
+                        scheduleMermaidRenderAfterLayout([container]);
+                        for (let attempt = 0; attempt < 160; attempt++) {
+                            await renderMermaidInContainers([container], 0);
+                            await new Promise((resolve) => requestAnimationFrame(resolve));
+                            const pending = container.querySelectorAll('.mermaid-diagram[data-mermaid-pending]');
+                            const rendering = container.querySelectorAll('[data-mermaid-rendering]');
+                            const diagrams = container.querySelectorAll('.mermaid-diagram');
+                            const mermaidReady = [...diagrams].every((node) => {
+                                const src = (node.getAttribute('data-mermaid-source') || node.textContent || '').trim();
+                                if (!src || node.classList.contains('is-empty')) return true;
+                                return node.querySelector('svg') || node.querySelector('.mermaid-error');
+                            });
+                            if (!pending.length && !rendering.length && mermaidReady) break;
+                        }
+                        const imgs = Array.from(container.querySelectorAll('img') || []);
+                        const pendingImages = imgs.filter((img) => !img.complete);
+                        if (pendingImages.length) {
+                            await Promise.all(pendingImages.map((img) => new Promise((resolve) => {
+                                const timer = setTimeout(resolve, 8000);
+                                const finish = () => { clearTimeout(timer); resolve(); };
+                                img.addEventListener('load', finish, { once: true });
+                                img.addEventListener('error', finish, { once: true });
+                            })));
+                        }
+                    }
+
+                    async function rasterizeMermaidForPDFPrint(root) {
+                        if (!root) return;
+                        for (const el of root.querySelectorAll('.mermaid-diagram')) {
+                            if (el.querySelector('img.export-mermaid-raster')) continue;
+                            const svg = el.querySelector('svg');
+                            if (!svg) continue;
+                            const rect = svg.getBoundingClientRect();
+                            const width = Math.max(rect.width, svg.viewBox?.baseVal?.width || 0, el.clientWidth, 1);
+                            const height = Math.max(rect.height, svg.viewBox?.baseVal?.height || 0, el.clientHeight, 1);
+                            if (width < 1 || height < 1) continue;
+                            try {
+                                const canvas = document.createElement('canvas');
+                                const scale = 2;
+                                canvas.width = Math.max(1, Math.ceil(width * scale));
+                                canvas.height = Math.max(1, Math.ceil(height * scale));
+                                const ctx = canvas.getContext('2d');
+                                ctx.scale(scale, scale);
+                                const clone = svg.cloneNode(true);
+                                clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+                                clone.setAttribute('width', String(width));
+                                clone.setAttribute('height', String(height));
+                                const src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(clone));
+                                await new Promise((resolve, reject) => {
+                                    const img = new Image();
+                                    img.onload = () => { ctx.drawImage(img, 0, 0, width, height); resolve(); };
+                                    img.onerror = reject;
+                                    img.src = src;
+                                });
+                                const png = canvas.toDataURL('image/png');
+                                const imgEl = document.createElement('img');
+                                imgEl.src = png;
+                                imgEl.className = 'export-mermaid-raster';
+                                imgEl.style.maxWidth = '100%';
+                                imgEl.style.height = 'auto';
+                                imgEl.style.display = 'block';
+                                imgEl.style.margin = '0 auto';
+                                el.innerHTML = '';
+                                el.appendChild(imgEl);
+                            } catch (e) {}
+                        }
+                    }
+
+                    function flattenDetailsForPrint(root) {
+                        (root || document).querySelectorAll('details').forEach((d) => {
+                            d.open = true;
+                            d.setAttribute('open', 'open');
+                            const flat = document.createElement('div');
+                            flat.className = 'export-details-flat export-open';
+                            flat.innerHTML = d.innerHTML;
+                            d.replaceWith(flat);
+                        });
+                    }
+
+                    function finalizeBodyForPrint(sourceRoot) {
+                        if (!sourceRoot) return null;
+                        const exportedHTML = sourceRoot.innerHTML;
+                        const bodyClass = document.body.className;
+
+                        document.getElementById('editor-container')?.remove();
+                        document.getElementById('live-editor')?.remove();
+                        document.getElementById('swap-button')?.remove();
+
+                        document.body.innerHTML = '';
+                        document.body.className = bodyClass + ' pdf-export-print-root';
+                        document.body.style.margin = '0';
+                        document.body.style.padding = '0';
+                        document.body.style.height = 'auto';
+                        document.body.style.overflow = 'visible';
+
+                        const root = document.createElement('div');
+                        root.id = 'preview-content';
+                        root.className = 'markdown-body pdf-export-root';
+                        root.innerHTML = exportedHTML;
+                        document.body.appendChild(root);
+                        return root;
+                    }
+
+                    function measurePDFPreviewHeight(root) {
+                        const el = root || document.getElementById('preview-content');
+                        if (!el) return 1;
+                        return Math.ceil(Math.max(el.scrollHeight, el.offsetHeight, el.getBoundingClientRect().height, 1));
+                    }
+
+                    await waitForPDFPreviewRender(previewContent);
+                    flattenDetailsForPrint(previewContent);
+                    await rasterizeMermaidForPDFPrint(previewContent);
+
+                    const blockCount = previewContent
+                        ? previewContent.querySelectorAll('.live-block').length
+                        : 0;
+
+                    const printRoot = finalizeBodyForPrint(previewContent);
+
+                    let lastHeight = 0;
+                    let stablePasses = 0;
+                    for (let i = 0; i < 24 && stablePasses < 3; i++) {
+                        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                        const h = measurePDFPreviewHeight(printRoot);
+                        if (h === lastHeight) stablePasses++;
+                        else { stablePasses = 0; lastHeight = h; }
+                    }
+
+                    return {
+                        height: lastHeight || measurePDFPreviewHeight(printRoot),
+                        blockCount
+                    };
+                    } catch (error) {
+                        return {
+                            height: 0,
+                            blockCount: 0,
+                            error: error?.message || String(error)
+                        };
+                    }
                 }
                 
             };
@@ -3891,7 +4219,6 @@
             // LIVE MODE — Typora-like inline rendering
             // ============================================================
 
-            const liveEditor = document.getElementById('live-editor');
             let liveBlocks = [];
             let activeBlockIndex = -1;
             let liveContent = '';
@@ -4776,7 +5103,7 @@
                 const skipLineNumbers = preEl.closest('.code-fence-wrap.is-editing');
                 if (showCodeLineNumbers && !skipLineNumbers && typeof hljs.lineNumbersBlock === 'function') {
                     try {
-                        hljs.lineNumbersBlock(codeEl);
+                        hljs.lineNumbersBlock(codeEl, { singleLine: true });
                         preEl.classList.add('has-line-numbers');
                     } catch (e) {
                         console.warn('lineNumbersBlock failed', e);
@@ -5223,6 +5550,9 @@
 
             function isElementVisibleForLayout(el) {
                 if (!el || !el.isConnected) return false;
+                if (document.body.classList.contains('pdf-export-mode')) {
+                    return true;
+                }
                 let node = el;
                 while (node && node !== document.body) {
                     const style = window.getComputedStyle(node);
@@ -7211,6 +7541,17 @@
                     return `\x00MDIMG${mdImgPlaceholders.length - 1}\x00`;
                 });
 
+                s = s.replace(/\[\^([^\]]+)\]/g, (match, id) => {
+                    const trimmed = id.trim();
+                    const slug = footnoteSlug(trimmed);
+                    const escaped = trimmed
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;');
+                    inlineHtmlPlaceholders.push(`<sup class="footnote-ref"><a href="#fn-${slug}" id="fnref-${slug}">${escaped}</a></sup>`);
+                    return `\x00HTML${inlineHtmlPlaceholders.length - 1}\x00`;
+                });
+
                 s = s.replace(/<img\s[^>]*>/gi, (match) => {
                     const resolved = match.replace(/\ssrc=(["'])(.*?)\1/i, (_, quote, src) => {
                         return ` src=${quote}${resolveImageSrc(src)}${quote}`;
@@ -7489,8 +7830,9 @@
                 liveBlocks = [];
                 activeBlockIndex = -1;
                 const normalized = normalizeMarkdownImages(text || '');
-                const { text: withoutRefs, refs, lineMap } = extractLinkReferenceDefinitions(normalized);
+                const { text: withoutRefs, refs, footnotes, lineMap } = extractLinkReferenceDefinitions(normalized);
                 linkReferenceMap = refs;
+                footnoteMap = footnotes;
                 liveContent = withoutRefs;
 
                 let blocks = parseMarkdownBlocks(liveContent, lineMap);
@@ -7528,6 +7870,7 @@
                 highlightCodeBlocks(liveEditor);
                 rewriteImagesInContainer(liveEditor);
                 scheduleMermaidRenderAfterLayout([liveEditor]);
+                appendFootnotesSection(liveEditor, footnotes);
 
                 lastLiveInteraction = {
                     blockIndex: Math.max(liveBlocks.length - 1, 0),

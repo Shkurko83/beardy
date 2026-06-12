@@ -45,6 +45,18 @@ struct MarkdownEditorApp: App {
             AppConstants.Keys.autoPairBrackets: true,
             AppConstants.Keys.autoPairQuotes: true,
             AppConstants.Keys.autoCloseMarkdown: true,
+            AppConstants.Keys.exportPDFMarginTop: 72,
+            AppConstants.Keys.exportPDFMarginBottom: 72,
+            AppConstants.Keys.exportPDFMarginLeft: 72,
+            AppConstants.Keys.exportPDFMarginRight: 72,
+            AppConstants.Keys.exportPDFPaperSize: "letter",
+            AppConstants.Keys.exportPDFIncludePageNumbers: false,
+            AppConstants.Keys.exportPDFIncludeTOC: false,
+            AppConstants.Keys.exportPDFIncludeThemeBackground: false,
+            AppConstants.Keys.exportHTMLStandalone: true,
+            AppConstants.Keys.exportRemoveYAMLFrontmatter: false,
+            AppConstants.Keys.exportPreserveEmptyLines: true,
+            AppConstants.Keys.usePandocForDocxExport: false,
         ])
         SecurityBookmarkStore.performStartupMaintenance()
         _ = KeyboardShortcutsManager.shared

@@ -185,8 +185,18 @@ struct AppConstants {
         static let followSystemAppearance = "followSystemAppearance"
         
         // Export
-        static let exportImageFormat = "exportImageFormat"
         static let exportPDFMargins = "exportPDFMargins"
+        static let exportPDFMarginTop = "exportPDFMarginTop"
+        static let exportPDFMarginBottom = "exportPDFMarginBottom"
+        static let exportPDFMarginLeft = "exportPDFMarginLeft"
+        static let exportPDFMarginRight = "exportPDFMarginRight"
+        static let exportPDFPaperSize = "exportPDFPaperSize"
+        static let exportPDFIncludePageNumbers = "exportPDFIncludePageNumbers"
+        static let exportPDFIncludeTOC = "exportPDFIncludeTOC"
+        static let exportPDFIncludeThemeBackground = "exportPDFIncludeThemeBackground"
+        static let exportHTMLStandalone = "exportHTMLStandalone"
+        static let exportRemoveYAMLFrontmatter = "exportRemoveYAMLFrontmatter"
+        static let exportPreserveEmptyLines = "exportPreserveEmptyLines"
         static let usePandocForDocxExport = "usePandocForDocxExport"
         
         // View State

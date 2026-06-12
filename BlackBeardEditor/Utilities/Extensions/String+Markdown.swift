@@ -259,6 +259,26 @@ extension String {
     }
     
     // MARK: - Cleaning
+
+    /// Removes a leading YAML frontmatter block (`---` … `---`) when present.
+    var removingYAMLFrontmatter: String {
+        let normalized = replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+        guard normalized.hasPrefix("---") else { return self }
+
+        let lines = normalized.components(separatedBy: "\n")
+        guard lines.first?.trimmingCharacters(in: .whitespaces) == "---" else { return self }
+
+        for index in 1..<lines.count {
+            if lines[index].trimmingCharacters(in: .whitespaces) == "---" {
+                var remainder = Array(lines[(index + 1)...])
+                while remainder.first?.isEmpty == true {
+                    remainder.removeFirst()
+                }
+                return remainder.joined(separator: "\n")
+            }
+        }
+        return self
+    }
     
     /// Remove markdown syntax
     var withoutMarkdown: String {
@@ -304,10 +324,15 @@ extension String {
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     
-    /// Trim trailing whitespace from each line
+    /// Trim trailing whitespace from each line (preserves leading indent for nested lists).
     var trimmingTrailingWhitespace: String {
-        return components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
+        components(separatedBy: .newlines)
+            .map { line in
+                guard let lastNonWhitespace = line.lastIndex(where: { !$0.isWhitespace }) else {
+                    return ""
+                }
+                return String(line[...lastNonWhitespace])
+            }
             .joined(separator: "\n")
     }
     
