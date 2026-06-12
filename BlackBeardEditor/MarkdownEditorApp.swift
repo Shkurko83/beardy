@@ -14,7 +14,9 @@ struct MarkdownEditorApp: App {
     @StateObject private var themeService = ThemeService.shared
     
     init() {
+        TypingSettingsSync.migrateLegacySettingsIfNeeded()
         UserDefaults.standard.register(defaults: [
+            AppConstants.Keys.webContinuousSpellChecking: true,
             AppConstants.Keys.focusHideSidebar: true,
             AppConstants.Keys.focusHideOutline: true,
             AppConstants.Keys.previewSyncScroll: true,
@@ -31,6 +33,18 @@ struct MarkdownEditorApp: App {
             AppConstants.Keys.highlightCurrentLine: true,
             AppConstants.Keys.indentSize: AppConstants.Defaults.tabSize,
             AppConstants.Keys.useSpacesForTabs: true,
+            AppConstants.Keys.spellCheckEnabled: true,
+            AppConstants.Keys.grammarCheckEnabled: true,
+            AppConstants.Keys.autoCapitalizationEnabled: false,
+            AppConstants.Keys.typographicPunctuationEnabled: false,
+            AppConstants.Keys.trimTrailingWhitespaceOnSave: true,
+            AppConstants.Keys.insertFinalNewlineOnSave: true,
+            AppConstants.Keys.continueListsOnEnter: true,
+            AppConstants.Keys.continueBlockquoteOnEnter: true,
+            AppConstants.Keys.smartPasteURLs: true,
+            AppConstants.Keys.autoPairBrackets: true,
+            AppConstants.Keys.autoPairQuotes: true,
+            AppConstants.Keys.autoCloseMarkdown: true,
         ])
         SecurityBookmarkStore.performStartupMaintenance()
         _ = KeyboardShortcutsManager.shared

@@ -155,6 +155,18 @@ struct AppConstants {
         static let spellCheckEnabled = "spellCheckEnabled"
         static let grammarCheckEnabled = "grammarCheckEnabled"
         static let autoCapitalizationEnabled = "autoCapitalizationEnabled"
+        static let typographicPunctuationEnabled = "typographicPunctuationEnabled"
+        static let trimTrailingWhitespaceOnSave = "trimTrailingWhitespaceOnSave"
+        static let insertFinalNewlineOnSave = "insertFinalNewlineOnSave"
+        static let continueListsOnEnter = "continueListsOnEnter"
+        static let continueBlockquoteOnEnter = "continueBlockquoteOnEnter"
+        static let smartPasteURLs = "smartPasteURLs"
+        static let autoPairBrackets = "autoPairBrackets"
+        static let autoPairQuotes = "autoPairQuotes"
+        static let autoCloseMarkdown = "autoCloseMarkdown"
+        /// Enables WebKit continuous spell checking where supported (macOS).
+        static let webContinuousSpellChecking = "WebContinuousSpellCheckingEnabled"
+        /// Legacy keys — migrated to `typographicPunctuationEnabled`.
         static let smartQuotesEnabled = "smartQuotesEnabled"
         static let smartDashesEnabled = "smartDashesEnabled"
         

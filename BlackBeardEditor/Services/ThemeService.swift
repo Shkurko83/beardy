@@ -480,7 +480,6 @@ class ThemeService: NSObject, ObservableObject {
         }
 
         html, body,
-        #markdown-textarea,
         #markdown-pane,
         #preview-content,
         #live-editor {
@@ -489,7 +488,13 @@ class ThemeService: NSObject, ObservableObject {
         }
 
         #markdown-textarea {
+            background-color: transparent !important;
             caret-color: var(--md-text);
+            color: var(--md-text) !important;
+        }
+
+        #markdown-line-gutter {
+            color: var(--md-secondary);
         }
 
         #preview-content,

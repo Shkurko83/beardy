@@ -13,11 +13,18 @@ struct SettingsView: View {
     @AppStorage("editorFontFamily") private var editorFontFamily: String = "SF Mono"
     @AppStorage("autoSaveEnabled") private var autoSaveEnabled: Bool = true
     @AppStorage("autoSaveInterval") private var autoSaveInterval: Double = 30
-    @AppStorage("spellCheckEnabled") private var spellCheckEnabled: Bool = true
-    @AppStorage("grammarCheckEnabled") private var grammarCheckEnabled: Bool = true
-    @AppStorage("autoCapitalizationEnabled") private var autoCapitalizationEnabled: Bool = false
-    @AppStorage("smartQuotesEnabled") private var smartQuotesEnabled: Bool = false
-    @AppStorage("smartDashesEnabled") private var smartDashesEnabled: Bool = false
+    @AppStorage(AppConstants.Keys.spellCheckEnabled) private var spellCheckEnabled: Bool = true
+    @AppStorage(AppConstants.Keys.grammarCheckEnabled) private var grammarCheckEnabled: Bool = true
+    @AppStorage(AppConstants.Keys.autoCapitalizationEnabled) private var autoCapitalizationEnabled: Bool = false
+    @AppStorage(AppConstants.Keys.typographicPunctuationEnabled) private var typographicPunctuationEnabled: Bool = false
+    @AppStorage(AppConstants.Keys.trimTrailingWhitespaceOnSave) private var trimTrailingWhitespaceOnSave: Bool = true
+    @AppStorage(AppConstants.Keys.insertFinalNewlineOnSave) private var insertFinalNewlineOnSave: Bool = true
+    @AppStorage(AppConstants.Keys.continueListsOnEnter) private var continueListsOnEnter: Bool = true
+    @AppStorage(AppConstants.Keys.continueBlockquoteOnEnter) private var continueBlockquoteOnEnter: Bool = true
+    @AppStorage(AppConstants.Keys.smartPasteURLs) private var smartPasteURLs: Bool = true
+    @AppStorage(AppConstants.Keys.autoPairBrackets) private var autoPairBrackets: Bool = true
+    @AppStorage(AppConstants.Keys.autoPairQuotes) private var autoPairQuotes: Bool = true
+    @AppStorage(AppConstants.Keys.autoCloseMarkdown) private var autoCloseMarkdown: Bool = true
     @AppStorage("showLineNumbers") private var showLineNumbers: Bool = false
     @AppStorage("highlightCurrentLine") private var highlightCurrentLine: Bool = true
     @AppStorage("indentSize") private var indentSize: Int = 4
@@ -67,8 +74,15 @@ struct SettingsView: View {
                 spellCheckEnabled: $spellCheckEnabled,
                 grammarCheckEnabled: $grammarCheckEnabled,
                 autoCapitalizationEnabled: $autoCapitalizationEnabled,
-                smartQuotesEnabled: $smartQuotesEnabled,
-                smartDashesEnabled: $smartDashesEnabled
+                typographicPunctuationEnabled: $typographicPunctuationEnabled,
+                trimTrailingWhitespaceOnSave: $trimTrailingWhitespaceOnSave,
+                insertFinalNewlineOnSave: $insertFinalNewlineOnSave,
+                continueListsOnEnter: $continueListsOnEnter,
+                continueBlockquoteOnEnter: $continueBlockquoteOnEnter,
+                smartPasteURLs: $smartPasteURLs,
+                autoPairBrackets: $autoPairBrackets,
+                autoPairQuotes: $autoPairQuotes,
+                autoCloseMarkdown: $autoCloseMarkdown
             )
             .tabItem {
                 Label("Typing", systemImage: "keyboard")
@@ -91,7 +105,7 @@ struct SettingsView: View {
             }
             .tag(SettingsTab.export)
         }
-        .frame(width: 600, height: 450)
+        .frame(width: 600, height: 520)
     }
 }
 
@@ -300,9 +314,16 @@ struct TypingSettingsView: View {
     @Binding var spellCheckEnabled: Bool
     @Binding var grammarCheckEnabled: Bool
     @Binding var autoCapitalizationEnabled: Bool
-    @Binding var smartQuotesEnabled: Bool
-    @Binding var smartDashesEnabled: Bool
-    
+    @Binding var typographicPunctuationEnabled: Bool
+    @Binding var trimTrailingWhitespaceOnSave: Bool
+    @Binding var insertFinalNewlineOnSave: Bool
+    @Binding var continueListsOnEnter: Bool
+    @Binding var continueBlockquoteOnEnter: Bool
+    @Binding var smartPasteURLs: Bool
+    @Binding var autoPairBrackets: Bool
+    @Binding var autoPairQuotes: Bool
+    @Binding var autoCloseMarkdown: Bool
+
     var body: some View {
         Form {
             Section {
@@ -310,59 +331,163 @@ struct TypingSettingsView: View {
                     Text("Typing")
                         .font(.title2)
                         .fontWeight(.bold)
-                    
+
                     Divider()
-                    
-                    // Spell Checking
-                    VStack(alignment: .leading, spacing: 8) {
+
+                    VStack(alignment: .leading, spacing: 12) {
                         Text("Spell Checking")
                             .font(.headline)
-                        
-                        Toggle("Check spelling while typing", isOn: $spellCheckEnabled)
-                        Toggle("Check grammar with spelling", isOn: $grammarCheckEnabled)
-                            .disabled(!spellCheckEnabled)
+
+                        TypingSettingRow(
+                            title: "Check spelling while typing",
+                            caption: "Underlines misspelled words as you type.",
+                            isOn: $spellCheckEnabled
+                        )
+                        .onChange(of: spellCheckEnabled) { _, enabled in
+                            if !enabled {
+                                grammarCheckEnabled = false
+                            }
+                            TypingSettingsSync.pushToEditor()
+                        }
+
+                        TypingSettingRow(
+                            title: "Check grammar with spelling",
+                            caption: "Adds grammar hints when macOS provides them.",
+                            isOn: $grammarCheckEnabled,
+                            disabled: !spellCheckEnabled
+                        )
+                        .onChange(of: grammarCheckEnabled) { _, _ in
+                            TypingSettingsSync.pushToEditor()
+                        }
                     }
-                    
+
                     Divider()
-                    
-                    // Auto-correction
-                    VStack(alignment: .leading, spacing: 8) {
+
+                    VStack(alignment: .leading, spacing: 12) {
                         Text("Auto-correction")
                             .font(.headline)
-                        
-                        Toggle("Capitalize words automatically", isOn: $autoCapitalizationEnabled)
-                        Toggle("Use smart quotes and dashes", isOn: $smartQuotesEnabled)
-                        Toggle("Use smart dashes", isOn: $smartDashesEnabled)
+
+                        TypingSettingRow(
+                            title: "Capitalize sentences automatically",
+                            caption: "Capitalizes the first letter after a sentence end.",
+                            isOn: $autoCapitalizationEnabled
+                        )
+                        .onChange(of: autoCapitalizationEnabled) { _, _ in
+                            TypingSettingsSync.pushToEditor()
+                        }
+
+                        TypingSettingRow(
+                            title: "Typographic punctuation",
+                            caption: "Curly quotes and em dashes instead of straight ASCII.",
+                            isOn: $typographicPunctuationEnabled
+                        )
+                        .onChange(of: typographicPunctuationEnabled) { _, _ in
+                            TypingSettingsSync.pushToEditor()
+                        }
                     }
-                    
+
                     Divider()
-                    
-                    // Markdown
-                    VStack(alignment: .leading, spacing: 8) {
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("On Save")
+                            .font(.headline)
+
+                        TypingSettingRow(
+                            title: "Trim trailing whitespace",
+                            caption: "Removes spaces at the end of each line when saving.",
+                            isOn: $trimTrailingWhitespaceOnSave
+                        )
+
+                        TypingSettingRow(
+                            title: "Insert final newline",
+                            caption: "Ensures the file ends with a single newline when saving.",
+                            isOn: $insertFinalNewlineOnSave
+                        )
+                    }
+
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 12) {
                         Text("Markdown")
                             .font(.headline)
-                        
-                        Toggle("Auto-pair brackets", isOn: .constant(true))
-                        Toggle("Auto-pair quotes", isOn: .constant(true))
-                        Toggle("Auto-close markdown syntax", isOn: .constant(true))
-                        Toggle("Smart paste for URLs", isOn: .constant(true))
-                    }
-                    
-                    Divider()
-                    
-                    // Behavior
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Behavior")
-                            .font(.headline)
-                        
-                        Toggle("Trim trailing whitespace", isOn: .constant(true))
-                        Toggle("Insert final newline", isOn: .constant(true))
+
+                        TypingSettingRow(
+                            title: "Continue lists on Enter",
+                            caption: "Repeats the list marker on the next line; empty item ends the list.",
+                            isOn: $continueListsOnEnter
+                        )
+                        .onChange(of: continueListsOnEnter) { _, _ in
+                            TypingSettingsSync.pushToEditor()
+                        }
+
+                        TypingSettingRow(
+                            title: "Continue blockquote on Enter",
+                            caption: "Inserts \"> \" on the next line; empty line exits the quote.",
+                            isOn: $continueBlockquoteOnEnter
+                        )
+                        .onChange(of: continueBlockquoteOnEnter) { _, _ in
+                            TypingSettingsSync.pushToEditor()
+                        }
+
+                        TypingSettingRow(
+                            title: "Smart paste URLs",
+                            caption: "Turns pasted links into Markdown links, using selected text as the label.",
+                            isOn: $smartPasteURLs
+                        )
+                        .onChange(of: smartPasteURLs) { _, _ in
+                            TypingSettingsSync.pushToEditor()
+                        }
+
+                        TypingSettingRow(
+                            title: "Auto-pair brackets",
+                            caption: "Inserts closing ), ], or } and skips over it when typed again.",
+                            isOn: $autoPairBrackets
+                        )
+                        .onChange(of: autoPairBrackets) { _, _ in
+                            TypingSettingsSync.pushToEditor()
+                        }
+
+                        TypingSettingRow(
+                            title: "Auto-pair quotes and backticks",
+                            caption: "Pairs \", ', and ` for inline code; skipped when typographic quotes are on.",
+                            isOn: $autoPairQuotes
+                        )
+                        .onChange(of: autoPairQuotes) { _, _ in
+                            TypingSettingsSync.pushToEditor()
+                        }
+
+                        TypingSettingRow(
+                            title: "Auto-close bold and strikethrough",
+                            caption: "Typing * or ~ inserts ** or ~~ with the cursor inside.",
+                            isOn: $autoCloseMarkdown
+                        )
+                        .onChange(of: autoCloseMarkdown) { _, _ in
+                            TypingSettingsSync.pushToEditor()
+                        }
                     }
                 }
                 .padding()
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+private struct TypingSettingRow: View {
+    let title: String
+    let caption: String
+    @Binding var isOn: Bool
+    var disabled: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle(title, isOn: $isOn)
+                .disabled(disabled)
+            Text(caption)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 

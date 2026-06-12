@@ -187,6 +187,40 @@
                         white-space: pre-wrap;
                         word-wrap: break-word;
                         overflow-wrap: break-word;
+                        position: relative;
+                        z-index: 2;
+                    }
+                    #markdown-spell-overlay {
+                        display: none;
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        min-height: 100%;
+                        margin: 0;
+                        border: none;
+                        box-sizing: border-box;
+                        padding: 40px 60px;
+                        white-space: pre-wrap;
+                        word-wrap: break-word;
+                        overflow-wrap: break-word;
+                        pointer-events: none;
+                        z-index: 3;
+                        color: transparent;
+                        overflow: visible;
+                        background: transparent;
+                    }
+                    body.editor-line-numbers #markdown-spell-overlay {
+                        padding-left: calc(var(--editor-gutter-width, 2.75rem) + 60px);
+                    }
+                    #markdown-spell-overlay .spell-err {
+                        color: transparent;
+                        -webkit-text-fill-color: transparent;
+                        border-bottom: 2px dotted #ff3b30;
+                        border-radius: 0;
+                    }
+                    body.dark #markdown-spell-overlay .spell-err {
+                        border-bottom-color: #ff6961;
                     }
                     body.editor-line-numbers #markdown-textarea {
                         padding-left: calc(var(--editor-gutter-width, 2.75rem) + 60px);
@@ -196,7 +230,7 @@
                         position: absolute;
                         top: 0;
                         left: 0;
-                        z-index: 2;
+                        z-index: 5;
                         overflow: hidden;
                         box-sizing: border-box;
                         text-align: right;
@@ -1032,6 +1066,7 @@
                         background: transparent;
                         color: inherit;
                     "></textarea>
+                        <div id="markdown-spell-overlay" class="editor-source-metrics" aria-hidden="true"></div>
                     </div>
                 </div>
             </div>
@@ -1060,6 +1095,19 @@
                 indentSize: 4,
                 useSpacesForTabs: true
             };
+            let typingPrefs = {
+                spellCheckEnabled: true,
+                grammarCheckEnabled: true,
+                autoCapitalizationEnabled: false,
+                typographicPunctuation: false,
+                continueListsOnEnter: true,
+                continueBlockquoteOnEnter: true,
+                smartPasteURLs: true,
+                autoPairBrackets: true,
+                autoPairQuotes: true,
+                autoCloseMarkdown: true
+            };
+            let spellCheckRanges = [];
             let isSwapped = false;
             let isLiveMode = false;
             let lastScrollTime = { markdown: 0, preview: 0 };
@@ -1092,25 +1140,361 @@
 
             const SMART_DOUBLE_QUOTES = /[\u201C\u201D\u201E\u201F\u2033\u2036\u00AB\u00BB]/g;
             const SMART_SINGLE_QUOTES = /[\u2018\u2019\u201A\u201B\u2032\u2035]/g;
+            const SMART_DASHES = /[\u2013\u2014]/g;
 
-            function normalizeSmartQuotes(text) {
+            function shouldNormalizeTypography() {
+                return !typingPrefs.typographicPunctuation;
+            }
+
+            function normalizeTypography(text) {
+                if (!shouldNormalizeTypography()) {
+                    return String(text || '');
+                }
                 return String(text || '')
                     .replace(SMART_DOUBLE_QUOTES, '"')
-                    .replace(SMART_SINGLE_QUOTES, "'");
+                    .replace(SMART_SINGLE_QUOTES, "'")
+                    .replace(SMART_DASHES, '--');
+            }
+
+            function applyTypingPreferences() {
+                const targets = [
+                    document.getElementById('markdown-textarea'),
+                    document.getElementById('live-editor')
+                ];
+                targets.forEach(configurePlainTextTyping);
             }
 
             function configurePlainTextTyping(el) {
                 if (!el) return;
                 el.setAttribute('autocorrect', 'off');
                 el.setAttribute('autocomplete', 'off');
-                el.setAttribute('autocapitalize', 'off');
-                el.setAttribute('spellcheck', 'false');
+                el.setAttribute(
+                    'autocapitalize',
+                    typingPrefs.autoCapitalizationEnabled ? 'sentences' : 'off'
+                );
+                el.setAttribute('spellcheck', typingPrefs.spellCheckEnabled ? 'true' : 'false');
                 el.setAttribute('data-gramm', 'false');
                 el.setAttribute('data-gramm_editor', 'false');
                 el.setAttribute('data-enable-grammarly', 'false');
             }
 
+            function escapeSpellOverlayText(text) {
+                return String(text || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+            }
+
+            function getMarkdownTextarea() {
+                return document.getElementById('markdown-textarea');
+            }
+
+            function syncSpellOverlayGeometry() {
+                const overlay = document.getElementById('markdown-spell-overlay');
+                const ta = getMarkdownTextarea();
+                if (!overlay || !ta) return;
+
+                const computed = window.getComputedStyle(ta);
+                overlay.style.width = ta.offsetWidth + 'px';
+                overlay.style.minHeight = ta.offsetHeight + 'px';
+                overlay.style.top = ta.offsetTop + 'px';
+                overlay.style.left = ta.offsetLeft + 'px';
+                overlay.style.font = computed.font;
+                overlay.style.letterSpacing = computed.letterSpacing;
+                overlay.style.wordSpacing = computed.wordSpacing;
+                overlay.style.tabSize = computed.tabSize || '';
+                overlay.style.textAlign = computed.textAlign;
+                overlay.style.wordBreak = computed.wordBreak;
+                overlay.style.overflowWrap = computed.overflowWrap;
+            }
+
+            function syncSpellOverlayHeight() {
+                syncSpellOverlayGeometry();
+            }
+
+            function renderSpellCheckOverlay() {
+                const overlay = document.getElementById('markdown-spell-overlay');
+                const ta = getMarkdownTextarea();
+                if (!overlay || !ta) return;
+
+                if (!typingPrefs.spellCheckEnabled || !spellCheckRanges.length) {
+                    overlay.innerHTML = '';
+                    overlay.style.display = 'none';
+                    return;
+                }
+
+                const mode = document.body.className.match(/mode-(\w+)/)?.[1] || 'edit';
+                if (mode !== 'edit' && mode !== 'split') {
+                    overlay.innerHTML = '';
+                    overlay.style.display = 'none';
+                    return;
+                }
+
+                const text = ta.value;
+                const sorted = [...spellCheckRanges]
+                    .filter((range) => range
+                        && Number.isFinite(range.from)
+                        && Number.isFinite(range.to)
+                        && range.from >= 0
+                        && range.to > range.from
+                        && range.to <= text.length)
+                    .sort((a, b) => a.from - b.from);
+
+                if (!sorted.length) {
+                    overlay.innerHTML = '';
+                    overlay.style.display = 'none';
+                    return;
+                }
+
+                let html = '';
+                let last = 0;
+                for (const range of sorted) {
+                    if (range.from < last) continue;
+                    html += escapeSpellOverlayText(text.slice(last, range.from));
+                    html += '<span class="spell-err">';
+                    html += escapeSpellOverlayText(text.slice(range.from, range.to));
+                    html += '</span>';
+                    last = range.to;
+                }
+                html += escapeSpellOverlayText(text.slice(last));
+
+                overlay.innerHTML = html;
+                overlay.style.display = 'block';
+                syncSpellOverlayGeometry();
+            }
+
+            function refreshSpellCheckFromNative() {
+                const ta = getMarkdownTextarea();
+                if (!typingPrefs.spellCheckEnabled || !ta) return;
+                const handler = window.webkit?.messageHandlers?.spellCheckRequest;
+                if (!handler) return;
+                handler.postMessage(ta.value);
+            }
+
+            const scheduleSpellCheckRequest = debounce(() => {
+                refreshSpellCheckFromNative();
+            }, 200);
+
             let isNormalizingQuotes = false;
+
+            function dispatchEditorInput(el) {
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+
+            function getTextareaSelection(el) {
+                const start = el.selectionStart ?? 0;
+                const end = el.selectionEnd ?? start;
+                return {
+                    start,
+                    end,
+                    collapsed: start === end,
+                    before: el.value.slice(0, start),
+                    after: el.value.slice(end)
+                };
+            }
+
+            function replaceTextareaRange(el, start, end, text) {
+                const value = el.value;
+                el.value = value.slice(0, start) + text + value.slice(end);
+                const pos = start + text.length;
+                el.setSelectionRange(pos, pos);
+                dispatchEditorInput(el);
+            }
+
+            function shouldAutoCapitalizeLetter(before, char, collapsed) {
+                if (!typingPrefs.autoCapitalizationEnabled) return false;
+                if (!collapsed || !char || char.length !== 1) return false;
+                if (!/[a-z]/.test(char)) return false;
+                if (!before.length) return true;
+                if (/[.!?]\s*$/.test(before)) return true;
+                const lineStart = before.lastIndexOf('\n');
+                const linePrefix = lineStart === -1 ? before : before.slice(lineStart + 1);
+                return !linePrefix.length || /^\s*$/.test(linePrefix);
+            }
+
+            function smartDoubleQuote(before) {
+                let opens = 0;
+                for (const c of before) {
+                    if (c === '"' || c === '\u201C' || c === '\u201E') opens++;
+                    if (c === '\u201D' || c === '\u201F') opens = Math.max(0, opens - 1);
+                }
+                return opens > 0 ? '\u201D' : '\u201C';
+            }
+
+            function smartSingleQuote(before) {
+                if (/[a-zA-Z0-9]$/.test(before)) return '\u2019';
+                let opens = 0;
+                for (const c of before) {
+                    if (c === "'" || c === '\u2018' || c === '\u201A') opens++;
+                    if (c === '\u2019' || c === '\u201B') opens = Math.max(0, opens - 1);
+                }
+                return opens > 0 ? '\u2019' : '\u2018';
+            }
+
+            function isDoubleQuoteChar(char) {
+                return char === '"' || char === '\u201C' || char === '\u201D' || char === '\u201E' || char === '\u201F';
+            }
+
+            function isSingleQuoteChar(char) {
+                return char === "'" || char === '\u2018' || char === '\u2019' || char === '\u201A' || char === '\u201B';
+            }
+
+            function typographicReplacementForTextarea(sel, char) {
+                if (!typingPrefs.typographicPunctuation) return null;
+                const { start, end, collapsed, before } = sel;
+                if (!collapsed) return null;
+
+                if (char === '-' && before.endsWith('-')) {
+                    return { start: start - 1, end: start, text: '\u2014' };
+                }
+                if (isDoubleQuoteChar(char)) {
+                    return { start, end, text: smartDoubleQuote(before) };
+                }
+                if (isSingleQuoteChar(char)) {
+                    return { start, end, text: smartSingleQuote(before) };
+                }
+                if (char === '.' && before.endsWith('..')) {
+                    return { start: start - 2, end: start, text: '\u2026' };
+                }
+                return null;
+            }
+
+            function getContentEditableContext(el) {
+                const sel = window.getSelection();
+                if (!sel || sel.rangeCount === 0) return null;
+                const range = sel.getRangeAt(0);
+                if (!el.contains(range.commonAncestorContainer)) return null;
+
+                const beforeRange = range.cloneRange();
+                beforeRange.selectNodeContents(el);
+                beforeRange.setEnd(range.startContainer, range.startOffset);
+                const before = beforeRange.toString();
+
+                return {
+                    before,
+                    collapsed: sel.isCollapsed,
+                    range,
+                    sel
+                };
+            }
+
+            function replaceContentEditableRange(ctx, text) {
+                const { range, sel } = ctx;
+                range.deleteContents();
+                range.insertNode(document.createTextNode(text));
+                range.collapse(false);
+                sel.removeAllRanges();
+                sel.addRange(range);
+            }
+
+            function handleTypingBeforeInput(el, e) {
+                if (e.inputType !== 'insertText' || !e.data) return false;
+
+                const data = e.data;
+
+                if (el.tagName === 'TEXTAREA') {
+                    const sel = getTextareaSelection(el);
+
+                    if (shouldAutoCapitalizeLetter(sel.before, data, sel.collapsed)) {
+                        e.preventDefault();
+                        isNormalizingQuotes = true;
+                        try {
+                            replaceTextareaRange(el, sel.start, sel.end, data.toUpperCase());
+                        } finally {
+                            isNormalizingQuotes = false;
+                        }
+                        return true;
+                    }
+
+                    const typo = typographicReplacementForTextarea(sel, data);
+                    if (typo) {
+                        e.preventDefault();
+                        isNormalizingQuotes = true;
+                        try {
+                            replaceTextareaRange(el, typo.start, typo.end, typo.text);
+                        } finally {
+                            isNormalizingQuotes = false;
+                        }
+                        return true;
+                    }
+
+                    if (handleMarkdownAutoInsertBeforeInput(el, e, sel, data)) {
+                        return true;
+                    }
+
+                    if (!shouldNormalizeTypography()) return false;
+
+                    const normalized = normalizeTypography(data);
+                    if (normalized === data) return false;
+
+                    e.preventDefault();
+                    isNormalizingQuotes = true;
+                    try {
+                        replaceTextareaRange(el, sel.start, sel.end, normalized);
+                    } finally {
+                        isNormalizingQuotes = false;
+                    }
+                    return true;
+                }
+
+                if (!el.isContentEditable) return false;
+
+                const ctx = getContentEditableContext(el);
+                if (!ctx) return false;
+
+                if (shouldAutoCapitalizeLetter(ctx.before, data, ctx.collapsed)) {
+                    e.preventDefault();
+                    isNormalizingQuotes = true;
+                    try {
+                        replaceContentEditableRange(ctx, data.toUpperCase());
+                        dispatchEditorInput(el);
+                    } finally {
+                        isNormalizingQuotes = false;
+                    }
+                    return true;
+                }
+
+                if (typingPrefs.typographicPunctuation) {
+                    if (isDoubleQuoteChar(data)) {
+                        const text = smartDoubleQuote(ctx.before);
+                        e.preventDefault();
+                        isNormalizingQuotes = true;
+                        try {
+                            replaceContentEditableRange(ctx, text);
+                            dispatchEditorInput(el);
+                        } finally {
+                            isNormalizingQuotes = false;
+                        }
+                        return true;
+                    }
+                    if (isSingleQuoteChar(data)) {
+                        const text = smartSingleQuote(ctx.before);
+                        e.preventDefault();
+                        isNormalizingQuotes = true;
+                        try {
+                            replaceContentEditableRange(ctx, text);
+                            dispatchEditorInput(el);
+                        } finally {
+                            isNormalizingQuotes = false;
+                        }
+                        return true;
+                    }
+                    return false;
+                }
+
+                const normalized = normalizeTypography(data);
+                if (normalized === data) return false;
+
+                e.preventDefault();
+                isNormalizingQuotes = true;
+                try {
+                    replaceContentEditableRange(ctx, normalized);
+                    dispatchEditorInput(el);
+                } finally {
+                    isNormalizingQuotes = false;
+                }
+                return true;
+            }
 
             function insertPlainTextAtSelection(el, text) {
                 if (el.isContentEditable) {
@@ -1134,6 +1518,213 @@
                 return false;
             }
 
+            function isPlainURL(text) {
+                const value = String(text || '').trim();
+                return /^https?:\/\/\S+$/i.test(value) || /^mailto:\S+$/i.test(value);
+            }
+
+            function getAutoPairDefinitions() {
+                const pairs = [];
+                if (typingPrefs.autoPairBrackets) {
+                    pairs.push(['(', ')'], ['[', ']'], ['{', '}']);
+                }
+                if (typingPrefs.autoPairQuotes) {
+                    pairs.push(['`', '`']);
+                    if (!typingPrefs.typographicPunctuation) {
+                        pairs.push(['"', '"'], ["'", "'"]);
+                    }
+                }
+                return pairs;
+            }
+
+            function canAutoWrapMarkdownDelimiter(before, after) {
+                if (after && after[0] && !/[\s,.;:!?)}\]]/.test(after[0])) return false;
+                if (!before.length) return true;
+                return /[\s([{'"`>]/.test(before.charAt(before.length - 1));
+            }
+
+            function handleMarkdownAutoInsertBeforeInput(el, e, sel, data) {
+                if (el.tagName !== 'TEXTAREA') return false;
+                if (e.inputType !== 'insertText' || !data || data.length !== 1) return false;
+
+                const { start, end, collapsed, before, after } = sel;
+
+                if (typingPrefs.autoCloseMarkdown && collapsed) {
+                    if (data === '*' && before.endsWith('*') && !before.endsWith('**') && !before.endsWith('\\*')) {
+                        e.preventDefault();
+                        isNormalizingQuotes = true;
+                        try {
+                            replaceTextareaRange(el, start - 1, start, '**');
+                            el.setSelectionRange(start - 1, start - 1);
+                        } finally {
+                            isNormalizingQuotes = false;
+                        }
+                        return true;
+                    }
+                    if (data === '*' && canAutoWrapMarkdownDelimiter(before, after) && !before.endsWith('*')) {
+                        e.preventDefault();
+                        isNormalizingQuotes = true;
+                        try {
+                            replaceTextareaRange(el, start, end, '**');
+                            el.setSelectionRange(start + 1, start + 1);
+                        } finally {
+                            isNormalizingQuotes = false;
+                        }
+                        return true;
+                    }
+                    if (data === '~' && before.endsWith('~') && !before.endsWith('~~') && !before.endsWith('\\~')) {
+                        e.preventDefault();
+                        isNormalizingQuotes = true;
+                        try {
+                            replaceTextareaRange(el, start - 1, start, '~~');
+                            el.setSelectionRange(start - 1, start - 1);
+                        } finally {
+                            isNormalizingQuotes = false;
+                        }
+                        return true;
+                    }
+                    if (data === '~' && canAutoWrapMarkdownDelimiter(before, after) && !before.endsWith('~')) {
+                        e.preventDefault();
+                        isNormalizingQuotes = true;
+                        try {
+                            replaceTextareaRange(el, start, end, '~~');
+                            el.setSelectionRange(start + 1, start + 1);
+                        } finally {
+                            isNormalizingQuotes = false;
+                        }
+                        return true;
+                    }
+                }
+
+                for (const [open, close] of getAutoPairDefinitions()) {
+                    if (data === open) {
+                        e.preventDefault();
+                        isNormalizingQuotes = true;
+                        try {
+                            replaceTextareaRange(el, start, end, open + close);
+                            el.setSelectionRange(start + 1, start + 1);
+                        } finally {
+                            isNormalizingQuotes = false;
+                        }
+                        return true;
+                    }
+                    if (data === close && collapsed && after.startsWith(close)) {
+                        e.preventDefault();
+                        el.setSelectionRange(start + 1, start + 1);
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
+            function handleMarkdownAutoPairKeydown(e) {
+                const ta = textarea;
+                if (!ta || document.activeElement !== ta) return false;
+                if (e.metaKey || e.ctrlKey || e.altKey) return false;
+
+                const start = ta.selectionStart ?? 0;
+                const end = ta.selectionEnd ?? start;
+
+                const closers = [];
+                for (const [, close] of getAutoPairDefinitions()) {
+                    if (!closers.includes(close)) closers.push(close);
+                }
+
+                if (e.key.length === 1 && closers.includes(e.key) && start === end && ta.value[start] === e.key) {
+                    e.preventDefault();
+                    ta.setSelectionRange(start + 1, start + 1);
+                    return true;
+                }
+
+                if (e.key === 'Backspace' && start === end && start > 0) {
+                    for (const [open, close] of getAutoPairDefinitions()) {
+                        if (ta.value[start - 1] === open && ta.value[start] === close) {
+                            e.preventDefault();
+                            isNormalizingQuotes = true;
+                            try {
+                                ta.value = ta.value.slice(0, start - 1) + ta.value.slice(start + 1);
+                                ta.setSelectionRange(start - 1, start - 1);
+                                dispatchEditorInput(ta);
+                            } finally {
+                                isNormalizingQuotes = false;
+                            }
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
+            }
+
+            function handleSmartPasteURLsTextarea(el, e, url) {
+                e.preventDefault();
+                const start = el.selectionStart ?? 0;
+                const end = el.selectionEnd ?? start;
+                const selected = el.value.slice(start, end);
+                const label = selected.trim() ? selected : url;
+                const insertion = `[${label}](${url})`;
+                isNormalizingQuotes = true;
+                try {
+                    replaceTextareaRange(el, start, end, insertion);
+                } finally {
+                    isNormalizingQuotes = false;
+                }
+                return true;
+            }
+
+            function handleEditorPaste(el, e) {
+                const raw = e.clipboardData?.getData('text/plain');
+                if (raw == null) return false;
+
+                if (typingPrefs.smartPasteURLs && el.tagName === 'TEXTAREA') {
+                    const trimmed = raw.trim();
+                    if (isPlainURL(trimmed) && handleSmartPasteURLsTextarea(el, e, trimmed)) {
+                        return true;
+                    }
+                }
+
+                if (!shouldNormalizeTypography()) return false;
+                const normalized = normalizeTypography(raw);
+                if (normalized === raw) return false;
+
+                e.preventDefault();
+                isNormalizingQuotes = true;
+                try {
+                    insertPlainTextAtSelection(el, normalized);
+                    dispatchEditorInput(el);
+                } finally {
+                    isNormalizingQuotes = false;
+                }
+                return true;
+            }
+
+            function fixStraightQuoteAtCursor(el) {
+                const start = el.selectionStart ?? 0;
+                const end = el.selectionEnd ?? start;
+                if (start !== end || start < 1) return false;
+
+                const value = el.value;
+                const charBefore = value.charAt(start - 1);
+                if (charBefore !== '"' && charBefore !== "'") return false;
+
+                const before = value.slice(0, start - 1);
+                const expected = charBefore === '"'
+                    ? smartDoubleQuote(before)
+                    : smartSingleQuote(before);
+                if (expected === charBefore) return false;
+
+                isNormalizingQuotes = true;
+                try {
+                    el.value = before + expected + value.slice(start);
+                    el.setSelectionRange(start, start);
+                    dispatchEditorInput(el);
+                    return true;
+                } finally {
+                    isNormalizingQuotes = false;
+                }
+            }
+
             function attachPlainTextTyping(el) {
                 if (!el || el.dataset.plainTextTyping === 'true') return;
                 el.dataset.plainTextTyping = 'true';
@@ -1143,46 +1734,33 @@
 
                 el.addEventListener('beforeinput', (e) => {
                     if (isNormalizingQuotes || isApplyingHistory || e.isComposing) return;
-                    const data = e.data;
-                    if (!data) return;
-                    const normalized = normalizeSmartQuotes(data);
-                    if (normalized === data) return;
-                    e.preventDefault();
-                    isNormalizingQuotes = true;
-                    try {
-                        insertPlainTextAtSelection(el, normalized);
-                    } finally {
-                        isNormalizingQuotes = false;
-                    }
+                    handleTypingBeforeInput(el, e);
                 }, true);
 
                 el.addEventListener('paste', (e) => {
                     if (isNormalizingQuotes || isApplyingHistory) return;
-                    const raw = e.clipboardData?.getData('text/plain');
-                    if (!raw) return;
-                    const normalized = normalizeSmartQuotes(raw);
-                    if (normalized === raw) return;
-                    e.preventDefault();
-                    isNormalizingQuotes = true;
-                    try {
-                        insertPlainTextAtSelection(el, normalized);
-                    } finally {
-                        isNormalizingQuotes = false;
-                    }
+                    handleEditorPaste(el, e);
                 });
 
                 if (isTextarea) {
                     el.addEventListener('input', () => {
                         if (isNormalizingQuotes || isApplyingHistory || isSyncing) return;
+
+                        if (typingPrefs.typographicPunctuation) {
+                            fixStraightQuoteAtCursor(el);
+                            return;
+                        }
+
+                        if (!shouldNormalizeTypography()) return;
                         const start = el.selectionStart ?? 0;
                         const end = el.selectionEnd ?? start;
                         const value = el.value;
-                        const normalized = normalizeSmartQuotes(value);
+                        const normalized = normalizeTypography(value);
                         if (normalized === value) return;
                         isNormalizingQuotes = true;
                         try {
                             const before = value.slice(0, start);
-                            const fixedBefore = normalizeSmartQuotes(before);
+                            const fixedBefore = normalizeTypography(before);
                             const delta = fixedBefore.length - before.length;
                             el.value = normalized;
                             const nextStart = Math.max(0, start + delta);
@@ -1321,21 +1899,253 @@
                 scheduleContentSync.flush(text);
             }
 
+            let documentScrollPercent = 0;
+            let scrollAnchorRestoreBlocked = false;
+            let scrollRestoreToken = 0;
+            let lockedScrollAnchor = null;
+            let pendingAppearanceMerge = null;
+            let pendingAppearanceAnchor = null;
+            let pendingAppearanceRaf = 0;
+
+            function getLiveScrollElement() {
+                return document.getElementById('live-editor');
+            }
+
+            function getScrollMetrics(el) {
+                if (!el) return { top: 0, max: 0, percent: 0 };
+                const max = Math.max(0, el.scrollHeight - el.clientHeight);
+                const top = el.scrollTop;
+                const percent = max > 0 ? top / max : 0;
+                return { top, max, percent };
+            }
+
+            function getActiveScrollElement() {
+                if (document.body.classList.contains('mode-live')) {
+                    return getLiveScrollElement();
+                }
+                if (document.body.classList.contains('mode-preview')) {
+                    return previewPane || preview;
+                }
+                return markdownEditorScroll;
+            }
+
+            function updateDocumentScrollAnchorFromActive() {
+                if (scrollAnchorRestoreBlocked || lockedScrollAnchor) return;
+                const active = getActiveScrollElement();
+                if (!active) return;
+                documentScrollPercent = getScrollMetrics(active).percent;
+            }
+
+            function captureDocumentScrollAnchor() {
+                if (lockedScrollAnchor) {
+                    return { percent: lockedScrollAnchor.percent, top: lockedScrollAnchor.top };
+                }
+                updateDocumentScrollAnchorFromActive();
+                const active = getActiveScrollElement();
+                const metrics = active ? getScrollMetrics(active) : { percent: documentScrollPercent, top: 0 };
+                documentScrollPercent = metrics.percent;
+                return { percent: documentScrollPercent, top: metrics.top };
+            }
+
+            function lockScrollAnchor(anchor) {
+                lockedScrollAnchor = {
+                    percent: anchor?.percent ?? documentScrollPercent ?? 0,
+                    top: anchor?.top ?? 0,
+                };
+            }
+
+            function unlockScrollAnchor() {
+                lockedScrollAnchor = null;
+            }
+
+            function applyScrollPercentToElement(el, percent) {
+                if (!el) return;
+                const max = Math.max(0, el.scrollHeight - el.clientHeight);
+                el.scrollTop = Math.round(percent * max);
+            }
+
+            function restoreDocumentScrollAnchor(anchor, options = {}) {
+                const percent = anchor?.percent ?? documentScrollPercent ?? 0;
+                const fallbackTop = anchor?.top ?? 0;
+                documentScrollPercent = percent;
+
+                const apply = () => {
+                    scrollAnchorRestoreBlocked = true;
+                    applyScrollPercentToElement(markdownEditorScroll, percent);
+                    applyScrollPercentToElement(previewPane, percent);
+                    applyScrollPercentToElement(getLiveScrollElement(), percent);
+                    if (fallbackTop > 0) {
+                        const active = getActiveScrollElement();
+                        if (active && active.scrollTop < 4 && getScrollMetrics(active).max > 0) {
+                            active.scrollTop = fallbackTop;
+                        }
+                    }
+                    requestAnimationFrame(() => {
+                        scrollAnchorRestoreBlocked = false;
+                    });
+                };
+
+                apply();
+
+                requestAnimationFrame(() => {
+                    apply();
+                    if (options.persistent) {
+                        requestAnimationFrame(apply);
+                    }
+                });
+
+                if (!options.persistent) return;
+
+                const token = ++scrollRestoreToken;
+                [50, 120, 250, 400, 600, 800, 1200].forEach((delay) => {
+                    setTimeout(() => {
+                        if (token !== scrollRestoreToken) return;
+                        apply();
+                    }, delay);
+                });
+            }
+
             function captureScrollState() {
+                const anchor = captureDocumentScrollAnchor();
                 return {
+                    percent: anchor.percent,
                     markdown: markdownEditorScroll ? markdownEditorScroll.scrollTop : 0,
                     preview: previewPane ? previewPane.scrollTop : 0,
-                    live: liveEditor ? liveEditor.scrollTop : 0,
+                    live: getLiveScrollElement()?.scrollTop ?? 0,
                     textarea: markdownEditorScroll ? markdownEditorScroll.scrollTop : 0,
                 };
             }
 
-            function restoreScrollState(state) {
+            function restoreScrollState(state, options = {}) {
                 if (!state) return;
-                requestAnimationFrame(() => {
-                    if (markdownEditorScroll) markdownEditorScroll.scrollTop = state.markdown;
-                    if (previewPane) previewPane.scrollTop = state.preview;
-                    if (liveEditor) liveEditor.scrollTop = state.live;
+                if (typeof state.percent === 'number') {
+                    restoreDocumentScrollAnchor(state, options);
+                    return;
+                }
+                restoreDocumentScrollAnchor({ percent: documentScrollPercent }, options);
+            }
+
+            function refreshCodeBlockChromeOnly() {
+                applyCodeBlockChrome(preview);
+                if (liveEditor) applyCodeBlockChrome(liveEditor);
+            }
+
+            function swapHighlightThemeStylesheet(url, onReady) {
+                const done = typeof onReady === 'function' ? onReady : () => {};
+                if (!url) {
+                    done();
+                    return;
+                }
+
+                const existing = document.getElementById('highlight-theme');
+                const normalizedTarget = String(url).split('?')[0];
+                const normalizedCurrent = existing ? String(existing.href).split('?')[0] : '';
+                if (existing && normalizedCurrent === normalizedTarget) {
+                    done();
+                    return;
+                }
+
+                if (loadedCodeThemeURLs.has(url) && existing) {
+                    existing.href = url;
+                    loadedCodeThemeURLs.add(url);
+                    done();
+                    return;
+                }
+
+                const link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = url;
+                const finish = () => {
+                    loadedCodeThemeURLs.add(url);
+                    if (existing && existing.parentNode) existing.remove();
+                    link.id = 'highlight-theme';
+                    done();
+                };
+                link.onload = finish;
+                link.onerror = finish;
+                document.head.appendChild(link);
+            }
+
+            function finishAppearanceThemeUpdate(anchor, options = {}) {
+                refreshCodeBlockChromeOnly();
+                if (options.rehighlight) {
+                    rehighlightCodeBlocks();
+                }
+                restoreDocumentScrollAnchor(anchor, { persistent: true });
+                unlockScrollAnchor();
+            }
+
+            function mergeAppearanceOptions(base, next) {
+                return Object.assign({}, base || {}, next || {});
+            }
+
+            function runApplyAppearanceNow(options, anchor) {
+                lockScrollAnchor(anchor);
+                let needsRehighlight = false;
+
+                if (typeof options.isDark === 'boolean') {
+                    const nextDark = !!options.isDark;
+                    const wasDark = document.body.classList.contains('dark');
+                    document.body.classList.toggle('dark', nextDark);
+                    [textarea, markdownPane, previewPane, liveEditor].forEach((el) => {
+                        if (!el) return;
+                        el.style.backgroundColor = 'transparent';
+                        el.style.color = 'inherit';
+                    });
+                    if (nextDark !== wasDark) {
+                        rethemeAllMermaidInApp(anchor, { skipRestore: true });
+                    }
+                }
+
+                if (options.themeCSS) {
+                    updateCustomThemeCSS(options.themeCSS);
+                }
+
+                if (options.codeBlockBg) {
+                    updateCodeBlockChromeStyle(options.codeBlockBg, options.codeBlockBorder);
+                }
+
+                if (options.showLineNumbers !== undefined) {
+                    const next = !!options.showLineNumbers;
+                    if (next !== showCodeLineNumbers) {
+                        needsRehighlight = true;
+                    }
+                    showCodeLineNumbers = next;
+                }
+
+                if (options.focusActive !== undefined) {
+                    window.cmEditor.setFocusMode(
+                        options.focusActive,
+                        options.focusDimLines,
+                        options.focusHideToolbar
+                    );
+                }
+
+                const finish = () => {
+                    finishAppearanceThemeUpdate(anchor, { rehighlight: needsRehighlight });
+                };
+
+                swapHighlightThemeStylesheet(options.codeThemeURL, finish);
+            }
+
+            function scheduleApplyAppearance(options) {
+                pendingAppearanceMerge = mergeAppearanceOptions(pendingAppearanceMerge, options);
+                if (!pendingAppearanceAnchor) {
+                    pendingAppearanceAnchor = captureDocumentScrollAnchor();
+                }
+
+                if (pendingAppearanceRaf) {
+                    cancelAnimationFrame(pendingAppearanceRaf);
+                }
+
+                pendingAppearanceRaf = requestAnimationFrame(() => {
+                    pendingAppearanceRaf = 0;
+                    const opts = pendingAppearanceMerge;
+                    const anchor = pendingAppearanceAnchor;
+                    pendingAppearanceMerge = null;
+                    pendingAppearanceAnchor = null;
+                    if (!opts) return;
+                    runApplyAppearanceNow(opts, anchor);
                 });
             }
 
@@ -1688,6 +2498,8 @@
                 const minHeight = wrap.clientHeight;
                 const nextHeight = Math.max(ta.scrollHeight, minHeight);
                 ta.style.height = nextHeight + 'px';
+                syncSpellOverlayHeight();
+                renderSpellCheckOverlay();
             }
 
             function getTextareaContentWidth(ta) {
@@ -1910,6 +2722,7 @@
                 } else {
                     resetGutterLayout(document.getElementById('markdown-line-gutter'));
                 }
+                renderSpellCheckOverlay();
             }
 
             function insertTextAtSelection(ta, text) {
@@ -1985,14 +2798,16 @@
             });
 
             function renderPreview(text, options = {}) {
-                const scroll = options.preserveScroll ? captureScrollState() : null;
+                const anchor = options.preserveScroll ? captureDocumentScrollAnchor() : null;
                 try {
                     mountDocumentBlocks(preview, text || '', { readOnly: true });
                 } catch (e) {
                     console.error('Preview render error:', e);
                     preview.textContent = text;
                 }
-                if (scroll) restoreScrollState(scroll);
+                if (anchor) {
+                    restoreDocumentScrollAnchor(anchor, { persistent: true });
+                }
             }
 
             const LINK_REF_DEF_RE = /^\s*\[([^\]]+)\]:\s*(?:<([^>]+)>|(\S+))(?:\s+(?:"([^"]*)"|'([^']*)'))?\s*$/;
@@ -2513,24 +3328,33 @@
                         invalidateGutterMeasureCache();
                         scheduleGutterRefreshAfterLayout();
                     }
+                    scheduleSpellCheckRequest();
                 },
 
                 setTheme(isDark) {
-                    document.body.classList.toggle('dark', !!isDark);
+                    const anchor = captureDocumentScrollAnchor();
+                    const nextDark = !!isDark;
+                    const wasDark = document.body.classList.contains('dark');
+                    document.body.classList.toggle('dark', nextDark);
                     textarea.style.backgroundColor = 'transparent';
                     textarea.style.color = 'inherit';
-                    const markdownPane = document.getElementById('markdown-pane');
-                    const previewPane = document.getElementById('preview-pane');
-                    const liveEditor = document.getElementById('live-editor');
-                    [textarea, markdownPane, previewPane, liveEditor].forEach((el) => {
+                    const markdownPaneEl = document.getElementById('markdown-pane');
+                    const previewPaneEl = document.getElementById('preview-pane');
+                    const liveEditorEl = getLiveScrollElement();
+                    [textarea, markdownPaneEl, previewPaneEl, liveEditorEl].forEach((el) => {
                         if (!el) return;
                         el.style.backgroundColor = 'transparent';
                         el.style.color = 'inherit';
                     });
-                    rethemeAllMermaidInApp();
+                    if (nextDark !== wasDark) {
+                        rethemeAllMermaidInApp(anchor);
+                    } else {
+                        restoreDocumentScrollAnchor(anchor, { persistent: true });
+                    }
                 },
 
                 setViewMode(mode) {
+                    const anchor = captureDocumentScrollAnchor();
                     const modeDebug = document.getElementById("mode-debug");
                     if (modeDebug) {
                         modeDebug.textContent = `MODE: ${mode}`;
@@ -2562,9 +3386,9 @@
                         initLiveEditor(currentContent);
                         attachLiveCaretTracking();
                     } else {
-                        const liveEditor = document.getElementById('live-editor');
-                        if (liveEditor) {
-                            liveEditor.innerHTML = '';
+                        const liveEditorEl = getLiveScrollElement();
+                        if (liveEditorEl) {
+                            liveEditorEl.innerHTML = '';
                             liveBlocks = [];
                             activeBlockIndex = -1;
                         }
@@ -2574,6 +3398,9 @@
                     }
                     debouncedGutterRefresh.cancel();
                     invalidateGutterMeasureCache();
+                    const restoreAfterModeSwitch = () => {
+                        restoreDocumentScrollAnchor(anchor, { persistent: true });
+                    };
                     requestAnimationFrame(() => {
                         scheduleMermaidRenderAfterLayout(getActiveMermaidRoots());
                         ensureTextareaLayout();
@@ -2582,6 +3409,7 @@
                         } else {
                             resetGutterLayout(document.getElementById('markdown-line-gutter'));
                         }
+                        restoreAfterModeSwitch();
                     });
                 },
 
@@ -2598,6 +3426,27 @@
                     applyEditorPreferences();
                 },
 
+                setTypingPreferences(prefs) {
+                    if (!prefs || typeof prefs !== 'object') return;
+                    typingPrefs = { ...typingPrefs, ...prefs };
+                    applyTypingPreferences();
+                    if (!typingPrefs.spellCheckEnabled) {
+                        spellCheckRanges = [];
+                        renderSpellCheckOverlay();
+                    } else {
+                        refreshSpellCheckFromNative();
+                    }
+                },
+
+                setSpellCheckRanges(ranges) {
+                    spellCheckRanges = Array.isArray(ranges) ? ranges : [];
+                    renderSpellCheckOverlay();
+                },
+
+                requestSpellCheckRefresh() {
+                    refreshSpellCheckFromNative();
+                },
+
                 setSwapped(swapped) {
                     isSwapped = swapped;
                     if (swapped) {
@@ -2610,46 +3459,19 @@
                 },
 
                 setPreviewTheme(themeName, themeCSS) {
-                    const scroll = captureScrollState();
+                    const anchor = captureDocumentScrollAnchor();
                     updateCustomThemeCSS(themeCSS);
-                    rehighlightCodeBlocks();
-                    restoreScrollState(scroll);
+                    finishAppearanceThemeUpdate(anchor);
                 },
 
                 setCodeBlockTheme(themeName, cdnURL, codeBlockBg, codeBlockBorder) {
                     if (codeBlockBg) {
                         updateCodeBlockChromeStyle(codeBlockBg, codeBlockBorder);
                     }
-                    const scroll = captureScrollState();
-                    const finish = () => {
-                        rehighlightCodeBlocks();
-                        restoreScrollState(scroll);
-                    };
-
-                    const existing = document.getElementById('highlight-theme');
-                    if (existing && existing.href === cdnURL) {
-                        finish();
-                        return;
-                    }
-
-                    if (loadedCodeThemeURLs.has(cdnURL) && existing) {
-                        existing.href = cdnURL;
-                        finish();
-                        return;
-                    }
-
-                    if (existing) existing.remove();
-
-                    const link = document.createElement('link');
-                    link.id = 'highlight-theme';
-                    link.rel = 'stylesheet';
-                    link.href = cdnURL;
-                    link.onload = () => {
-                        loadedCodeThemeURLs.add(cdnURL);
-                        finish();
-                    };
-                    link.onerror = finish;
-                    document.head.appendChild(link);
+                    const anchor = captureDocumentScrollAnchor();
+                    swapHighlightThemeStylesheet(cdnURL, () => {
+                        finishAppearanceThemeUpdate(anchor);
+                    });
                 },
 
                 setShowLineNumbers(enabled) {
@@ -2665,69 +3487,7 @@
                 },
 
                 applyAppearance(options) {
-                    const scroll = captureScrollState();
-
-                    if (typeof options.isDark === 'boolean') {
-                        document.body.classList.toggle('dark', options.isDark);
-                        [textarea, markdownPane, previewPane, liveEditor].forEach((el) => {
-                            if (!el) return;
-                            el.style.backgroundColor = 'transparent';
-                            el.style.color = 'inherit';
-                        });
-                        rethemeAllMermaidInApp();
-                    }
-
-                    if (options.themeCSS) {
-                        updateCustomThemeCSS(options.themeCSS);
-                    }
-
-                    if (options.codeBlockBg) {
-                        updateCodeBlockChromeStyle(options.codeBlockBg, options.codeBlockBorder);
-                    }
-
-                    if (options.showLineNumbers !== undefined) {
-                        showCodeLineNumbers = !!options.showLineNumbers;
-                    }
-
-                    if (options.focusActive !== undefined) {
-                        this.setFocusMode(options.focusActive, options.focusDimLines, options.focusHideToolbar);
-                    }
-
-                    const finish = () => {
-                        rehighlightCodeBlocks();
-                        restoreScrollState(scroll);
-                    };
-
-                    const url = options.codeThemeURL;
-                    if (!url) {
-                        finish();
-                        return;
-                    }
-
-                    const existing = document.getElementById('highlight-theme');
-                    if (existing && existing.href === url) {
-                        finish();
-                        return;
-                    }
-
-                    if (loadedCodeThemeURLs.has(url) && existing) {
-                        existing.href = url;
-                        finish();
-                        return;
-                    }
-
-                    if (existing) existing.remove();
-
-                    const link = document.createElement('link');
-                    link.id = 'highlight-theme';
-                    link.rel = 'stylesheet';
-                    link.href = url;
-                    link.onload = () => {
-                        loadedCodeThemeURLs.add(url);
-                        finish();
-                    };
-                    link.onerror = finish;
-                    document.head.appendChild(link);
+                    scheduleApplyAppearance(options);
                 },
 
                 setDocumentPath(path) {
@@ -2769,6 +3529,10 @@
 
                 toggleList(kind) {
                     toggleMarkdownList(kind);
+                },
+
+                toggleBlockquote() {
+                    toggleMarkdownBlockquote();
                 },
 
                 insertText(text) {
@@ -2911,7 +3675,10 @@
                 currentContent = initialText;
                 textarea.value = initialText;
                 renderPreview(initialText);
-                requestAnimationFrame(ensureTextareaLayout);
+                requestAnimationFrame(() => {
+                    ensureTextareaLayout();
+                    refreshSpellCheckFromNative();
+                });
 
                 if (!isInitialized) {
                     document.addEventListener('keydown', handleGlobalUndoRedoKeydown, true);
@@ -2925,6 +3692,7 @@
                         rememberTextareaSelection();
                         schedulePreviewRender();
                         scheduleContentSync(text);
+                        scheduleSpellCheckRequest();
                         if (isLiveActive()) {
                             scheduleLiveRebuild(text);
                         }
@@ -2935,6 +3703,7 @@
                         currentContent = textarea.value;
                         schedulePreviewRender.flush();
                         scheduleContentSync.flush(textarea.value);
+                        scheduleSpellCheckRequest.flush();
                     });
 
                     ['keyup', 'mouseup', 'select', 'click'].forEach((eventName) => {
@@ -2954,6 +3723,8 @@
                     });
 
                     textarea.addEventListener('keydown', (e) => {
+                        if (handleMarkdownAutoPairKeydown(e)) return;
+                        if (handleBlockquoteKeydown(e)) return;
                         if (handleListKeydown(e)) return;
                         if (handleEditModeTableKeydown(e)) return;
                         handleEditorIndentKeydown(e);
@@ -3009,12 +3780,28 @@
                         }
 
                         const scrollPercent = source.scrollTop / maxScrollSource;
+                        if (!scrollAnchorRestoreBlocked) {
+                            documentScrollPercent = scrollPercent;
+                        }
                         target.scrollTop = scrollPercent * maxScrollTarget;
 
                         setTimeout(() => { isInternalScroll = false; }, 20);
                     }
 
+                    function rememberScrollAnchorFrom(sourceEl) {
+                        if (scrollAnchorRestoreBlocked || !sourceEl) return;
+                        if (document.body.classList.contains('mode-split')) {
+                            documentScrollPercent = getScrollMetrics(sourceEl).percent;
+                            return;
+                        }
+                        const active = getActiveScrollElement();
+                        if (active === sourceEl) {
+                            documentScrollPercent = getScrollMetrics(sourceEl).percent;
+                        }
+                    }
+
                     function onEditorScroll() {
+                        rememberScrollAnchorFrom(getEditorScrollElement());
                         if (!syncScroll) return;
                         const now = Date.now();
                         if (now - lastScrollTime.preview < 50) return;
@@ -3023,6 +3810,7 @@
                     }
 
                     function onPreviewScroll() {
+                        rememberScrollAnchorFrom(getPreviewScrollElement());
                         if (!syncScroll) return;
                         const now = Date.now();
                         if (now - lastScrollTime.markdown < 50) return;
@@ -3030,12 +3818,21 @@
                         syncScrollPercent(getPreviewScrollElement(), getEditorScrollElement());
                     }
 
+                    function onLiveScroll() {
+                        rememberScrollAnchorFrom(getLiveScrollElement());
+                    }
+
                     if (markdownEditorScroll) {
                         markdownEditorScroll.addEventListener('scroll', onEditorScroll, { passive: true });
                     }
 
                     if (previewPane) {
-                        previewPane.addEventListener('scroll', onPreviewScroll);
+                        previewPane.addEventListener('scroll', onPreviewScroll, { passive: true });
+                    }
+
+                    const liveScrollEl = getLiveScrollElement();
+                    if (liveScrollEl) {
+                        liveScrollEl.addEventListener('scroll', onLiveScroll, { passive: true });
                     }
 
                     window.addEventListener('resize', debounce(() => {
@@ -4473,7 +5270,8 @@
             }
 
             /** Перерисовать все диаграммы после смены светлой/тёмной темы приложения. */
-            function rethemeAllMermaidInApp() {
+            function rethemeAllMermaidInApp(scrollAnchor, options = {}) {
+                const anchor = scrollAnchor || captureDocumentScrollAnchor();
                 resetMermaidTheme();
                 const roots = getActiveMermaidRoots();
                 let hasDiagrams = false;
@@ -4482,8 +5280,16 @@
                         if (prepareMermaidNodeForRender(node)) hasDiagrams = true;
                     });
                 });
-                if (!hasDiagrams) return;
+                if (!hasDiagrams) {
+                    if (!options.skipRestore) {
+                        restoreDocumentScrollAnchor(anchor, { persistent: true });
+                    }
+                    return;
+                }
                 scheduleMermaidRenderAfterLayout(roots);
+                if (!options.skipRestore) {
+                    restoreDocumentScrollAnchor(anchor, { persistent: true });
+                }
             }
 
             function scheduleMermaidRenderAfterLayout(roots, attempt = 0) {
@@ -5509,7 +6315,124 @@
                 }
             }
 
+            function toggleMarkdownBlockquote() {
+                const live = isLiveActive();
+                if (live) syncLiveCaretToTextarea();
+                const ta = textarea;
+                if (!live) ta.focus();
+
+                const { rangeStart, rangeEnd } = getLineRangeForSelection(ta);
+                const selectedText = ta.value.slice(rangeStart, rangeEnd);
+                const lines = selectedText.split('\n');
+
+                const parsedLines = lines.map((line) => ({
+                    line,
+                    parsed: parseBlockquoteEditingLine(line),
+                }));
+                const nonEmptyLines = parsedLines.filter(({ line }) => line.trim() !== '');
+                const allQuoted = nonEmptyLines.length > 0
+                    && nonEmptyLines.every(({ parsed }) => !!parsed);
+                const hasNonEmptyLine = nonEmptyLines.length > 0;
+
+                const newLines = parsedLines.map(({ line, parsed }) => {
+                    if (line.trim() === '' && parsedLines.length > 1 && hasNonEmptyLine) {
+                        return line;
+                    }
+                    if (allQuoted && parsed) {
+                        return `${parsed.indent}${parsed.content}`;
+                    }
+                    if (!allQuoted && !parsed) {
+                        const match = line.match(/^(\s*)(.*)$/);
+                        const indent = match ? match[1] : '';
+                        const content = match ? match[2] : line;
+                        return `${indent}> ${content}`;
+                    }
+                    return line;
+                });
+
+                const replacement = newLines.join('\n');
+                ta.setRangeText(replacement, rangeStart, rangeEnd, 'end');
+
+                if (ta.selectionStart === ta.selectionEnd) {
+                    const first = parseBlockquoteEditingLine(newLines[0]);
+                    if (first) {
+                        const pos = rangeStart + first.prefixLength;
+                        ta.setSelectionRange(pos, pos);
+                    }
+                }
+
+                rememberTextareaSelection();
+
+                const caretPos = ta.selectionStart;
+                if (live) {
+                    currentContent = ta.value;
+                    scheduleLiveRebuild.cancel();
+                    initLiveEditor(ta.value);
+                    scheduleContentSync(ta.value);
+                    const blockIdx = blockIndexAtTextareaOffset(caretPos);
+                    if (liveBlocks[blockIdx]?.type === 'blockquote') {
+                        activateBlock(blockIdx, 0);
+                    }
+                } else {
+                    ta.dispatchEvent(new Event('input'));
+                }
+            }
+
+            function parseBlockquoteEditingLine(line) {
+                const match = (line || '').match(/^(\s*)((?:>\s*)+)(.*)$/);
+                if (!match) return null;
+                return {
+                    indent: match[1],
+                    markers: match[2],
+                    content: match[3],
+                    prefixLength: match[1].length + match[2].length,
+                };
+            }
+
+            function handleBlockquoteKeydown(e) {
+                if (!typingPrefs.continueBlockquoteOnEnter) return false;
+                if (e.key !== 'Enter' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return false;
+
+                const ta = textarea;
+                const pos = ta.selectionStart;
+                if (pos !== ta.selectionEnd) return false;
+
+                const lineStart = ta.value.lastIndexOf('\n', pos - 1) + 1;
+                const lineEnd = ta.value.indexOf('\n', pos);
+                const lineEndPos = lineEnd === -1 ? ta.value.length : lineEnd;
+                const line = ta.value.slice(lineStart, lineEndPos);
+                const parsed = parseBlockquoteEditingLine(line);
+                if (!parsed) return false;
+
+                e.preventDefault();
+                const cursorInLine = pos - lineStart;
+                const prefixLen = parsed.prefixLength;
+                const textBefore = line.slice(prefixLen, cursorInLine);
+                const textAfter = line.slice(cursorInLine);
+
+                if (parsed.content.trim() === '' && cursorInLine >= prefixLen) {
+                    ta.setRangeText(parsed.indent + '\n', lineStart, lineEndPos, 'end');
+                    const newPos = lineStart + parsed.indent.length + 1;
+                    ta.setSelectionRange(newPos, newPos);
+                    rememberTextareaSelection();
+                    ta.dispatchEvent(new Event('input', { bubbles: true }));
+                    if (isLiveActive()) initLiveEditor(ta.value);
+                    return true;
+                }
+
+                const currentLine = `${parsed.indent}${parsed.markers}${textBefore}`;
+                const nextLine = `${parsed.indent}${parsed.markers}${textAfter}`;
+                ta.setRangeText(currentLine + '\n' + nextLine, lineStart, lineEndPos, 'end');
+                const newPos = lineStart + currentLine.length + 1 + prefixLen;
+                ta.setSelectionRange(newPos, newPos);
+                rememberTextareaSelection();
+                ta.dispatchEvent(new Event('input', { bubbles: true }));
+                if (isLiveActive()) initLiveEditor(ta.value);
+                return true;
+            }
+
             function handleListKeydown(e) {
+                if (!typingPrefs.continueListsOnEnter) return false;
                 if (e.key !== 'Enter' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return false;
 
                 const ta = textarea;
@@ -5630,6 +6553,7 @@
             }
 
             function handleLiveListItemKeydown(e, blockIndex, itemIndex, bodyEl) {
+                if (!typingPrefs.continueListsOnEnter) return;
                 if (e.key !== 'Enter' || e.shiftKey) return;
                 e.preventDefault();
 
@@ -6798,6 +7722,7 @@
             }
 
             function handleLiveBlockquoteEnter(e, blockIndex) {
+                if (!typingPrefs.continueBlockquoteOnEnter) return false;
                 if (e.key !== 'Enter' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return false;
 
                 const block = liveBlocks[blockIndex];

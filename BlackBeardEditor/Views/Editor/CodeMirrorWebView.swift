@@ -40,6 +40,7 @@ struct CodeMirrorWebView: NSViewRepresentable {
         contentController.add(context.coordinator, name: "outlineHeadings")
         contentController.add(context.coordinator, name: "editorUndoRedo")
         contentController.add(context.coordinator, name: "editorContentFlush")
+        contentController.add(context.coordinator, name: "spellCheckRequest")
 
         #if DEBUG
         webView.configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
@@ -109,7 +110,6 @@ struct CodeMirrorWebView: NSViewRepresentable {
         let token = appearanceToken
         if context.coordinator.lastAppearanceToken != token {
             context.coordinator.lastAppearanceToken = token
-            applyAppearance(to: webView, coordinator: context.coordinator)
         }
 
         if context.coordinator.lastViewMode != viewMode {
@@ -197,6 +197,7 @@ struct CodeMirrorWebView: NSViewRepresentable {
         var lastDocumentURL: URL?
         var lastDocumentBasePath: String?
         private var pendingExecScripts: [String] = []
+        private var spellCheckWorkItem: DispatchWorkItem?
 
         init(_ parent: CodeMirrorWebView) {
             self.parent = parent
@@ -220,6 +221,7 @@ struct CodeMirrorWebView: NSViewRepresentable {
                 let syncScroll = AppConstants.isPreviewSyncScrollEnabled
                 webView.evaluateJavaScript("window.cmEditor?.setSyncScroll(\(syncScroll));")
                 EditorSettingsSync.pushToEditor()
+                TypingSettingsSync.pushToEditor()
 
                 self.pageLoaded = true
                 self.flushPendingExecScripts(on: webView)
@@ -241,13 +243,11 @@ struct CodeMirrorWebView: NSViewRepresentable {
 
         @objc func handleThemeDidChange(_ notification: Notification) {
             guard pageLoaded else { return }
-            EditorAppearanceSync.pushToEditor()
             lastAppearanceToken = parent.appearanceToken
         }
 
         @objc func handleCodeThemeDidChange(_ notification: Notification) {
             guard pageLoaded else { return }
-            EditorAppearanceSync.pushToEditor()
             lastAppearanceToken = parent.appearanceToken
         }
 
@@ -263,11 +263,16 @@ struct CodeMirrorWebView: NSViewRepresentable {
             if message.name == "contentChanged", let newText = message.body as? String {
                 isUpdatingFromJS = true
                 lastKnownText = newText
+                scheduleSpellCheck(for: newText)
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
                     self.parent.text = newText
                     self.isUpdatingFromJS = false
                 }
+            }
+
+            if message.name == "spellCheckRequest", let text = message.body as? String {
+                scheduleSpellCheck(for: text)
             }
 
             if message.name == "swapPanes", let isSwapped = message.body as? Bool {
@@ -327,6 +332,24 @@ struct CodeMirrorWebView: NSViewRepresentable {
                 return
             }
             webView.evaluateJavaScript(js, completionHandler: nil)
+        }
+
+        private func scheduleSpellCheck(for text: String) {
+            spellCheckWorkItem?.cancel()
+            guard AppConstants.boolSetting(forKey: AppConstants.Keys.spellCheckEnabled, default: true) else {
+                SpellCheckSync.clearMarks(on: webView)
+                return
+            }
+
+            let webView = self.webView
+            let work = DispatchWorkItem {
+                let ranges = SpellCheckSync.findMisspellings(in: text)
+                DispatchQueue.main.async { [weak self] in
+                    SpellCheckSync.pushRangesToEditor(ranges, on: self?.webView ?? webView)
+                }
+            }
+            spellCheckWorkItem = work
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.2, execute: work)
         }
     }
 }

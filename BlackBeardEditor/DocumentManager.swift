@@ -655,7 +655,8 @@ class DocumentManager: ObservableObject {
         var doc = tabs[index].document
         let previousDocumentID = doc.id
         let hadURL = doc.url != nil
-        let text = explicitContent!
+        let text = TypingSaveTransform.applyingSavePreferences(to: explicitContent!)
+        let contentChangedBySaveRules = text != explicitContent!
 
         do {
             Self.grantAccessAndSaveBookmarks(for: url)
@@ -688,6 +689,11 @@ class DocumentManager: ObservableObject {
                 reloadDiffModeForCurrentTab(resetSnapshotSelection: false)
             }
             RecoveryBackupStore.remove(document: doc)
+
+            if contentChangedBySaveRules {
+                NotificationCenter.default.post(name: .editorHistoryContentApplied, object: text)
+                execEditorJS("window.cmEditor?.updateContent(`\(escapeForJS(text))`);")
+            }
         } catch {
             showError("Failed to save document: \(error.localizedDescription)")
         }
@@ -1659,7 +1665,7 @@ class DocumentManager: ObservableObject {
     }
     
     func insertBlockquote() {
-        insertAtCurrentLine(prefix: "> ")
+        execEditorJS("window.cmEditor?.toggleBlockquote();")
     }
     
     func insertHorizontalRule() {

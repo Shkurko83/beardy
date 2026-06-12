@@ -132,12 +132,10 @@ struct MarkdownEditorArea: View {
             isEditorFocused = true
             EditorAppearanceSync.pushToEditor()
             EditorSettingsSync.pushToEditor()
+            TypingSettingsSync.pushToEditor()
         }
         .onChange(of: documentManager.selectedTabID) { _, _ in
             loadDocumentContent()
-            EditorAppearanceSync.pushToEditor()
-        }
-        .onChange(of: themeService.appearanceToken) { _, _ in
             EditorAppearanceSync.pushToEditor()
         }
         .onChange(of: textContent) { _, newValue in
