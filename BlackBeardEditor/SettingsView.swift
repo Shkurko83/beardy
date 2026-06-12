@@ -683,8 +683,8 @@ struct ExportSettingsView: View {
                             Toggle("Include table of contents", isOn: $includeTOC)
                             settingCaption("Inserts a linked table of contents from document headings at the start of the PDF.")
 
-                            Toggle("Use editor theme background", isOn: $includeThemeBackground)
-                            settingCaption("Extends the editor background into the page margins; text still follows your margin settings. When off, the PDF uses a white page and switches to dark print-friendly text colors so light editor themes remain readable.")
+                            Toggle("Use editor theme", isOn: $includeThemeBackground)
+                            settingCaption("You get the PDF exactly as you see it on the screen.")
                         }
 
                         Divider()
