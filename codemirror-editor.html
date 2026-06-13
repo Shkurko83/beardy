@@ -2114,8 +2114,12 @@
 
                 const apply = () => {
                     scrollAnchorRestoreBlocked = true;
-                    applyScrollPercentToElement(markdownEditorScroll, percent);
-                    applyScrollPercentToElement(previewPane, percent);
+                    if (document.body.classList.contains('mode-split')) {
+                        restoreSplitScrollFromRatio(percent);
+                    } else {
+                        applyScrollPercentToElement(markdownEditorScroll, percent);
+                        applyScrollPercentToElement(previewPane, percent);
+                    }
                     applyScrollPercentToElement(getLiveScrollElement(), percent);
                     if (fallbackTop > 0) {
                         const active = getActiveScrollElement();
@@ -2639,11 +2643,17 @@
                 const wrap = markdownEditorScroll;
                 if (!ta || !wrap) return;
                 ta.style.height = 'auto';
+                const contentHeight = ta.scrollHeight;
                 const minHeight = wrap.clientHeight;
-                const nextHeight = Math.max(ta.scrollHeight, minHeight);
-                ta.style.height = nextHeight + 'px';
+                const nextHeight = contentHeight < minHeight ? minHeight : contentHeight;
+                const nextHeightPx = `${nextHeight}px`;
+                const heightChanged = ta.style.height !== nextHeightPx;
+                ta.style.height = nextHeightPx;
                 syncSpellOverlayHeight();
                 renderSpellCheckOverlay();
+                if (heightChanged && document.body.classList.contains('mode-split')) {
+                    invalidateSplitScrollMap();
+                }
             }
 
             function getTextareaContentWidth(ta) {
@@ -2949,6 +2959,7 @@
                     console.error('Preview render error:', e);
                     preview.textContent = text;
                 }
+                invalidateSplitScrollMap();
                 if (anchor) {
                     restoreDocumentScrollAnchor(anchor, { persistent: true });
                 }
@@ -3282,6 +3293,170 @@
                 const containerTop = scrollContainer.getBoundingClientRect().top;
                 const nextScroll = scrollContainer.scrollTop + (targetTop - containerTop) - topInset;
                 smoothScrollToTop(scrollContainer, nextScroll);
+            }
+
+            function getPreviewScrollElement() {
+                return previewPane || preview;
+            }
+
+            let splitPaneMetricsCache = null;
+            let splitSyncEchoLock = false;
+            let splitSyncRaf = 0;
+            let splitActiveScroller = 'editor';
+
+            function invalidateSplitScrollMap() {
+                splitPaneMetricsCache = null;
+            }
+
+            function withSplitScrollEcho(callback) {
+                splitSyncEchoLock = true;
+                try {
+                    callback();
+                } finally {
+                    requestAnimationFrame(() => {
+                        splitSyncEchoLock = false;
+                    });
+                }
+            }
+
+            function isSplitScrollEchoSuppressed() {
+                return splitSyncEchoLock;
+            }
+
+            function clampRatio(value) {
+                if (!Number.isFinite(value)) return 0;
+                return Math.max(0, Math.min(1, value));
+            }
+
+            function measureSplitPaneMetrics() {
+                const sourceEl = getMarkdownScrollElement();
+                const previewEl = getPreviewScrollElement();
+                const previewRoot = preview;
+
+                const sourceRawMax = Math.max(0, (sourceEl?.scrollHeight ?? 0) - (sourceEl?.clientHeight ?? 0));
+                const previewRawMax = Math.max(0, (previewEl?.scrollHeight ?? 0) - (previewEl?.clientHeight ?? 0));
+
+                // Textarea height is synced to content — raw max already matches document end.
+                let sourceMax = sourceRawMax;
+
+                let previewMax = previewRawMax;
+                if (previewRoot && previewEl) {
+                    const style = window.getComputedStyle(previewRoot);
+                    const padBottom = parseFloat(style.paddingBottom) || 0;
+                    const lastBlock = previewRoot.querySelector('.live-block:last-of-type');
+                    if (lastBlock) {
+                        const contentBottom = lastBlock.offsetTop + lastBlock.offsetHeight + padBottom;
+                        previewMax = Math.max(0, Math.min(previewRawMax, contentBottom - previewEl.clientHeight));
+                    }
+                }
+
+                return {
+                    sourceEl,
+                    previewEl,
+                    sourceMax,
+                    previewMax,
+                    sourceRawMax,
+                    previewRawMax,
+                };
+            }
+
+            function refreshSplitPaneMetrics() {
+                splitPaneMetricsCache = measureSplitPaneMetrics();
+                return splitPaneMetricsCache;
+            }
+
+            function getSplitPaneMetrics() {
+                return splitPaneMetricsCache || refreshSplitPaneMetrics();
+            }
+
+            function splitRatioFromSourceScrollTop(scrollTop, sourceMax) {
+                if (sourceMax <= 0) return 0;
+                return clampRatio(scrollTop / sourceMax);
+            }
+
+            function splitRatioFromPreviewScrollTop(scrollTop, previewMax) {
+                if (previewMax <= 0) return 0;
+                return clampRatio(scrollTop / previewMax);
+            }
+
+            function splitPreviewScrollTopForRatio(ratio, previewMax) {
+                const r = clampRatio(ratio);
+                if (previewMax <= 0) return 0;
+                if (r <= 0) return 0;
+                if (r >= 1) return previewMax;
+                return r * previewMax;
+            }
+
+            function splitSourceScrollTopForRatio(ratio, sourceMax) {
+                const r = clampRatio(ratio);
+                if (sourceMax <= 0) return 0;
+                if (r <= 0) return 0;
+                if (r >= 1) return sourceMax;
+                return r * sourceMax;
+            }
+
+            function applySplitScrollToPreview() {
+                const metrics = getSplitPaneMetrics();
+                if (!metrics.sourceEl || !metrics.previewEl || metrics.sourceMax <= 0) return;
+
+                const ratio = splitRatioFromSourceScrollTop(metrics.sourceEl.scrollTop, metrics.sourceMax);
+                if (!scrollAnchorRestoreBlocked) {
+                    documentScrollPercent = ratio;
+                }
+                const next = splitPreviewScrollTopForRatio(ratio, metrics.previewMax);
+                if (Math.abs(metrics.previewEl.scrollTop - next) < 0.01) return;
+
+                withSplitScrollEcho(() => {
+                    metrics.previewEl.scrollTop = next;
+                });
+            }
+
+            function applySplitScrollToSource() {
+                const metrics = getSplitPaneMetrics();
+                if (!metrics.sourceEl || !metrics.previewEl || metrics.previewMax <= 0) return;
+
+                const ratio = splitRatioFromPreviewScrollTop(metrics.previewEl.scrollTop, metrics.previewMax);
+                if (!scrollAnchorRestoreBlocked) {
+                    documentScrollPercent = ratio;
+                }
+                const next = splitSourceScrollTopForRatio(ratio, metrics.sourceMax);
+                if (Math.abs(metrics.sourceEl.scrollTop - next) < 0.01) return;
+
+                withSplitScrollEcho(() => {
+                    metrics.sourceEl.scrollTop = next;
+                });
+            }
+
+            function syncSplitScrollFromEditor() {
+                applySplitScrollToPreview();
+            }
+
+            function syncSplitScrollFromPreview() {
+                applySplitScrollToSource();
+            }
+
+            function scheduleSplitScrollSync() {
+                if (splitSyncRaf) return;
+                splitSyncRaf = requestAnimationFrame(() => {
+                    splitSyncRaf = 0;
+                    if (!document.body.classList.contains('mode-split') || !syncScroll) return;
+                    if (splitActiveScroller === 'preview') {
+                        syncSplitScrollFromPreview();
+                    } else {
+                        syncSplitScrollFromEditor();
+                    }
+                });
+            }
+
+            function restoreSplitScrollFromRatio(ratio) {
+                const metrics = refreshSplitPaneMetrics();
+                if (!metrics.sourceEl || !metrics.previewEl) return;
+                const r = clampRatio(ratio);
+                documentScrollPercent = r;
+                withSplitScrollEcho(() => {
+                    metrics.sourceEl.scrollTop = splitSourceScrollTopForRatio(r, metrics.sourceMax);
+                    metrics.previewEl.scrollTop = splitPreviewScrollTopForRatio(r, metrics.previewMax);
+                });
             }
 
             function getOutlineSourceText() {
@@ -3836,6 +4011,11 @@
                     preserved.forEach((cls) => document.body.classList.add(cls));
                     document.body.classList.add(`mode-${mode}`);
 
+                    if (mode === 'split') {
+                        splitActiveScroller = 'editor';
+                        invalidateSplitScrollMap();
+                    }
+
                     flushPendingEditorUpdates();
                     if (mode === 'live') {
                         const previewEl = document.getElementById('preview-content');
@@ -3868,6 +4048,17 @@
                         }
                         restoreAfterModeSwitch();
                         if (findState.active) scheduleFindRefresh.flush();
+                        if (mode === 'split') {
+                            setTimeout(() => {
+                                if (!document.body.classList.contains('mode-split')) return;
+                                refreshSplitPaneMetrics();
+                                if (splitActiveScroller === 'preview') {
+                                    syncSplitScrollFromPreview();
+                                } else {
+                                    syncSplitScrollFromEditor();
+                                }
+                            }, 400);
+                        }
                     });
                 },
 
@@ -4435,53 +4626,52 @@
                         }
                     });
                     
-                    // ===== SCROLL SYNC (процентная синхронизация) =====
-                    let isInternalScroll = false;
-
+                    // ===== SCROLL SYNC (content-aware percent in split) =====
                     function getEditorScrollElement() {
                         return getMarkdownScrollElement();
                     }
 
-                    function getPreviewScrollElement() {
-                        return previewPane || preview;
-                    }
-
                     function syncScrollPercent(source, target) {
-                        if (!source || !target || isInternalScroll) return;
-                        isInternalScroll = true;
-
+                        if (!source || !target || isSplitScrollEchoSuppressed()) return;
                         const maxScrollSource = source.scrollHeight - source.clientHeight;
                         const maxScrollTarget = target.scrollHeight - target.clientHeight;
-
-                        if (maxScrollSource <= 0 || maxScrollTarget <= 0) {
-                            isInternalScroll = false;
-                            return;
-                        }
-
+                        if (maxScrollSource <= 0 || maxScrollTarget <= 0) return;
                         const scrollPercent = source.scrollTop / maxScrollSource;
                         if (!scrollAnchorRestoreBlocked) {
                             documentScrollPercent = scrollPercent;
                         }
-                        target.scrollTop = scrollPercent * maxScrollTarget;
-
-                        setTimeout(() => { isInternalScroll = false; }, 20);
+                        withSplitScrollEcho(() => {
+                            target.scrollTop = scrollPercent * maxScrollTarget;
+                        });
                     }
 
                     function rememberScrollAnchorFrom(sourceEl) {
                         if (scrollAnchorRestoreBlocked || !sourceEl) return;
                         if (document.body.classList.contains('mode-split')) {
-                            documentScrollPercent = getScrollMetrics(sourceEl).percent;
+                            const metrics = splitPaneMetricsCache;
+                            if (metrics) {
+                                if (sourceEl === metrics.sourceEl && metrics.sourceMax > 0) {
+                                    documentScrollPercent = splitRatioFromSourceScrollTop(sourceEl.scrollTop, metrics.sourceMax);
+                                } else if (sourceEl === metrics.previewEl && metrics.previewMax > 0) {
+                                    documentScrollPercent = splitRatioFromPreviewScrollTop(sourceEl.scrollTop, metrics.previewMax);
+                                }
+                            } else {
+                                documentScrollPercent = getScrollMetrics(sourceEl).percent;
+                            }
                             return;
                         }
-                        const active = getActiveScrollElement();
-                        if (active === sourceEl) {
-                            documentScrollPercent = getScrollMetrics(sourceEl).percent;
-                        }
+                        documentScrollPercent = getScrollMetrics(sourceEl).percent;
                     }
 
                     function onEditorScroll() {
+                        if (isSplitScrollEchoSuppressed()) return;
                         rememberScrollAnchorFrom(getEditorScrollElement());
                         if (!syncScroll) return;
+                        if (document.body.classList.contains('mode-split')) {
+                            splitActiveScroller = 'editor';
+                            scheduleSplitScrollSync();
+                            return;
+                        }
                         const now = Date.now();
                         if (now - lastScrollTime.preview < 50) return;
                         lastScrollTime.markdown = now;
@@ -4489,13 +4679,38 @@
                     }
 
                     function onPreviewScroll() {
+                        if (isSplitScrollEchoSuppressed()) return;
                         rememberScrollAnchorFrom(getPreviewScrollElement());
                         if (!syncScroll) return;
+                        if (document.body.classList.contains('mode-split')) {
+                            splitActiveScroller = 'preview';
+                            scheduleSplitScrollSync();
+                            return;
+                        }
                         const now = Date.now();
                         if (now - lastScrollTime.markdown < 50) return;
                         lastScrollTime.preview = now;
                         syncScrollPercent(getPreviewScrollElement(), getEditorScrollElement());
                     }
+
+                    const refreshSplitMetricsOnGesture = () => {
+                        if (!document.body.classList.contains('mode-split')) return;
+                        if (!splitPaneMetricsCache) {
+                            refreshSplitPaneMetrics();
+                        }
+                    };
+
+                    const bindSplitScrollerIntent = (el, pane) => {
+                        if (!el) return;
+                        ['wheel', 'touchstart', 'mousedown'].forEach((evt) => {
+                            el.addEventListener(evt, () => {
+                                splitActiveScroller = pane;
+                                refreshSplitMetricsOnGesture();
+                            }, { passive: true });
+                        });
+                    };
+                    bindSplitScrollerIntent(markdownEditorScroll, 'editor');
+                    bindSplitScrollerIntent(previewPane, 'preview');
 
                     function onLiveScroll() {
                         rememberScrollAnchorFrom(getLiveScrollElement());
@@ -4509,6 +4724,14 @@
                         previewPane.addEventListener('scroll', onPreviewScroll, { passive: true });
                     }
 
+                    if (preview && typeof ResizeObserver !== 'undefined') {
+                        const previewLayoutObserver = new ResizeObserver(debounce(() => {
+                            if (!document.body.classList.contains('mode-split')) return;
+                            invalidateSplitScrollMap();
+                        }, 250));
+                        previewLayoutObserver.observe(preview);
+                    }
+
                     const liveScrollEl = getLiveScrollElement();
                     if (liveScrollEl) {
                         liveScrollEl.addEventListener('scroll', onLiveScroll, { passive: true });
@@ -4520,7 +4743,13 @@
                         if (Math.abs(nextWidth - lastGutterObservedWidth) < 2) return;
                         invalidateGutterMeasureCache();
                         if (syncScroll && document.body.classList.contains('mode-split')) {
-                            syncScrollPercent(getEditorScrollElement(), getPreviewScrollElement());
+                            invalidateSplitScrollMap();
+                            refreshSplitPaneMetrics();
+                            if (splitActiveScroller === 'preview') {
+                                syncSplitScrollFromPreview();
+                            } else {
+                                syncSplitScrollFromEditor();
+                            }
                         }
                         scheduleGutterRefresh();
                     }, 200));

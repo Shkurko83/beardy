@@ -30,9 +30,22 @@
 		EBMM00012F2500000040C1BB /* Mermaid */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Mermaid; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		EB3DF56B2EFFF1CE0052CF78 /* Exceptions for "BlackBeardEditor" folder in "BlackBeardEditor" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = EB3DF5672EFFF1CE0052CF77 /* BlackBeardEditor */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		EB3DF56A2EFFF1CE0052CF77 /* BlackBeardEditor */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				EB3DF56B2EFFF1CE0052CF78 /* Exceptions for "BlackBeardEditor" folder in "BlackBeardEditor" target */,
+			);
 			path = BlackBeardEditor;
 			sourceTree = "<group>";
 		};
@@ -304,7 +317,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=*]" = BlackBeardEditor/MarkdownEditor.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 369L854425;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = readwrite;
@@ -325,9 +338,8 @@
 				ENABLE_RESOURCE_ACCESS_PRINTING = YES;
 				ENABLE_RESOURCE_ACCESS_USB = YES;
 				ENABLE_USER_SELECTED_FILES = readwrite;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Black Beard Editor";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = BlackBeardEditor/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -361,7 +373,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=*]" = BlackBeardEditor/MarkdownEditor.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 369L854425;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = readwrite;
@@ -382,9 +394,8 @@
 				ENABLE_RESOURCE_ACCESS_PRINTING = YES;
 				ENABLE_RESOURCE_ACCESS_USB = YES;
 				ENABLE_USER_SELECTED_FILES = readwrite;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Black Beard Editor";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = BlackBeardEditor/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
