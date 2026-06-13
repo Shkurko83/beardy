@@ -222,6 +222,70 @@
                     body.dark #markdown-spell-overlay .spell-err {
                         border-bottom-color: #ff6961;
                     }
+                    #markdown-find-overlay {
+                        display: none;
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        min-height: 100%;
+                        margin: 0;
+                        border: none;
+                        box-sizing: border-box;
+                        padding: 40px 60px;
+                        white-space: pre-wrap;
+                        word-wrap: break-word;
+                        overflow-wrap: break-word;
+                        pointer-events: none;
+                        z-index: 4;
+                        color: transparent;
+                        overflow: visible;
+                        background: transparent;
+                    }
+                    body.editor-line-numbers #markdown-find-overlay {
+                        padding-left: calc(var(--editor-gutter-width, 2.75rem) + 60px);
+                    }
+                    #markdown-find-overlay .find-hit {
+                        color: transparent;
+                        -webkit-text-fill-color: transparent;
+                        background: rgba(255, 214, 10, 0.45);
+                        border-radius: 2px;
+                    }
+                    #markdown-find-overlay .find-hit-current {
+                        color: transparent;
+                        -webkit-text-fill-color: transparent;
+                        background: rgba(255, 149, 0, 0.72);
+                        border-radius: 2px;
+                        box-shadow: 0 0 0 1px rgba(255, 149, 0, 0.9);
+                    }
+                    body.dark #markdown-find-overlay .find-hit {
+                        background: rgba(255, 214, 10, 0.35);
+                    }
+                    body.dark #markdown-find-overlay .find-hit-current {
+                        background: rgba(255, 159, 10, 0.55);
+                    }
+                    mark.find-hit,
+                    mark.find-hit-current {
+                        background: rgba(255, 214, 10, 0.45);
+                        color: inherit;
+                        padding: 0;
+                        border-radius: 2px;
+                    }
+                    mark.find-hit-current {
+                        background: rgba(255, 149, 0, 0.72);
+                        box-shadow: 0 0 0 1px rgba(255, 149, 0, 0.9);
+                    }
+                    body.dark mark.find-hit {
+                        background: rgba(255, 214, 10, 0.35);
+                    }
+                    body.dark mark.find-hit-current {
+                        background: rgba(255, 159, 10, 0.55);
+                    }
+                    .live-block.find-flash {
+                        outline: 2px solid rgba(255, 149, 0, 0.85);
+                        outline-offset: 2px;
+                        border-radius: 4px;
+                    }
                     body.editor-line-numbers #markdown-textarea {
                         padding-left: calc(var(--editor-gutter-width, 2.75rem) + 60px);
                     }
@@ -1121,6 +1185,7 @@
                         color: inherit;
                     "></textarea>
                         <div id="markdown-spell-overlay" class="editor-source-metrics" aria-hidden="true"></div>
+                        <div id="markdown-find-overlay" class="editor-source-metrics" aria-hidden="true"></div>
                     </div>
                 </div>
             </div>
@@ -1263,8 +1328,28 @@
                 overlay.style.overflowWrap = computed.overflowWrap;
             }
 
+            function syncFindOverlayGeometry() {
+                const overlay = document.getElementById('markdown-find-overlay');
+                const ta = getMarkdownTextarea();
+                if (!overlay || !ta) return;
+
+                const computed = window.getComputedStyle(ta);
+                overlay.style.width = ta.offsetWidth + 'px';
+                overlay.style.minHeight = ta.offsetHeight + 'px';
+                overlay.style.top = ta.offsetTop + 'px';
+                overlay.style.left = ta.offsetLeft + 'px';
+                overlay.style.font = computed.font;
+                overlay.style.letterSpacing = computed.letterSpacing;
+                overlay.style.wordSpacing = computed.wordSpacing;
+                overlay.style.tabSize = computed.tabSize || '';
+                overlay.style.textAlign = computed.textAlign;
+                overlay.style.wordBreak = computed.wordBreak;
+                overlay.style.overflowWrap = computed.overflowWrap;
+            }
+
             function syncSpellOverlayHeight() {
                 syncSpellOverlayGeometry();
+                syncFindOverlayGeometry();
             }
 
             function renderSpellCheckOverlay() {
@@ -2867,6 +2952,7 @@
                 if (anchor) {
                     restoreDocumentScrollAnchor(anchor, { persistent: true });
                 }
+                if (findState.active) scheduleFindRefresh();
             }
 
             function isFootnoteDefinitionLine(line) {
@@ -3433,6 +3519,249 @@
                 }
                 appendFootnotesSection(container, footnotes);
             }
+
+            let findState = {
+                active: false,
+                query: '',
+                ranges: [],
+                currentIndex: -1,
+                caseSensitive: false,
+            };
+
+            function normalizeFindRanges(ranges) {
+                return (ranges || [])
+                    .map((range) => {
+                        const start = Number(range.start ?? range.location ?? range.from);
+                        const length = Number(range.length ?? ((range.end ?? range.to) - start));
+                        if (!Number.isFinite(start) || !Number.isFinite(length) || length < 1) return null;
+                        return { start, end: start + length };
+                    })
+                    .filter(Boolean)
+                    .sort((a, b) => a.start - b.start);
+            }
+
+            function getActiveEditorMode() {
+                return document.body.className.match(/mode-(\w+)/)?.[1] || 'edit';
+            }
+
+            function isSourceFindPaneVisible() {
+                const mode = getActiveEditorMode();
+                return mode === 'edit' || mode === 'split';
+            }
+
+            function offsetToLineIndex(text, offset) {
+                const safe = Math.max(0, Math.min(offset, text.length));
+                return text.slice(0, safe).split('\n').length - 1;
+            }
+
+            function scrollSourceToRange(start, end) {
+                const ta = textarea;
+                if (!ta) return false;
+
+                const layout = measureLogicalLineLayout(ta);
+                const lineIndex = offsetToLineIndex(ta.value, start);
+                const metrics = getGutterTypographyMetrics(ta);
+                const lineTop = layout.tops[lineIndex] || 0;
+                const scrollEl = getMarkdownScrollElement();
+                const viewport = scrollEl?.clientHeight || ta.clientHeight || 0;
+                let targetScroll = Math.max(
+                    0,
+                    metrics.paddingTop + lineTop + OUTLINE_SCROLL_TOP_INSET - Math.max(0, viewport * 0.25)
+                );
+
+                if (scrollEl) {
+                    smoothScrollToTop(scrollEl, targetScroll);
+                }
+
+                requestAnimationFrame(() => {
+                    ta.focus({ preventScroll: true });
+                    ta.setSelectionRange(start, end);
+                });
+                return true;
+            }
+
+            function renderFindSourceOverlay() {
+                const overlay = document.getElementById('markdown-find-overlay');
+                const ta = getMarkdownTextarea();
+                if (!overlay || !ta) return;
+
+                if (!findState.active || !findState.ranges.length || !isSourceFindPaneVisible()) {
+                    overlay.innerHTML = '';
+                    overlay.style.display = 'none';
+                    return;
+                }
+
+                const text = ta.value;
+                let html = '';
+                let last = 0;
+                findState.ranges.forEach((range, index) => {
+                    if (range.start < last) return;
+                    html += escapeSpellOverlayText(text.slice(last, range.start));
+                    const cls = index === findState.currentIndex ? 'find-hit-current' : 'find-hit';
+                    html += `<span class="${cls}">`;
+                    html += escapeSpellOverlayText(text.slice(range.start, range.end));
+                    html += '</span>';
+                    last = range.end;
+                });
+                html += escapeSpellOverlayText(text.slice(last));
+
+                overlay.innerHTML = html;
+                overlay.style.display = 'block';
+                syncFindOverlayGeometry();
+            }
+
+            function clearFindHighlightsInRoot(root) {
+                if (!root) return;
+                root.querySelectorAll('mark.find-hit, mark.find-hit-current').forEach((mark) => {
+                    const parent = mark.parentNode;
+                    if (!parent) return;
+                    while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+                    parent.removeChild(mark);
+                    parent.normalize();
+                });
+                root.querySelectorAll('.live-block.find-flash').forEach((el) => el.classList.remove('find-flash'));
+            }
+
+            function getSourceBlockSpans(root) {
+                const blocks = [...(root || document).querySelectorAll(':scope > .live-block')];
+                const spans = [];
+                let offset = 0;
+                blocks.forEach((el) => {
+                    const source = el.dataset.blockSource ?? '';
+                    spans.push({ el, start: offset, end: offset + source.length, source });
+                    offset += source.length + 1;
+                });
+                return spans;
+            }
+
+            function findBlockSpanForOffset(spans, offset) {
+                if (!spans.length) return null;
+                for (const span of spans) {
+                    if (offset >= span.start && offset < span.end) return span;
+                }
+                return spans[spans.length - 1];
+            }
+
+            function highlightSubstringInElement(el, text, isCurrent, caseSensitive) {
+                if (!el || !text) return false;
+                const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+                let node;
+                while ((node = walker.nextNode())) {
+                    const content = node.textContent || '';
+                    const hay = caseSensitive ? content : content.toLowerCase();
+                    const ned = caseSensitive ? text : text.toLowerCase();
+                    const idx = hay.indexOf(ned);
+                    if (idx < 0) continue;
+                    try {
+                        const range = document.createRange();
+                        range.setStart(node, idx);
+                        range.setEnd(node, idx + text.length);
+                        const mark = document.createElement('mark');
+                        mark.className = isCurrent ? 'find-hit-current' : 'find-hit';
+                        range.surroundContents(mark);
+                        return true;
+                    } catch (_) {
+                        continue;
+                    }
+                }
+                return false;
+            }
+
+            function navigateFindInRenderedRoot(root, scrollContainer) {
+                clearFindHighlightsInRoot(root);
+                if (!findState.active || !findState.ranges.length || findState.currentIndex < 0) return;
+
+                const spans = getSourceBlockSpans(root);
+                const current = findState.ranges[findState.currentIndex];
+                if (!current) return;
+
+                findState.ranges.forEach((range, index) => {
+                    const span = findBlockSpanForOffset(spans, range.start);
+                    if (!span) return;
+                    const localStart = range.start - span.start;
+                    const slice = span.source.slice(localStart, localStart + (range.end - range.start));
+                    highlightSubstringInElement(
+                        span.el,
+                        slice,
+                        index === findState.currentIndex,
+                        findState.caseSensitive
+                    );
+                });
+
+                const currentSpan = findBlockSpanForOffset(spans, current.start);
+                if (!currentSpan) return;
+
+                if (!highlightSubstringInElement(
+                    currentSpan.el,
+                    currentSpan.source.slice(current.start - currentSpan.start, current.start - currentSpan.start + (current.end - current.start)),
+                    true,
+                    findState.caseSensitive
+                )) {
+                    currentSpan.el.classList.add('find-flash');
+                }
+
+                if (scrollContainer) {
+                    smoothScrollElementToTop(scrollContainer, currentSpan.el);
+                } else {
+                    currentSpan.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                flashAnchorHighlight(currentSpan.el);
+            }
+
+            function resetDocumentFindState() {
+                findState = {
+                    active: false,
+                    query: '',
+                    ranges: [],
+                    currentIndex: -1,
+                    caseSensitive: false,
+                };
+                const overlay = document.getElementById('markdown-find-overlay');
+                if (overlay) {
+                    overlay.innerHTML = '';
+                    overlay.style.display = 'none';
+                }
+                clearFindHighlightsInRoot(document.getElementById('preview-content'));
+                clearFindHighlightsInRoot(document.getElementById('live-editor'));
+            }
+
+            function applyFindState() {
+                if (!findState.active || !findState.ranges.length || findState.currentIndex < 0) {
+                    resetDocumentFindState();
+                    return;
+                }
+
+                const current = findState.ranges[findState.currentIndex];
+                if (!current) return;
+
+                const mode = getActiveEditorMode();
+
+                if (isSourceFindPaneVisible()) {
+                    scrollSourceToRange(current.start, current.end);
+                    renderFindSourceOverlay();
+                } else {
+                    const overlay = document.getElementById('markdown-find-overlay');
+                    if (overlay) {
+                        overlay.innerHTML = '';
+                        overlay.style.display = 'none';
+                    }
+                }
+
+                if (mode === 'preview' || mode === 'split') {
+                    const previewRoot = document.getElementById('preview-content');
+                    const previewScroll = document.getElementById('preview-pane');
+                    navigateFindInRenderedRoot(previewRoot, previewScroll);
+                }
+
+                if (mode === 'live') {
+                    const liveRoot = document.getElementById('live-editor');
+                    navigateFindInRenderedRoot(liveRoot, liveRoot);
+                }
+            }
+
+            const scheduleFindRefresh = debounce(() => {
+                if (findState.active) applyFindState();
+            }, 80);
             
             window.cmEditor = {
                 updateContent(text) {
@@ -3538,6 +3867,7 @@
                             resetGutterLayout(document.getElementById('markdown-line-gutter'));
                         }
                         restoreAfterModeSwitch();
+                        if (findState.active) scheduleFindRefresh.flush();
                     });
                 },
 
@@ -3733,6 +4063,27 @@
                 getContent() {
                     flushAllPendingLiveEdits();
                     return textarea.value || currentContent || '';
+                },
+
+                setFindState(options = {}) {
+                    const ranges = normalizeFindRanges(options.ranges);
+                    findState = {
+                        active: !!options.active && ranges.length > 0,
+                        query: String(options.query || ''),
+                        ranges,
+                        currentIndex: Math.max(0, Math.min(Number(options.currentIndex) || 0, Math.max(0, ranges.length - 1))),
+                        caseSensitive: !!options.caseSensitive,
+                    };
+                    if (!findState.active) {
+                        resetDocumentFindState();
+                        return false;
+                    }
+                    applyFindState();
+                    return true;
+                },
+
+                clearFindState() {
+                    resetDocumentFindState();
                 },
 
                 scrollToHeading(options) {
@@ -7877,6 +8228,7 @@
                     offsetInBlock: null
                 };
                 attachLiveCaretTracking();
+                if (findState.active) scheduleFindRefresh();
             }
 
             function placeCaretAtEnd(el) {

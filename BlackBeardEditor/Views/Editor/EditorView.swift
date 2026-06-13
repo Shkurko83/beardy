@@ -84,16 +84,6 @@ struct EditorView: View {
                 FullStatisticsPanel(statistics: DocumentStatistics(from: doc.content))
             }
         }
-        .overlay(alignment: .top) {
-            if showFindPanel, let doc = documentManager.currentDocument {
-                FindReplacePanel(
-                    isPresented: $showFindPanel,
-                    textContent: .constant(doc.content),
-                    selectedRange: .constant(NSRange(location: 0, length: 0))
-                )
-                .padding(.top, 60)
-            }
-        }
     }
 }
 

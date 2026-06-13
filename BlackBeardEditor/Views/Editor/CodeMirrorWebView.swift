@@ -73,6 +73,13 @@ struct CodeMirrorWebView: NSViewRepresentable {
             object: nil
         )
 
+        NotificationCenter.default.addObserver(
+            context.coordinator,
+            selector: #selector(Coordinator.handleFindUpdate(_:)),
+            name: .editorFindDidUpdate,
+            object: nil
+        )
+
         context.coordinator.webView = webView
         return webView
     }
@@ -332,6 +339,38 @@ struct CodeMirrorWebView: NSViewRepresentable {
                 return
             }
             webView.evaluateJavaScript(js, completionHandler: nil)
+        }
+
+        @objc func handleFindUpdate(_ notification: Notification) {
+            guard pageLoaded, let webView else { return }
+            guard let userInfo = notification.userInfo else { return }
+
+            if let active = userInfo["active"] as? Bool, !active {
+                webView.evaluateJavaScript("window.cmEditor?.clearFindState?.();", completionHandler: nil)
+                return
+            }
+
+            guard let query = userInfo["query"] as? String,
+                  let ranges = userInfo["ranges"] as? [[String: Any]],
+                  let currentIndex = userInfo["currentIndex"] as? Int else { return }
+
+            let payload: [String: Any] = [
+                "active": true,
+                "query": query,
+                "ranges": ranges.map { item in
+                    [
+                        "location": item["location"] ?? 0,
+                        "length": item["length"] ?? 0
+                    ]
+                },
+                "currentIndex": currentIndex,
+                "caseSensitive": userInfo["caseSensitive"] as? Bool ?? false
+            ]
+
+            guard let data = try? JSONSerialization.data(withJSONObject: payload),
+                  let json = String(data: data, encoding: .utf8) else { return }
+
+            webView.evaluateJavaScript("window.cmEditor?.setFindState(\(json));", completionHandler: nil)
         }
 
         private func scheduleSpellCheck(for text: String) {

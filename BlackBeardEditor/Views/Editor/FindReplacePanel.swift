@@ -150,6 +150,13 @@ struct FindReplacePanel: View {
             isFindFieldFocused = true
             performFind()
         }
+        .onDisappear {
+            NotificationCenter.default.post(
+                name: .editorFindDidUpdate,
+                object: nil,
+                userInfo: ["active": false]
+            )
+        }
         .onChange(of: findText) { _, _ in
             performFind()
         }
@@ -170,6 +177,7 @@ struct FindReplacePanel: View {
             matches = []
             matchCount = 0
             currentMatchIndex = 0
+            publishFindState(clear: true)
             return
         }
         
@@ -179,9 +187,10 @@ struct FindReplacePanel: View {
         if matchCount > 0 {
             // Find closest match to current selection
             currentMatchIndex = findClosestMatch()
-            highlightCurrentMatch()
+            publishFindState()
         } else {
             currentMatchIndex = 0
+            publishFindState(clear: true)
         }
     }
     
@@ -250,26 +259,45 @@ struct FindReplacePanel: View {
         guard matchCount > 0 else { return }
         
         currentMatchIndex = (currentMatchIndex + 1) % matchCount
-        highlightCurrentMatch()
+        publishFindState()
     }
     
     private func findPrevious() {
         guard matchCount > 0 else { return }
         
         currentMatchIndex = (currentMatchIndex - 1 + matchCount) % matchCount
-        highlightCurrentMatch()
+        publishFindState()
     }
     
-    private func highlightCurrentMatch() {
-        guard currentMatchIndex >= 0 && currentMatchIndex < matches.count else { return }
+    private func publishFindState(clear: Bool = false) {
+        if clear || findText.isEmpty || matches.isEmpty {
+            NotificationCenter.default.post(
+                name: .editorFindDidUpdate,
+                object: nil,
+                userInfo: ["active": false]
+            )
+            return
+        }
         
-        selectedRange = matches[currentMatchIndex]
+        guard currentMatchIndex >= 0, currentMatchIndex < matches.count else { return }
         
-        // Post notification to scroll to selection
+        let current = matches[currentMatchIndex]
+        selectedRange = current
+        
+        let rangePayload = matches.map { range in
+            ["location": range.location, "length": range.length]
+        }
+        
         NotificationCenter.default.post(
-            name: .scrollToSelection,
+            name: .editorFindDidUpdate,
             object: nil,
-            userInfo: ["range": selectedRange]
+            userInfo: [
+                "active": true,
+                "query": findText,
+                "ranges": rangePayload,
+                "currentIndex": currentMatchIndex,
+                "caseSensitive": isCaseSensitive
+            ]
         )
     }
     
@@ -348,6 +376,15 @@ struct FindReplaceOverlay: ViewModifier {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: isPresented)
+        .onChange(of: isPresented) { _, visible in
+            if !visible {
+                NotificationCenter.default.post(
+                    name: .editorFindDidUpdate,
+                    object: nil,
+                    userInfo: ["active": false]
+                )
+            }
+        }
     }
 }
 
@@ -367,7 +404,7 @@ extension View {
 
 // MARK: - Notification Names
 extension Notification.Name {
-    static let scrollToSelection = Notification.Name("scrollToSelection")
+    static let editorFindDidUpdate = Notification.Name("editorFindDidUpdate")
 }
 
 // MARK: - Preview
