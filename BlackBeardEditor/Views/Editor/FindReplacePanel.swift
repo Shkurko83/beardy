@@ -13,6 +13,9 @@ struct FindReplacePanel: View {
     @Binding var isPresented: Bool
     @Binding var textContent: String
     @Binding var selectedRange: NSRange
+    var baseOffset: CGSize = .zero
+    @Binding var liveDragOffset: CGSize
+    var onDragEnded: (CGSize) -> Void = { _ in }
     
     @State private var findText: String = ""
     @State private var replaceText: String = ""
@@ -28,16 +31,33 @@ struct FindReplacePanel: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.secondary)
-                
-                Text(showReplaceOptions ? "Find and Replace" : "Find")
-                    .font(.headline)
-                
-                Spacer()
-                
+            // Header (drag handle)
+            HStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .help("Drag to move")
+
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+
+                    Text(showReplaceOptions ? "Find and Replace" : "Find")
+                        .font(.headline)
+
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .gesture(panelDragGesture)
+                .onHover { hovering in
+                    if hovering {
+                        NSCursor.openHand.push()
+                    } else {
+                        NSCursor.pop()
+                    }
+                }
+
                 // Toggle replace options
                 Button(action: {
                     withAnimation {
@@ -49,7 +69,7 @@ struct FindReplacePanel: View {
                 }
                 .buttonStyle(.plain)
                 .help(showReplaceOptions ? "Hide Replace" : "Show Replace")
-                
+
                 Button(action: {
                     isPresented = false
                 }) {
@@ -146,6 +166,10 @@ struct FindReplacePanel: View {
         .background(Color(NSColor.windowBackgroundColor))
         .cornerRadius(8)
         .shadow(radius: 10)
+        .offset(
+            x: baseOffset.width + liveDragOffset.width,
+            y: baseOffset.height + liveDragOffset.height
+        )
         .onAppear {
             isFindFieldFocused = true
             performFind()
@@ -169,6 +193,17 @@ struct FindReplacePanel: View {
         .onChange(of: useRegex) { _, _ in
             performFind()
         }
+    }
+
+    private var panelDragGesture: some Gesture {
+        DragGesture(minimumDistance: 2)
+            .onChanged { value in
+                liveDragOffset = value.translation
+            }
+            .onEnded { value in
+                onDragEnded(value.translation)
+                liveDragOffset = .zero
+            }
     }
     
     // MARK: - Find Methods
@@ -354,37 +389,76 @@ struct FindReplaceOverlay: ViewModifier {
     @Binding var isPresented: Bool
     @Binding var textContent: String
     @Binding var selectedRange: NSRange
-    
+
+    @AppStorage("findPanelOffsetX") private var offsetX: Double = 0
+    @AppStorage("findPanelOffsetY") private var offsetY: Double = 60
+    @State private var liveDragOffset: CGSize = .zero
+    @State private var containerSize: CGSize = .zero
+
+    private let panelSize = CGSize(width: 500, height: 220)
+
     func body(content: Content) -> some View {
-        ZStack(alignment: .top) {
-            content
-            
-            if isPresented {
-                Color.black.opacity(0.3)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        isPresented = false
-                    }
-                
-                FindReplacePanel(
-                    isPresented: $isPresented,
-                    textContent: $textContent,
-                    selectedRange: $selectedRange
-                )
-                .padding(.top, 60)
-                .transition(.move(edge: .top).combined(with: .opacity))
+        content
+            .background {
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear { containerSize = proxy.size }
+                        .onChange(of: proxy.size) { _, newSize in
+                            containerSize = newSize
+                        }
+                }
             }
-        }
-        .animation(.easeInOut(duration: 0.2), value: isPresented)
-        .onChange(of: isPresented) { _, visible in
-            if !visible {
-                NotificationCenter.default.post(
-                    name: .editorFindDidUpdate,
-                    object: nil,
-                    userInfo: ["active": false]
-                )
+            .overlay(alignment: .top) {
+                if isPresented {
+                    FindReplacePanel(
+                        isPresented: $isPresented,
+                        textContent: $textContent,
+                        selectedRange: $selectedRange,
+                        baseOffset: storedOffset,
+                        liveDragOffset: $liveDragOffset,
+                        onDragEnded: { translation in
+                            let next = clampedOffset(
+                                CGSize(
+                                    width: storedOffset.width + translation.width,
+                                    height: storedOffset.height + translation.height
+                                ),
+                                in: containerSize
+                            )
+                            offsetX = next.width
+                            offsetY = next.height
+                        }
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    .zIndex(20)
+                }
             }
-        }
+            .animation(.easeInOut(duration: 0.2), value: isPresented)
+            .onChange(of: isPresented) { _, visible in
+                if !visible {
+                    NotificationCenter.default.post(
+                        name: .editorFindDidUpdate,
+                        object: nil,
+                        userInfo: ["active": false]
+                    )
+                }
+            }
+    }
+
+    private var storedOffset: CGSize {
+        CGSize(width: offsetX, height: offsetY)
+    }
+
+    private func clampedOffset(_ proposed: CGSize, in container: CGSize) -> CGSize {
+        let horizontalPadding: CGFloat = 16
+        let minY: CGFloat = 12
+        let maxY = max(minY, container.height - panelSize.height - 12)
+        let maxX = max(0, (container.width - panelSize.width) / 2 - horizontalPadding)
+        let minX = -maxX
+
+        return CGSize(
+            width: min(max(proposed.width, minX), maxX),
+            height: min(max(proposed.height, minY), maxY)
+        )
     }
 }
 
@@ -413,7 +487,8 @@ struct FindReplacePanel_Previews: PreviewProvider {
         FindReplacePanel(
             isPresented: .constant(true),
             textContent: .constant("Hello world! This is a test. Hello again!"),
-            selectedRange: .constant(NSRange(location: 0, length: 0))
+            selectedRange: .constant(NSRange(location: 0, length: 0)),
+            liveDragOffset: .constant(.zero)
         )
     }
 }
