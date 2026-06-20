@@ -205,10 +205,12 @@
 
     function refreshTheme() {
         if (!view) return;
-        const scrollTop = view.scrollDOM.scrollTop;
+        const line = getTopSourceLine();
+        const sub = getSubLinePx();
         const text = view.state.doc.toString();
         unmount();
-        mount({ initialText: text, scrollTop });
+        mount({ initialText: text });
+        setScrollTop(scrollForLine(line, sub));
     }
 
     global.experimentalCodeMirror = {

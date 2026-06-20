@@ -2237,7 +2237,6 @@
                 const text = options.text ?? ta.value ?? currentContent ?? '';
                 window.experimentalCodeMirror?.mount({
                     initialText: text,
-                    scrollTop: markdownEditorScroll?.scrollTop,
                     onChange: options.onChange,
                     onScroll: options.onScroll,
                 });
@@ -2356,15 +2355,23 @@
             }
 
             function enterExperimentalMode(anchor) {
+                lockScrollAnchor(anchor);
                 window.experimentalEditor?.enter?.({
                     text: currentContent ?? textarea?.value ?? '',
                     anchor,
                     hooks: getExperimentalHooks(),
+                    onReady: () => {
+                        restoreDocumentScrollAnchor(anchor, { persistent: true });
+                        unlockScrollAnchor();
+                    },
                 });
             }
 
             function leaveExperimentalMode() {
-                window.experimentalEditor?.leave?.();
+                const anchor = window.experimentalEditor?.leave?.();
+                if (anchor && typeof anchor.percent === 'number') {
+                    documentScrollPercent = anchor.percent;
+                }
             }
 
             function isLiveActive() {
@@ -2762,21 +2769,53 @@
                 documentScrollPercent = getScrollMetrics(active).percent;
             }
 
+            function captureCm6LineAnchor() {
+                if (isExperimentalMode() && window.experimentalCodeMirror?.isActive?.()) {
+                    return {
+                        line: window.experimentalCodeMirror.getTopSourceLine(),
+                        sub: window.experimentalCodeMirror.getSubLinePx(),
+                    };
+                }
+                if (isCm6SourceActive() && window.sourceCodeMirror?.getTopSourceLine) {
+                    return {
+                        line: window.sourceCodeMirror.getTopSourceLine(),
+                        sub: window.sourceCodeMirror.getSubLinePx(),
+                    };
+                }
+                return null;
+            }
+
             function captureDocumentScrollAnchor() {
                 if (lockedScrollAnchor) {
-                    return { percent: lockedScrollAnchor.percent, top: lockedScrollAnchor.top };
+                    return {
+                        percent: lockedScrollAnchor.percent,
+                        top: lockedScrollAnchor.top,
+                        line: lockedScrollAnchor.line,
+                        sub: lockedScrollAnchor.sub,
+                    };
                 }
                 updateDocumentScrollAnchorFromActive();
                 const active = getActiveScrollElement();
                 const metrics = active ? getScrollMetrics(active) : { percent: documentScrollPercent, top: 0 };
                 documentScrollPercent = metrics.percent;
-                return { percent: documentScrollPercent, top: metrics.top };
+                const anchor = {
+                    percent: documentScrollPercent,
+                    top: metrics.top,
+                };
+                const lineAnchor = captureCm6LineAnchor();
+                if (lineAnchor) {
+                    anchor.line = lineAnchor.line;
+                    anchor.sub = lineAnchor.sub;
+                }
+                return anchor;
             }
 
             function lockScrollAnchor(anchor) {
                 lockedScrollAnchor = {
                     percent: anchor?.percent ?? documentScrollPercent ?? 0,
                     top: anchor?.top ?? 0,
+                    line: anchor?.line,
+                    sub: anchor?.sub,
                 };
             }
 
@@ -2797,10 +2836,27 @@
 
                 const apply = () => {
                     scrollAnchorRestoreBlocked = true;
-                    if (document.body.classList.contains('mode-split')) {
-                        restoreSplitScrollFromRatio(anchor?.percent ?? documentScrollPercent ?? 0);
-                    } else if (document.body.classList.contains('mode-experimental')) {
+                    if (document.body.classList.contains('mode-experimental')) {
                         window.experimentalEditor?.restoreScroll?.(anchor);
+                    } else if (document.body.classList.contains('mode-split')) {
+                        if (Number.isFinite(anchor?.line) && isCm6SourceActive()) {
+                            window.sourceCodeMirror.setScrollTop(
+                                window.sourceCodeMirror.scrollForLine(anchor.line, anchor.sub ?? 0)
+                            );
+                            if (shouldUseLargeDocPerf()) {
+                                syncSplitLargeFromEditor();
+                            } else if (ensureSplitLineMap() && splitSourceLineTops && splitPreviewLineTops) {
+                                syncSplitFromEditor();
+                            } else {
+                                restoreSplitScrollFromRatio(percent);
+                            }
+                        } else {
+                            restoreSplitScrollFromRatio(percent);
+                        }
+                    } else if (Number.isFinite(anchor?.line) && isCm6SourceActive()) {
+                        window.sourceCodeMirror.setScrollTop(
+                            window.sourceCodeMirror.scrollForLine(anchor.line, anchor.sub ?? 0)
+                        );
                     } else {
                         applyScrollPercentToElement(markdownEditorScroll, percent);
                         applyScrollPercentToElement(previewPane, percent);
@@ -2904,8 +2960,21 @@
                 if (options.rehighlight) {
                     rehighlightCodeBlocks();
                 }
-                if (document.body.classList.contains('mode-split')) {
-                    restoreSplitScrollFromRatio(anchor?.percent ?? documentScrollPercent ?? 0);
+                if (document.body.classList.contains('mode-experimental')) {
+                    window.experimentalEditor?.restoreScroll?.(anchor);
+                } else if (document.body.classList.contains('mode-split')) {
+                    if (Number.isFinite(anchor?.line) && isCm6SourceActive()) {
+                        window.sourceCodeMirror.setScrollTop(
+                            window.sourceCodeMirror.scrollForLine(anchor.line, anchor.sub ?? 0)
+                        );
+                        if (shouldUseLargeDocPerf()) {
+                            syncSplitLargeFromEditor();
+                        } else {
+                            syncSplitFromEditor();
+                        }
+                    } else {
+                        restoreSplitScrollFromRatio(anchor?.percent ?? documentScrollPercent ?? 0);
+                    }
                 } else {
                     restoreDocumentScrollAnchor(anchor, { persistent: true });
                 }
@@ -2959,6 +3028,13 @@
                 }
 
                 const finish = () => {
+                    if (isCm6SourceActive()) {
+                        window.sourceCodeMirror.refreshTheme();
+                    }
+                    if (isExperimentalMode()) {
+                        window.experimentalCodeMirror?.refreshTheme?.();
+                    }
+                    renderMarkdownSourceMirror();
                     finishAppearanceThemeUpdate(anchor, { rehighlight: needsRehighlight });
                 };
 
@@ -4604,6 +4680,9 @@
             }
 
             function getMarkdownScrollElement() {
+                if (isExperimentalMode() && window.experimentalCodeMirror?.isActive?.()) {
+                    return window.experimentalCodeMirror.getScrollElement() || markdownEditorScroll;
+                }
                 if (isCm6SourceActive()) {
                     return window.sourceCodeMirror.getScrollElement() || markdownEditorScroll;
                 }
@@ -5188,7 +5267,7 @@
                         el.style.color = 'inherit';
                     });
                     if (nextDark !== wasDark) {
-                        rethemeAllMermaidInApp(anchor);
+                        rethemeAllMermaidInApp(anchor, { skipRestore: true });
                     } else {
                         restoreDocumentScrollAnchor(anchor, { persistent: true });
                     }
@@ -5199,6 +5278,9 @@
                         window.experimentalCodeMirror?.refreshTheme?.();
                     }
                     renderMarkdownSourceMirror();
+                    if (nextDark !== wasDark) {
+                        restoreDocumentScrollAnchor(anchor, { persistent: true });
+                    }
                 },
 
                 setViewMode(mode) {
@@ -5276,7 +5358,9 @@
                     }
 
                     requestAnimationFrame(() => {
-                        restoreDocumentScrollAnchor(anchor, { persistent: false });
+                        if (mode !== 'experimental') {
+                            restoreDocumentScrollAnchor(anchor, { persistent: false });
+                        }
                         if (mode === 'split') {
                             updateCachedSourceLineCount();
                             if (!shouldUseLargeDocPerf()) {

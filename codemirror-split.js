@@ -183,11 +183,13 @@
 
     function refreshTheme() {
         if (!view) return;
-        const scrollTop = view.scrollDOM.scrollTop;
+        const line = getTopSourceLine();
+        const sub = getSubLinePx();
         const sel = view.state.selection.main;
         const text = view.state.doc.toString();
         unmount();
-        mount({ initialText: text, scrollTop });
+        mount({ initialText: text });
+        setScrollTop(scrollForLine(line, sub));
         if (view) {
             view.dispatch({ selection: { anchor: sel.anchor, head: sel.head } });
         }

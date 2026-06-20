@@ -201,11 +201,12 @@
                 if (saved) {
                     restoreSourceAnchor(saved);
                 } else if (mountOpts.anchor) {
-                    restoreScrollRatio(mountOpts.anchor);
+                    restoreScroll(mountOpts.anchor);
                 } else {
                     markLeader('source');
                     syncFromSource();
                 }
+                mountOpts.onComplete?.();
             },
         });
     }
@@ -230,13 +231,17 @@
             onScroll: onSourceScroll,
         });
 
-        mountPreview(options.text ?? hooks.getText?.() ?? '', { anchor: options.anchor });
+        mountPreview(options.text ?? hooks.getText?.() ?? '', {
+            anchor: options.anchor,
+            onComplete: options.onReady,
+        });
         bindScrollInteraction();
         return true;
     }
 
     function leave() {
-        if (!active) return;
+        if (!active) return null;
+        const anchor = captureScrollAnchor();
         active = false;
         clearTimeout(updateTimer);
         updateTimer = 0;
@@ -245,6 +250,7 @@
         hooks.teardownPreview?.();
         document.body.classList.remove('experimental-active');
         hooks = {};
+        return anchor;
     }
 
     function scheduleUpdate(text) {
@@ -270,7 +276,24 @@
 
     function restoreScroll(anchor) {
         if (!active) return;
+        if (Number.isFinite(anchor?.line)) {
+            restoreSourceAnchor({ line: anchor.line, sub: anchor.sub ?? 0 });
+            return;
+        }
         restoreScrollRatio(anchor);
+    }
+
+    function captureScrollAnchor() {
+        return {
+            percent: (() => {
+                const sourceEl = hooks.getSourceScrollEl?.();
+                if (!sourceEl) return 0;
+                const max = Math.max(0, sourceEl.scrollHeight - sourceEl.clientHeight);
+                return max > 0 ? sourceEl.scrollTop / max : 0;
+            })(),
+            line: hooks.getTopSourceLine?.() ?? 0,
+            sub: hooks.getSubLinePx?.() ?? 0,
+        };
     }
 
     function resyncAfterLayout() {
@@ -286,6 +309,7 @@
         flushUpdate,
         restoreScroll,
         resyncAfterLayout,
+        captureScrollAnchor,
         isActive: () => active,
     };
 })(window);
