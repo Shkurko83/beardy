@@ -280,6 +280,7 @@ enum ViewMode: String, CaseIterable {
     case edit = "Edit"
     case preview = "Preview"
     case split = "Split"
+    case experimental = "Experimental"
     case live = "Live"
     case diff = "Diff"
 }

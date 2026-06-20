@@ -244,6 +244,10 @@ class DocumentManager: ObservableObject {
         if selectedTabID == id {
             if tabs.isEmpty {
                 selectedTabID = nil
+                NotificationCenter.default.post(
+                    name: .editorExecJS,
+                    object: "window.cmEditor?.clearDocumentCache?.();"
+                )
             } else {
                 let nextIndex = min(index, tabs.count - 1)
                 selectedTabID = tabs[nextIndex].id
@@ -1313,6 +1317,14 @@ class DocumentManager: ObservableObject {
         }
         statisticsUpdateWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+    }
+
+    func refreshStatisticsForCurrentTab() {
+        guard let id = selectedTabID,
+              let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        var doc = tabs[index].document
+        doc.updateStatistics()
+        tabs[index].document = doc
     }
     
     // MARK: - Recent Documents

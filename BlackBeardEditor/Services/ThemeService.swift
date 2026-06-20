@@ -493,13 +493,18 @@ class ThemeService: NSObject, ObservableObject {
             color: var(--md-text) !important;
         }
 
-        #markdown-line-gutter {
-            color: var(--md-secondary);
-        }
-
         #preview-content,
         #live-editor {
-            line-height: 1.65;
+            line-height: var(--document-line-height-ratio, 1.6);
+        }
+
+        #preview-content .live-block,
+        #live-editor .live-block,
+        #preview-content p,
+        #preview-content li,
+        #live-editor p,
+        #live-editor li {
+            line-height: inherit;
         }
 
         #preview-content h1, #preview-content h2, #preview-content h3,

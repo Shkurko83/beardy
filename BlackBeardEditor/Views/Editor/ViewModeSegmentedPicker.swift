@@ -17,6 +17,8 @@ extension ViewMode {
             return "Preview — read-only rendered document"
         case .split:
             return "Split — source editor and preview side by side"
+        case .experimental:
+            return "X-Split (experimental) — plain markdown source with optimized virtual preview and scroll sync"
         case .diff:
             return "Diff — compare current document with a saved version (read-only)"
         }
@@ -28,6 +30,7 @@ extension ViewMode {
         case .live: return "Live"
         case .preview: return "Preview"
         case .split: return "Split"
+        case .experimental: return "X-Split"
         case .diff: return "Diff"
         }
     }
@@ -38,6 +41,7 @@ extension ViewMode {
         case .live: return "doc.richtext"
         case .preview: return "eye"
         case .split: return "rectangle.split.2x1"
+        case .experimental: return "flask"
         case .diff: return "arrow.left.arrow.right"
         }
     }
@@ -47,7 +51,7 @@ extension ViewMode {
 struct ViewModeSegmentedPicker: NSViewRepresentable {
     @Binding var selection: ViewMode
 
-    private static let segmentModes: [ViewMode] = [.edit, .live, .preview, .split, .diff]
+    private static let segmentModes: [ViewMode] = [.edit, .live, .preview, .split, .experimental, .diff]
 
     func makeCoordinator() -> Coordinator {
         Coordinator(selection: $selection)

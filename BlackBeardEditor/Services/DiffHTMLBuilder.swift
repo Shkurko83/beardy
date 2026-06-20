@@ -47,6 +47,10 @@ enum DiffHTMLBuilder {
             }
 
         let diffCSS = diffStyles(isDark: isDark)
+        let lineHeight = AppConstants.doubleSetting(
+            forKey: AppConstants.Keys.editorLineHeight,
+            default: Double(AppConstants.Defaults.lineHeight)
+        )
         let hljsTheme = BundledHighlightJS.relativeThemeCSSPath(
             for: CodeTheme(rawValue: codeTheme) ?? .github
         )
@@ -59,13 +63,16 @@ enum DiffHTMLBuilder {
         <link rel="stylesheet" href="\(hljsTheme)">
         <link rel="stylesheet" href="\(BundledKaTeX.relativeCSSPath())">
         <style>
+        :root {
+            --document-line-height-ratio: \(lineHeight);
+        }
         \(themeCSS)
         \(diffCSS)
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             margin: 0;
             padding: 40px 48px 80px;
-            line-height: 1.65;
+            line-height: var(--document-line-height-ratio, \(lineHeight));
         }
         #diff-content { max-width: 900px; margin: 0 auto; }
         #diff-content > *:first-child { margin-top: 0; }
@@ -93,7 +100,7 @@ enum DiffHTMLBuilder {
         #diff-content li,
         #diff-content .diff-list li {
             margin: 0.25em 0;
-            line-height: 1.5;
+            line-height: inherit;
         }
         #diff-content .diff-nested-list {
             margin: 0.35em 0 0.2em;
@@ -401,8 +408,8 @@ enum DiffHTMLBuilder {
             .diff-block-del { background: #2d1717; border-left: 3px solid #f85149; padding: 12px 16px; margin: 0.75em 0; border-radius: 4px; }
             .diff-block-del * { text-decoration: none !important; }
             .diff-block-ins * { text-decoration: none !important; }
-            .diff-inline-text { margin: 0.5em 0; line-height: 1.65; }
-            .diff-inline-rendered { margin: 0.5em 0; line-height: 1.65; padding: 4px 2px; background: transparent; border: none; border-radius: 4px; }
+            .diff-inline-text { margin: 0.5em 0; line-height: inherit; }
+            .diff-inline-rendered { margin: 0.5em 0; line-height: inherit; padding: 4px 2px; background: transparent; border: none; border-radius: 4px; }
             .diff-cell-change { display: inline; }
             .diff-block-del.diff-current-focus, .diff-block-ins.diff-current-focus,
             .diff-inline-rendered.diff-current-focus { outline: 2px solid currentColor; box-shadow: 0 0 0 3px rgba(127,127,127,0.35); }
@@ -418,8 +425,8 @@ enum DiffHTMLBuilder {
         .diff-block-del { background: #fae0de; border-left: 3px solid #cf222e; padding: 12px 16px; margin: 0.75em 0; border-radius: 4px; }
         .diff-block-del * { text-decoration: none !important; }
         .diff-block-ins * { text-decoration: none !important; }
-        .diff-inline-text { margin: 0.5em 0; line-height: 1.65; }
-        .diff-inline-rendered { margin: 0.5em 0; line-height: 1.65; padding: 4px 2px; background: transparent; border: none; border-radius: 4px; }
+        .diff-inline-text { margin: 0.5em 0; line-height: inherit; }
+        .diff-inline-rendered { margin: 0.5em 0; line-height: inherit; padding: 4px 2px; background: transparent; border: none; border-radius: 4px; }
         .diff-cell-change { display: inline; }
         .diff-block-del.diff-current-focus, .diff-block-ins.diff-current-focus,
         .diff-inline-rendered.diff-current-focus { outline: 2px solid currentColor; box-shadow: 0 0 0 3px rgba(0,0,0,0.12); }

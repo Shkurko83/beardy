@@ -1,6 +1,6 @@
 import Foundation
 
-/// Pushes Settings → Editor preferences to the markdown textarea WebView.
+/// Pushes document typography and editor preferences to the markdown WebView.
 enum EditorSettingsSync {
 
     static func pushToEditor() {
@@ -14,14 +14,6 @@ enum EditorSettingsSync {
         )
         let fontFamily = UserDefaults.standard.string(forKey: AppConstants.Keys.editorFontFamily)
             ?? AppConstants.Defaults.fontFamily
-        let showLineNumbers = AppConstants.boolSetting(forKey: AppConstants.Keys.showLineNumbers, default: false)
-        var highlightCurrentLine = AppConstants.boolSetting(forKey: AppConstants.Keys.highlightCurrentLine, default: true)
-        if !showLineNumbers {
-            if AppConstants.boolSetting(forKey: AppConstants.Keys.highlightCurrentLine, default: true) {
-                UserDefaults.standard.set(false, forKey: AppConstants.Keys.highlightCurrentLine)
-            }
-            highlightCurrentLine = false
-        }
         let indentSize = AppConstants.intSetting(forKey: AppConstants.Keys.indentSize, default: AppConstants.Defaults.tabSize)
         let useSpacesForTabs = AppConstants.boolSetting(forKey: AppConstants.Keys.useSpacesForTabs, default: true)
 
@@ -33,8 +25,6 @@ enum EditorSettingsSync {
                 fontFamily: `\(escapedFamily)`,
                 fontSize: \(fontSize),
                 lineHeight: \(lineHeight),
-                showLineNumbers: \(showLineNumbers),
-                highlightCurrentLine: \(highlightCurrentLine),
                 indentSize: \(indentSize),
                 useSpacesForTabs: \(useSpacesForTabs)
             });

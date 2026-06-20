@@ -40,6 +40,7 @@ struct CodeMirrorWebView: NSViewRepresentable {
         contentController.add(context.coordinator, name: "outlineHeadings")
         contentController.add(context.coordinator, name: "editorUndoRedo")
         contentController.add(context.coordinator, name: "editorContentFlush")
+        contentController.add(context.coordinator, name: "documentContentLoaded")
         contentController.add(context.coordinator, name: "spellCheckRequest")
 
         #if DEBUG
@@ -92,9 +93,7 @@ struct CodeMirrorWebView: NSViewRepresentable {
         }
 
         if !context.coordinator.isUpdatingFromJS && context.coordinator.lastKnownText != text {
-            context.coordinator.lastKnownText = text
-            let escapedText = escapeForJS(text)
-            webView.evaluateJavaScript("window.cmEditor?.updateContent(`\(escapedText)`);", completionHandler: nil)
+            pushContentToEditor(text, webView: webView, coordinator: context.coordinator)
         }
 
         updateThemeAndMode(webView, context: context)
@@ -177,8 +176,91 @@ struct CodeMirrorWebView: NSViewRepresentable {
         case .live: return "live"
         case .preview: return "preview"
         case .split: return "split"
+        case .experimental: return "experimental"
         case .diff: return "preview"
         }
+    }
+
+    private static let inlineEditorContentLimit = 350_000
+    private static let contentImportChunkSize = 900_000
+
+    fileprivate func pushContentToEditor(
+        _ text: String,
+        webView: WKWebView,
+        coordinator: Coordinator,
+        completion: (() -> Void)? = nil
+    ) {
+        coordinator.beginDocumentLoad(expectedCharacterCount: text.count)
+        coordinator.lastKnownText = text
+
+        if text.count <= Self.inlineEditorContentLimit {
+            let escapedText = escapeForJS(text)
+            webView.evaluateJavaScript("window.cmEditor?.updateContent(`\(escapedText)`);") { _, _ in
+                completion?()
+            }
+            return
+        }
+
+        guard let data = text.data(using: .utf8) else {
+            coordinator.endDocumentLoad()
+            completion?()
+            return
+        }
+
+        let encoded = data.base64EncodedString()
+        var chunks: [String] = []
+        var start = encoded.startIndex
+        while start < encoded.endIndex {
+            let end = encoded.index(start, offsetBy: Self.contentImportChunkSize, limitedBy: encoded.endIndex) ?? encoded.endIndex
+            chunks.append(String(encoded[start..<end]))
+            start = end
+        }
+
+        webView.evaluateJavaScript("window.cmEditor?.beginContentImport(\(chunks.count));") { _, _ in
+            self.appendContentImportChunks(chunks, startingAt: 0, webView: webView) {
+                webView.evaluateJavaScript("window.cmEditor?.finishContentImport();") { _, _ in
+                    completion?()
+                }
+            }
+        }
+    }
+
+    private func appendContentImportChunks(
+        _ chunks: [String],
+        startingAt index: Int,
+        webView: WKWebView,
+        completion: @escaping () -> Void
+    ) {
+        guard index < chunks.count else {
+            completion()
+            return
+        }
+
+        let escaped = escapeForJS(chunks[index])
+        let script = "window.cmEditor?.appendContentImportChunk(\(index), `\(escaped)`);"
+        webView.evaluateJavaScript(script) { _, _ in
+            self.appendContentImportChunks(chunks, startingAt: index + 1, webView: webView, completion: completion)
+        }
+    }
+
+    private func finishEditorSetup(webView: WKWebView, viewMode: String, coordinator: Coordinator) {
+        webView.evaluateJavaScript("window.cmEditor?.setViewMode('\(viewMode)');")
+
+        let isSwapped = UserDefaults.standard.bool(forKey: "editorPanesSwapped")
+        webView.evaluateJavaScript("window.cmEditor?.setSwapped(\(isSwapped));")
+
+        let syncScroll = AppConstants.isPreviewSyncScrollEnabled
+        webView.evaluateJavaScript("window.cmEditor?.setSyncScroll(\(syncScroll));")
+        EditorSettingsSync.pushToEditor()
+        TypingSettingsSync.pushToEditor()
+
+        coordinator.pageLoaded = true
+        coordinator.flushPendingExecScripts(on: webView)
+        coordinator.lastKnownText = text
+        coordinator.lastAppearanceToken = appearanceToken
+        applyAppearance(to: webView, coordinator: coordinator)
+        syncDocumentPath(webView, coordinator: coordinator)
+        webView.evaluateJavaScript("window.cmEditor?.publishOutlineHeadings?.();")
     }
 
     private func escapeForJS(_ value: String) -> String {
@@ -205,6 +287,8 @@ struct CodeMirrorWebView: NSViewRepresentable {
         var lastDocumentBasePath: String?
         private var pendingExecScripts: [String] = []
         private var spellCheckWorkItem: DispatchWorkItem?
+        private var documentLoadExpectedCount = 0
+        private var documentLoadStartedAt: Date?
 
         init(_ parent: CodeMirrorWebView) {
             self.parent = parent
@@ -212,35 +296,57 @@ struct CodeMirrorWebView: NSViewRepresentable {
             self.lastAppearanceToken = parent.appearanceToken
         }
 
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            let escapedText = parent.escapeForJS(parent.text)
-            let initScript = "window.initializeEditor(`\(escapedText)`, \(parent.isDark));"
-            let viewMode = parent.jsViewModeName(parent.viewMode)
+        func beginDocumentLoad(expectedCharacterCount: Int) {
+            documentLoadExpectedCount = max(0, expectedCharacterCount)
+            documentLoadStartedAt = Date()
+        }
 
+        func endDocumentLoad() {
+            documentLoadExpectedCount = 0
+            documentLoadStartedAt = nil
+        }
+
+        func shouldIgnoreContentChange(_ newText: String) -> Bool {
+            guard documentLoadExpectedCount > 0 else { return false }
+            if newText.count >= max(256, documentLoadExpectedCount / 2) {
+                endDocumentLoad()
+                return false
+            }
+            if let started = documentLoadStartedAt, Date().timeIntervalSince(started) < 60 {
+                return true
+            }
+            endDocumentLoad()
+            return false
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            let viewMode = parent.jsViewModeName(parent.viewMode)
+            let useImport = parent.text.count > CodeMirrorWebView.inlineEditorContentLimit
+
+            let completeSetup = {
+                self.parent.finishEditorSetup(webView: webView, viewMode: viewMode, coordinator: self)
+            }
+
+            if useImport {
+                let initScript = "window.initializeEditor('', \(parent.isDark), null);"
+                webView.evaluateJavaScript(initScript) { _, error in
+                    if error != nil { return }
+                    self.parent.pushContentToEditor(self.parent.text, webView: webView, coordinator: self) {
+                        completeSetup()
+                    }
+                }
+                return
+            }
+
+            let escapedText = parent.escapeForJS(parent.text)
+            let initScript = "window.initializeEditor(`\(escapedText)`, \(parent.isDark), '\(viewMode)');"
             webView.evaluateJavaScript(initScript) { _, error in
                 if error != nil { return }
-
-                webView.evaluateJavaScript("window.cmEditor?.setViewMode('\(viewMode)');")
-
-                let isSwapped = UserDefaults.standard.bool(forKey: "editorPanesSwapped")
-                webView.evaluateJavaScript("window.cmEditor?.setSwapped(\(isSwapped));")
-
-                let syncScroll = AppConstants.isPreviewSyncScrollEnabled
-                webView.evaluateJavaScript("window.cmEditor?.setSyncScroll(\(syncScroll));")
-                EditorSettingsSync.pushToEditor()
-                TypingSettingsSync.pushToEditor()
-
-                self.pageLoaded = true
-                self.flushPendingExecScripts(on: webView)
-                self.lastKnownText = self.parent.text
-                self.lastAppearanceToken = self.parent.appearanceToken
-                self.parent.applyAppearance(to: webView, coordinator: self)
-                self.parent.syncDocumentPath(webView, coordinator: self)
-                webView.evaluateJavaScript("window.cmEditor?.publishOutlineHeadings?.();")
+                completeSetup()
             }
         }
 
-        private func flushPendingExecScripts(on webView: WKWebView) {
+        fileprivate func flushPendingExecScripts(on webView: WKWebView) {
             let scripts = pendingExecScripts
             pendingExecScripts.removeAll()
             for script in scripts {
@@ -268,12 +374,25 @@ struct CodeMirrorWebView: NSViewRepresentable {
             }
 
             if message.name == "contentChanged", let newText = message.body as? String {
+                if shouldIgnoreContentChange(newText) { return }
                 isUpdatingFromJS = true
                 lastKnownText = newText
                 scheduleSpellCheck(for: newText)
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
                     self.parent.text = newText
+                    self.isUpdatingFromJS = false
+                }
+            }
+
+            if message.name == "documentContentLoaded", let content = message.body as? String {
+                endDocumentLoad()
+                isUpdatingFromJS = true
+                lastKnownText = content
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.parent.text = content
+                    DocumentManager.shared?.refreshStatisticsForCurrentTab()
                     self.isUpdatingFromJS = false
                 }
             }

@@ -126,6 +126,7 @@ struct MarkdownEditorArea: View {
         }
         .onChange(of: documentManager.selectedTabID) { _, _ in
             loadDocumentContent()
+            documentManager.refreshStatisticsForCurrentTab()
             EditorAppearanceSync.pushToEditor()
         }
         .onChange(of: textContent) { _, newValue in

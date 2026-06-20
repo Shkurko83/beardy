@@ -24,15 +24,18 @@ enum SpellCheckSync {
     static func findMisspellings(in text: String) -> [TextRange] {
         guard !text.isEmpty else { return [] }
 
+        let scanLimit = 400_000
+        let scanText = text.count > scanLimit ? String(text.prefix(scanLimit)) : text
+
         let checker = NSSpellChecker.shared
         let language = spellingLanguage()
-        let nsLength = (text as NSString).length
+        let nsLength = (scanText as NSString).length
         var location = 0
         var results: [TextRange] = []
 
         while location < nsLength {
             let misspelled = checker.checkSpelling(
-                of: text,
+                of: scanText,
                 startingAt: location,
                 language: language,
                 wrap: false,

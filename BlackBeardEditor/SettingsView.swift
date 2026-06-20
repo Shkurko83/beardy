@@ -25,8 +25,6 @@ struct SettingsView: View {
     @AppStorage(AppConstants.Keys.autoPairBrackets) private var autoPairBrackets: Bool = true
     @AppStorage(AppConstants.Keys.autoPairQuotes) private var autoPairQuotes: Bool = true
     @AppStorage(AppConstants.Keys.autoCloseMarkdown) private var autoCloseMarkdown: Bool = true
-    @AppStorage("showLineNumbers") private var showLineNumbers: Bool = false
-    @AppStorage("highlightCurrentLine") private var highlightCurrentLine: Bool = true
     @AppStorage("indentSize") private var indentSize: Int = 4
     @AppStorage("useSpacesForTabs") private var useSpacesForTabs: Bool = true
     @AppStorage(AppConstants.Keys.previewSyncScroll) private var previewSyncScroll: Bool = true
@@ -46,7 +44,10 @@ struct SettingsView: View {
                 startupAction: $startupAction,
                 recoveryBackupEnabled: $recoveryBackupEnabled,
                 restoreOpenFilesOnLaunch: $restoreOpenFilesOnLaunch,
-                warnBeforeClosingUnsaved: $warnBeforeClosingUnsaved
+                warnBeforeClosingUnsaved: $warnBeforeClosingUnsaved,
+                fontSize: $editorFontSize,
+                lineHeight: $editorLineHeight,
+                fontFamily: $editorFontFamily
             )
             .tabItem {
                 Label("General", systemImage: "gearshape")
@@ -54,11 +55,6 @@ struct SettingsView: View {
             .tag(SettingsTab.general)
             
             EditorSettingsView(
-                fontSize: $editorFontSize,
-                lineHeight: $editorLineHeight,
-                fontFamily: $editorFontFamily,
-                showLineNumbers: $showLineNumbers,
-                highlightCurrentLine: $highlightCurrentLine,
                 indentSize: $indentSize,
                 useSpacesForTabs: $useSpacesForTabs,
                 copyImagesToDocumentFolder: $copyImagesToDocumentFolder
@@ -99,7 +95,7 @@ struct SettingsView: View {
             }
             .tag(SettingsTab.export)
         }
-        .frame(width: 600, height: 580)
+        .frame(width: 600, height: 640)
     }
 }
 
@@ -119,6 +115,11 @@ struct GeneralSettingsView: View {
     @Binding var recoveryBackupEnabled: Bool
     @Binding var restoreOpenFilesOnLaunch: Bool
     @Binding var warnBeforeClosingUnsaved: Bool
+    @Binding var fontSize: Double
+    @Binding var lineHeight: Double
+    @Binding var fontFamily: String
+
+    private let availableFonts = ["SF Mono", "Menlo", "Monaco", "Courier New", "Source Code Pro", "Fira Code"]
     
     var body: some View {
         Form {
@@ -127,6 +128,51 @@ struct GeneralSettingsView: View {
                     Text("General")
                         .font(.title2)
                         .fontWeight(.bold)
+                    
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Document Typography")
+                            .font(.headline)
+
+                        Text("Font family, size, and line height apply to Edit, Live, Preview, and Split.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        HStack {
+                            Text("Font family:")
+                            Spacer()
+                            Picker("", selection: $fontFamily) {
+                                ForEach(availableFonts, id: \.self) { font in
+                                    Text(font).tag(font)
+                                }
+                            }
+                            .frame(width: 200)
+                            .onChange(of: fontFamily) { _, _ in EditorSettingsSync.pushToEditor() }
+                        }
+
+                        HStack {
+                            Text("Font size:")
+                            Spacer()
+                            Slider(value: $fontSize, in: 10...24, step: 1)
+                                .frame(width: 200)
+                                .onChange(of: fontSize) { _, _ in EditorSettingsSync.pushToEditor() }
+                            Text("\(Int(fontSize))pt")
+                                .frame(width: 40, alignment: .trailing)
+                                .foregroundColor(.secondary)
+                        }
+
+                        HStack {
+                            Text("Line height:")
+                            Spacer()
+                            Slider(value: $lineHeight, in: 1.0...2.5, step: 0.1)
+                                .frame(width: 200)
+                                .onChange(of: lineHeight) { _, _ in EditorSettingsSync.pushToEditor() }
+                            Text(String(format: "%.1f", lineHeight))
+                                .frame(width: 40, alignment: .trailing)
+                                .foregroundColor(.secondary)
+                        }
+                    }
                     
                     Divider()
                     
@@ -184,16 +230,9 @@ struct GeneralSettingsView: View {
 
 // MARK: - Editor Settings
 struct EditorSettingsView: View {
-    @Binding var fontSize: Double
-    @Binding var lineHeight: Double
-    @Binding var fontFamily: String
-    @Binding var showLineNumbers: Bool
-    @Binding var highlightCurrentLine: Bool
     @Binding var indentSize: Int
     @Binding var useSpacesForTabs: Bool
     @Binding var copyImagesToDocumentFolder: Bool
-    
-    let availableFonts = ["SF Mono", "Menlo", "Monaco", "Courier New", "Source Code Pro", "Fira Code"]
     
     var body: some View {
         Form {
@@ -202,67 +241,6 @@ struct EditorSettingsView: View {
                     Text("Editor")
                         .font(.title2)
                         .fontWeight(.bold)
-                    
-                    Divider()
-                    
-                    // Font Settings
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Font")
-                            .font(.headline)
-                        
-                        HStack {
-                            Text("Font family:")
-                            Spacer()
-                            Picker("", selection: $fontFamily) {
-                                ForEach(availableFonts, id: \.self) { font in
-                                    Text(font).tag(font)
-                                }
-                            }
-                            .frame(width: 200)
-                            .onChange(of: fontFamily) { _, _ in EditorSettingsSync.pushToEditor() }
-                        }
-                        
-                        HStack {
-                            Text("Font size:")
-                            Spacer()
-                            Slider(value: $fontSize, in: 10...24, step: 1)
-                                .frame(width: 200)
-                                .onChange(of: fontSize) { _, _ in EditorSettingsSync.pushToEditor() }
-                            Text("\(Int(fontSize))pt")
-                                .frame(width: 40, alignment: .trailing)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        HStack {
-                            Text("Line height:")
-                            Spacer()
-                            Slider(value: $lineHeight, in: 1.0...2.5, step: 0.1)
-                                .frame(width: 200)
-                                .onChange(of: lineHeight) { _, _ in EditorSettingsSync.pushToEditor() }
-                            Text(String(format: "%.1f", lineHeight))
-                                .frame(width: 40, alignment: .trailing)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    
-                    Divider()
-                    
-                    // Display
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Display")
-                            .font(.headline)
-                        
-                        Toggle("Show line numbers", isOn: $showLineNumbers)
-                            .onChange(of: showLineNumbers) { _, enabled in
-                                if !enabled {
-                                    highlightCurrentLine = false
-                                }
-                                EditorSettingsSync.pushToEditor()
-                            }
-                        Toggle("Highlight current line", isOn: $highlightCurrentLine)
-                            .disabled(!showLineNumbers)
-                            .onChange(of: highlightCurrentLine) { _, _ in EditorSettingsSync.pushToEditor() }
-                    }
                     
                     Divider()
                     
