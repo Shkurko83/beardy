@@ -101,6 +101,12 @@ enum ThemeFamily: String, CaseIterable, Identifiable {
     case oneDark = "oneDark"
     case dracula = "dracula"
     case nord = "nord"
+    case ocean = "ocean"
+    case rosePine = "rosePine"
+    case forest = "forest"
+    case sunset = "sunset"
+    case gruvbox = "gruvbox"
+    case catppuccin = "catppuccin"
 
     var id: String { rawValue }
 
@@ -112,6 +118,12 @@ enum ThemeFamily: String, CaseIterable, Identifiable {
         case .oneDark: return "One Dark"
         case .dracula: return "Dracula"
         case .nord: return "Nord"
+        case .ocean: return "Ocean"
+        case .rosePine: return "Rosé Pine"
+        case .forest: return "Forest"
+        case .sunset: return "Sunset"
+        case .gruvbox: return "Gruvbox"
+        case .catppuccin: return "Catppuccin"
         }
     }
 
@@ -290,6 +302,180 @@ enum ThemeFamily: String, CaseIterable, Identifiable {
                     tableHeader: Color(hex: "#e5e9f0"),
                     tableStripe: Color(hex: "#eceff4")
                 )
+
+        case .ocean:
+            return isDark
+                ? ThemeColors(
+                    background: Color(hex: "#0a1929"),
+                    text: Color(hex: "#b2ccd6"),
+                    secondaryText: Color(hex: "#6e8a99"),
+                    heading: Color(hex: "#4fc3f7"),
+                    link: Color(hex: "#26c6da"),
+                    code: Color(hex: "#0d2438"),
+                    codeText: Color(hex: "#80cbc4"),
+                    selection: Color(hex: "#123047"),
+                    border: Color(hex: "#1e3a52"),
+                    tableHeader: Color(hex: "#0d2438"),
+                    tableStripe: Color(hex: "#0a1929")
+                )
+                : ThemeColors(
+                    background: Color(hex: "#f0f8ff"),
+                    text: Color(hex: "#1a3a4a"),
+                    secondaryText: Color(hex: "#5a7a8a"),
+                    heading: Color(hex: "#0277bd"),
+                    link: Color(hex: "#00838f"),
+                    code: Color(hex: "#e1f5fe"),
+                    codeText: Color(hex: "#00695c"),
+                    selection: Color(hex: "#b3e5fc"),
+                    border: Color(hex: "#b3d9f2"),
+                    tableHeader: Color(hex: "#e1f5fe"),
+                    tableStripe: Color(hex: "#f0f8ff")
+                )
+
+        case .rosePine:
+            return isDark
+                ? ThemeColors(
+                    background: Color(hex: "#191724"),
+                    text: Color(hex: "#e0def4"),
+                    secondaryText: Color(hex: "#908caa"),
+                    heading: Color(hex: "#eb6f92"),
+                    link: Color(hex: "#9ccfd8"),
+                    code: Color(hex: "#1f1d2e"),
+                    codeText: Color(hex: "#f6c177"),
+                    selection: Color(hex: "#26233a"),
+                    border: Color(hex: "#403d52"),
+                    tableHeader: Color(hex: "#1f1d2e"),
+                    tableStripe: Color(hex: "#191724")
+                )
+                : ThemeColors(
+                    background: Color(hex: "#faf4ed"),
+                    text: Color(hex: "#575279"),
+                    secondaryText: Color(hex: "#9893a5"),
+                    heading: Color(hex: "#b4637a"),
+                    link: Color(hex: "#286983"),
+                    code: Color(hex: "#fffaf3"),
+                    codeText: Color(hex: "#d7827e"),
+                    selection: Color(hex: "#f2e9e1"),
+                    border: Color(hex: "#dfdad9"),
+                    tableHeader: Color(hex: "#fffaf3"),
+                    tableStripe: Color(hex: "#faf4ed")
+                )
+
+        case .forest:
+            return isDark
+                ? ThemeColors(
+                    background: Color(hex: "#1a2419"),
+                    text: Color(hex: "#c8d9c6"),
+                    secondaryText: Color(hex: "#7a9478"),
+                    heading: Color(hex: "#81c784"),
+                    link: Color(hex: "#66bb6a"),
+                    code: Color(hex: "#243024"),
+                    codeText: Color(hex: "#aed581"),
+                    selection: Color(hex: "#2d402c"),
+                    border: Color(hex: "#3d523c"),
+                    tableHeader: Color(hex: "#243024"),
+                    tableStripe: Color(hex: "#1a2419")
+                )
+                : ThemeColors(
+                    background: Color(hex: "#f4faf3"),
+                    text: Color(hex: "#2e4a2c"),
+                    secondaryText: Color(hex: "#6b8f69"),
+                    heading: Color(hex: "#388e3c"),
+                    link: Color(hex: "#2e7d32"),
+                    code: Color(hex: "#e8f5e9"),
+                    codeText: Color(hex: "#558b2f"),
+                    selection: Color(hex: "#c8e6c9"),
+                    border: Color(hex: "#c5e1a5"),
+                    tableHeader: Color(hex: "#e8f5e9"),
+                    tableStripe: Color(hex: "#f4faf3")
+                )
+
+        case .sunset:
+            return isDark
+                ? ThemeColors(
+                    background: Color(hex: "#2a1810"),
+                    text: Color(hex: "#f0ddd4"),
+                    secondaryText: Color(hex: "#a88878"),
+                    heading: Color(hex: "#ffab91"),
+                    link: Color(hex: "#ff8a65"),
+                    code: Color(hex: "#3d2218"),
+                    codeText: Color(hex: "#ffcc80"),
+                    selection: Color(hex: "#4a2a1e"),
+                    border: Color(hex: "#5c3a2c"),
+                    tableHeader: Color(hex: "#3d2218"),
+                    tableStripe: Color(hex: "#2a1810")
+                )
+                : ThemeColors(
+                    background: Color(hex: "#fff8f3"),
+                    text: Color(hex: "#5c3d2e"),
+                    secondaryText: Color(hex: "#9a7565"),
+                    heading: Color(hex: "#e64a19"),
+                    link: Color(hex: "#f4511e"),
+                    code: Color(hex: "#ffe0b2"),
+                    codeText: Color(hex: "#ef6c00"),
+                    selection: Color(hex: "#ffccbc"),
+                    border: Color(hex: "#ffccbc"),
+                    tableHeader: Color(hex: "#ffe0b2"),
+                    tableStripe: Color(hex: "#fff8f3")
+                )
+
+        case .gruvbox:
+            return isDark
+                ? ThemeColors(
+                    background: Color(hex: "#282828"),
+                    text: Color(hex: "#ebdbb2"),
+                    secondaryText: Color(hex: "#a89984"),
+                    heading: Color(hex: "#fabd2f"),
+                    link: Color(hex: "#83a598"),
+                    code: Color(hex: "#3c3836"),
+                    codeText: Color(hex: "#fe8019"),
+                    selection: Color(hex: "#504945"),
+                    border: Color(hex: "#665c54"),
+                    tableHeader: Color(hex: "#3c3836"),
+                    tableStripe: Color(hex: "#282828")
+                )
+                : ThemeColors(
+                    background: Color(hex: "#fbf1c7"),
+                    text: Color(hex: "#3c3836"),
+                    secondaryText: Color(hex: "#7c6f64"),
+                    heading: Color(hex: "#b57614"),
+                    link: Color(hex: "#076678"),
+                    code: Color(hex: "#ebdbb2"),
+                    codeText: Color(hex: "#af3a03"),
+                    selection: Color(hex: "#d5c4a1"),
+                    border: Color(hex: "#d5c4a1"),
+                    tableHeader: Color(hex: "#ebdbb2"),
+                    tableStripe: Color(hex: "#fbf1c7")
+                )
+
+        case .catppuccin:
+            return isDark
+                ? ThemeColors(
+                    background: Color(hex: "#1e1e2e"),
+                    text: Color(hex: "#cdd6f4"),
+                    secondaryText: Color(hex: "#a6adc8"),
+                    heading: Color(hex: "#cba6f7"),
+                    link: Color(hex: "#89b4fa"),
+                    code: Color(hex: "#313244"),
+                    codeText: Color(hex: "#f38ba8"),
+                    selection: Color(hex: "#45475a"),
+                    border: Color(hex: "#585b70"),
+                    tableHeader: Color(hex: "#313244"),
+                    tableStripe: Color(hex: "#1e1e2e")
+                )
+                : ThemeColors(
+                    background: Color(hex: "#eff1f5"),
+                    text: Color(hex: "#4c4f69"),
+                    secondaryText: Color(hex: "#8c8fa1"),
+                    heading: Color(hex: "#8839ef"),
+                    link: Color(hex: "#1e66f5"),
+                    code: Color(hex: "#e6e9ef"),
+                    codeText: Color(hex: "#d20f39"),
+                    selection: Color(hex: "#dce0e8"),
+                    border: Color(hex: "#ccd0da"),
+                    tableHeader: Color(hex: "#e6e9ef"),
+                    tableStripe: Color(hex: "#eff1f5")
+                )
         }
     }
 
@@ -307,6 +493,18 @@ enum ThemeFamily: String, CaseIterable, Identifiable {
             return isDark ? .dracula : .vs
         case .nord:
             return isDark ? .atomOneDark : .xcode
+        case .ocean:
+            return isDark ? .githubDark : .github
+        case .rosePine:
+            return isDark ? .dracula : .atomOneLight
+        case .forest:
+            return isDark ? .monokai : .solarizedLight
+        case .sunset:
+            return isDark ? .monokai : .atomOneLight
+        case .gruvbox:
+            return isDark ? .monokai : .solarizedLight
+        case .catppuccin:
+            return isDark ? .dracula : .xcode
         }
     }
 }
@@ -802,85 +1000,239 @@ extension Color {
 
 struct ThemePickerView: View {
     @ObservedObject var themeService: ThemeService
+    @State private var showThemeBrowser = false
+
+    private var previewColors: ThemeColors {
+        themeService.themeFamily.colors(isDark: themeService.isDarkMode)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Editor Theme")
                 .font(.headline)
 
-            ForEach(ThemeFamily.allCases) { family in
-                ThemeFamilyRow(
-                    family: family,
-                    isSelected: themeService.themeFamily == family,
-                    isDark: themeService.isDarkMode
-                ) {
-                    themeService.selectThemeFamily(family)
-                }
-            }
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Picker("Theme", selection: Binding(
+                        get: { themeService.themeFamily },
+                        set: { themeService.selectThemeFamily($0) }
+                    )) {
+                        ForEach(ThemeFamily.allCases) { family in
+                            Text(family.displayName).tag(family)
+                        }
+                    }
+                    .frame(maxWidth: 220)
 
-            Toggle("Dark appearance", isOn: Binding(
-                get: { themeService.isDarkMode },
-                set: { themeService.setDarkMode($0) }
-            ))
-            .padding(.top, 4)
-
-            if themeService.followSystemAppearance {
-                Text("Turn off “Follow system” above to set light/dark manually.")
+                    Button("Browse all themes…") {
+                        showThemeBrowser = true
+                    }
+                    .buttonStyle(.link)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+
+                    Toggle("Dark appearance", isOn: Binding(
+                        get: { themeService.isDarkMode },
+                        set: { themeService.setDarkMode($0) }
+                    ))
+
+                    if themeService.followSystemAppearance {
+                        Text("Turn off “Follow system” above to set light/dark manually.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                ThemeDocumentPreview(colors: previewColors)
             }
+        }
+        .sheet(isPresented: $showThemeBrowser) {
+            ThemeBrowserSheet(themeService: themeService)
         }
     }
 }
 
-private struct ThemeFamilyRow: View {
+// MARK: - Theme preview sample
+
+private struct ThemeDocumentPreview: View {
+    let colors: ThemeColors
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("Sample Document")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(colors.heading)
+
+            Text("Body text in the editor and preview panes.")
+                .font(.system(size: 9))
+                .foregroundColor(colors.text)
+                .lineLimit(2)
+
+            HStack(spacing: 0) {
+                Text("See the ")
+                    .font(.system(size: 9))
+                    .foregroundColor(colors.text)
+                Text("documentation")
+                    .font(.system(size: 9))
+                    .foregroundColor(colors.link)
+                Text(".")
+                    .font(.system(size: 9))
+                    .foregroundColor(colors.text)
+            }
+
+            Text("inline")
+                .font(.system(size: 8, design: .monospaced))
+                .foregroundColor(colors.codeText)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
+                .background(colors.code)
+                .cornerRadius(3)
+
+            RoundedRectangle(cornerRadius: 4)
+                .fill(colors.code)
+                .frame(height: 26)
+                .overlay(
+                    Text("function hello() { }")
+                        .font(.system(size: 7.5, design: .monospaced))
+                        .foregroundColor(colors.secondaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 6)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(colors.border, lineWidth: 1)
+                )
+
+            HStack(alignment: .top, spacing: 5) {
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(colors.border)
+                    .frame(width: 3, height: 22)
+                Text("A short blockquote for contrast.")
+                    .font(.system(size: 8))
+                    .foregroundColor(colors.secondaryText)
+                    .lineLimit(2)
+            }
+
+            HStack(spacing: 0) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(colors.tableHeader)
+                    .frame(height: 14)
+                    .overlay(
+                        Text("Header")
+                            .font(.system(size: 7, weight: .semibold))
+                            .foregroundColor(colors.heading)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 2)
+                            .stroke(colors.border, lineWidth: 0.5)
+                    )
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(colors.tableStripe)
+                    .frame(height: 14)
+                    .overlay(
+                        Text("Cell")
+                            .font(.system(size: 7))
+                            .foregroundColor(colors.text)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 2)
+                            .stroke(colors.border, lineWidth: 0.5)
+                    )
+            }
+        }
+        .padding(10)
+        .frame(width: 196, alignment: .leading)
+        .background(colors.background)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(colors.border, lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Theme browser sheet
+
+private struct ThemeBrowserSheet: View {
+    @ObservedObject var themeService: ThemeService
+    @Environment(\.dismiss) private var dismiss
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 220, maximum: 260), spacing: 16)
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Choose Editor Theme")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                Spacer()
+                Toggle("Dark", isOn: Binding(
+                    get: { themeService.isDarkMode },
+                    set: { themeService.setDarkMode($0) }
+                ))
+                .toggleStyle(.switch)
+                .frame(width: 120)
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding()
+
+            Divider()
+
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: 16) {
+                    ForEach(ThemeFamily.allCases) { family in
+                        ThemeBrowserCard(
+                            family: family,
+                            isDark: themeService.isDarkMode,
+                            isSelected: themeService.themeFamily == family
+                        ) {
+                            themeService.selectThemeFamily(family)
+                        }
+                    }
+                }
+                .padding(20)
+            }
+        }
+        .frame(minWidth: 520, minHeight: 480)
+    }
+}
+
+private struct ThemeBrowserCard: View {
     let family: ThemeFamily
-    let isSelected: Bool
     let isDark: Bool
+    let isSelected: Bool
     let action: () -> Void
 
     @State private var isHovered = false
 
-    private var previewColors: ThemeColors {
+    private var colors: ThemeColors {
         family.colors(isDark: isDark)
     }
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(previewColors.background)
-                        .frame(width: 18, height: 18)
-                        .overlay(Circle().stroke(previewColors.border, lineWidth: 1))
-                    Circle()
-                        .fill(previewColors.heading)
-                        .frame(width: 18, height: 18)
-                    Circle()
-                        .fill(previewColors.link)
-                        .frame(width: 18, height: 18)
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
                     Text(family.displayName)
                         .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                    Text(isDark ? "Dark variant" : "Light variant")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                    Spacer()
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.accentColor)
+                    }
                 }
 
-                Spacer()
-
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.accentColor)
-                }
+                ThemeDocumentPreview(colors: colors)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(10)
             .background(
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: 10)
                     .fill(isHovered ? Color(NSColor.controlBackgroundColor) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(isSelected ? Color.accentColor : Color(NSColor.separatorColor), lineWidth: isSelected ? 2 : 1)
             )
         }
         .buttonStyle(.plain)
