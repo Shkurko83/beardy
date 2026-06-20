@@ -13,15 +13,15 @@
 		EB763A732F0EDF3000B17ECA /* codemirror-styles.css in Resources */ = {isa = PBXBuildFile; fileRef = EB763A722F0EDF2B00B17ECA /* codemirror-styles.css */; };
 		EB763A752F0EE01300B17ECA /* codemirror-script.js in Resources */ = {isa = PBXBuildFile; fileRef = EB763A742F0EE00E00B17ECA /* codemirror-script.js */; };
 		EB763A7A2F11736F00B17ECA /* codemirror-editor.html in Resources */ = {isa = PBXBuildFile; fileRef = EB763A792F11735D00B17ECA /* codemirror-editor.html */; };
+		EBAC00022F2900000040C1BB /* Ace in Resources */ = {isa = PBXBuildFile; fileRef = EBAC00012F2900000040C1BB /* Ace */; };
 		EBCM00022F2600000040C1BB /* codemirror-split.js in Resources */ = {isa = PBXBuildFile; fileRef = EBCM00012F2600000040C1BB /* codemirror-split.js */; };
-		EBVP00022F2700000040C1BB /* editor-virtual-preview.js in Resources */ = {isa = PBXBuildFile; fileRef = EBVP00012F2700000040C1BB /* editor-virtual-preview.js */; };
 		EBEX00022F2800000040C1BB /* editor-experimental.js in Resources */ = {isa = PBXBuildFile; fileRef = EBEX00012F2800000040C1BB /* editor-experimental.js */; };
 		EBEXCM022F2A00000040C1BB /* editor-experimental-cm.js in Resources */ = {isa = PBXBuildFile; fileRef = EBEXCM012F2A00000040C1BB /* editor-experimental-cm.js */; };
-		EBAC00022F2900000040C1BB /* Ace in Resources */ = {isa = PBXBuildFile; fileRef = EBAC00012F2900000040C1BB /* Ace */; };
-		EBMK00022F2700000040C1BB /* Marked in Resources */ = {isa = PBXBuildFile; fileRef = EBMK00012F2700000040C1BB /* Marked */; };
 		EBHL00022F2500000040C1BB /* HighlightJS in Resources */ = {isa = PBXBuildFile; fileRef = EBHL00012F2500000040C1BB /* HighlightJS */; };
 		EBKX00022F2500000040C1BB /* KaTeX in Resources */ = {isa = PBXBuildFile; fileRef = EBKX00012F2500000040C1BB /* KaTeX */; };
+		EBMK00022F2700000040C1BB /* Marked in Resources */ = {isa = PBXBuildFile; fileRef = EBMK00012F2700000040C1BB /* Marked */; };
 		EBMM00022F2500000040C1BB /* Mermaid in Resources */ = {isa = PBXBuildFile; fileRef = EBMM00012F2500000040C1BB /* Mermaid */; };
+		EBVP00022F2700000040C1BB /* editor-virtual-preview.js in Resources */ = {isa = PBXBuildFile; fileRef = EBVP00012F2700000040C1BB /* editor-virtual-preview.js */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -31,15 +31,15 @@
 		EB763A722F0EDF2B00B17ECA /* codemirror-styles.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = "codemirror-styles.css"; sourceTree = "<group>"; };
 		EB763A742F0EE00E00B17ECA /* codemirror-script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "codemirror-script.js"; sourceTree = "<group>"; };
 		EB763A792F11735D00B17ECA /* codemirror-editor.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = "codemirror-editor.html"; sourceTree = "<group>"; };
+		EBAC00012F2900000040C1BB /* Ace */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Ace; sourceTree = "<group>"; };
 		EBCM00012F2600000040C1BB /* codemirror-split.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "codemirror-split.js"; sourceTree = "<group>"; };
-		EBVP00012F2700000040C1BB /* editor-virtual-preview.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "editor-virtual-preview.js"; sourceTree = "<group>"; };
 		EBEX00012F2800000040C1BB /* editor-experimental.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "editor-experimental.js"; sourceTree = "<group>"; };
 		EBEXCM012F2A00000040C1BB /* editor-experimental-cm.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "editor-experimental-cm.js"; sourceTree = "<group>"; };
-		EBAC00012F2900000040C1BB /* Ace */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Ace; sourceTree = "<group>"; };
-		EBMK00012F2700000040C1BB /* Marked */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Marked; sourceTree = "<group>"; };
 		EBHL00012F2500000040C1BB /* HighlightJS */ = {isa = PBXFileReference; lastKnownFileType = folder; path = HighlightJS; sourceTree = "<group>"; };
 		EBKX00012F2500000040C1BB /* KaTeX */ = {isa = PBXFileReference; lastKnownFileType = folder; path = KaTeX; sourceTree = "<group>"; };
+		EBMK00012F2700000040C1BB /* Marked */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Marked; sourceTree = "<group>"; };
 		EBMM00012F2500000040C1BB /* Mermaid */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Mermaid; sourceTree = "<group>"; };
+		EBVP00012F2700000040C1BB /* editor-virtual-preview.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "editor-virtual-preview.js"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */

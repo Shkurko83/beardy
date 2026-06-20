@@ -259,6 +259,13 @@
                         overflow-y: auto;
                         overflow-x: hidden;
                     }
+                    body.mode-experimental.experimental-cm-active .markdown-editor-wrap {
+                        overflow: hidden;
+                    }
+                    body.mode-experimental.experimental-cm-active .markdown-editor-body {
+                        height: 100%;
+                        min-height: 0;
+                    }
                     body.mode-experimental #codemirror-split-root,
                     body.mode-experimental #markdown-spell-overlay,
                     body.mode-experimental #markdown-find-overlay {
@@ -2098,7 +2105,7 @@
                     scheduleMermaid: scheduleMermaidRenderAfterLayout,
                     appendFootnotes: appendFootnotesSection,
                     rewriteImages: rewriteImagesInContainer,
-                    preferSourceLineWindow: true,
+                    preferSourceLineWindow: false,
                     getSourceLineWindow: () => (
                         window.experimentalCodeMirror?.getVisibleSourceLineRange?.()
                         ?? { startLine: 0, endLine: 0 }
@@ -2240,6 +2247,10 @@
                     onChange: options.onChange,
                     onScroll: options.onScroll,
                 });
+                if (typeof applyExperimentalTextareaHeight === 'function') {
+                    applyExperimentalTextareaHeight();
+                }
+                if (markdownEditorScroll) markdownEditorScroll.scrollTop = 0;
             }
 
             function experimentalSetPreviewScrollTop(y, opts) {
@@ -2266,21 +2277,12 @@
             }
 
             function experimentalLayoutYToPreviewScroll(layoutY) {
-                const vp = window.virtualPreview;
-                const layoutH = vp?.totalContentHeight?.() ?? 0;
                 const maxScroll = experimentalPreviewScrollMax();
-                if (layoutH <= 0) return Math.max(0, layoutY ?? 0);
-                const ratio = Math.max(0, Math.min(1, (layoutY ?? 0) / layoutH));
-                return ratio * maxScroll;
+                return Math.max(0, Math.min(layoutY ?? 0, maxScroll));
             }
 
             function experimentalPreviewScrollToLayoutY(scrollTop) {
-                const vp = window.virtualPreview;
-                const layoutH = vp?.totalContentHeight?.() ?? 0;
-                const maxScroll = experimentalPreviewScrollMax();
-                if (maxScroll <= 0 || layoutH <= 0) return 0;
-                const ratio = Math.max(0, Math.min(1, (scrollTop ?? 0) / maxScroll));
-                return ratio * layoutH;
+                return Math.max(0, scrollTop ?? 0);
             }
 
             function experimentalGetSourceLineForLayoutY(layoutY) {
@@ -2647,21 +2649,32 @@
             let scheduleContentSync = debounce((text) => {
                 if (isLoadingDocumentContent) return;
                 if (isApplyingHistory) return;
-                if (window.webkit?.messageHandlers?.contentChanged) {
-                    isSyncing = true;
-                    window.webkit.messageHandlers.contentChanged.postMessage(text);
-                    setTimeout(() => { isSyncing = false; }, 400);
-                }
+                if (!editorTabSession.tabId) return;
+                isSyncing = true;
+                postEditorContentMessage('contentChanged', text);
+                setTimeout(() => { isSyncing = false; }, 400);
             }, 180);
 
             let contentImportChunks = [];
             let contentImportExpected = 0;
             let isLoadingDocumentContent = false;
+            let editorTabSession = { tabId: null, generation: 0 };
+
+            function postEditorContentMessage(handlerName, content) {
+                const handler = window.webkit?.messageHandlers?.[handlerName];
+                if (!handler || !editorTabSession.tabId) return;
+                handler.postMessage({
+                    tabId: editorTabSession.tabId,
+                    generation: editorTabSession.generation,
+                    content: content ?? ''
+                });
+            }
 
             function notifyNativeDocumentContentLoaded() {
-                if (!window.webkit?.messageHandlers?.documentContentLoaded) return;
-                const payload = textarea?.value ?? currentContent ?? '';
-                window.webkit.messageHandlers.documentContentLoaded.postMessage(payload);
+                postEditorContentMessage(
+                    'documentContentLoaded',
+                    textarea?.value ?? currentContent ?? ''
+                );
             }
 
             function beginDocumentContentLoad() {
@@ -3456,6 +3469,14 @@
                 const ta = textarea;
                 const wrap = markdownEditorScroll;
                 if (!ta || !wrap) return;
+                if (window.experimentalCodeMirror?.isActive?.()) {
+                    ta.style.height = '0';
+                    ta.style.minHeight = '0';
+                    ta.style.overflow = 'hidden';
+                    wrap.scrollTop = 0;
+                    syncSpellOverlayHeight();
+                    return;
+                }
                 const textLen = ta.value.length;
                 const minHeight = wrap.clientHeight;
                 const metrics = getGutterTypographyMetrics(ta);
@@ -5163,6 +5184,16 @@
             window.cmEditor = {
                 clearDocumentCache() {
                     clearDocumentRenderSurfaces();
+                },
+
+                setEditorTabSession(session) {
+                    const tabId = session?.tabId ?? null;
+                    const generation = Number(session?.generation) || 0;
+                    editorTabSession = { tabId, generation };
+                    scheduleContentSync.cancel();
+                    contentImportChunks = [];
+                    contentImportExpected = 0;
+                    beginDocumentContentLoad();
                 },
 
                 beginContentImport(chunkCount) {

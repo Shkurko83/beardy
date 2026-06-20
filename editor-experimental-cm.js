@@ -83,8 +83,8 @@
         }
 
         hooks = {
-            onChange: options.onChange,
-            onScroll: options.onScroll,
+            onChange: options.onChange ?? hooks.onChange,
+            onScroll: options.onScroll ?? hooks.onScroll,
         };
 
         const host = getHost();
@@ -208,8 +208,14 @@
         const line = getTopSourceLine();
         const sub = getSubLinePx();
         const text = view.state.doc.toString();
+        const savedOnChange = hooks.onChange;
+        const savedOnScroll = hooks.onScroll;
         unmount();
-        mount({ initialText: text });
+        mount({
+            initialText: text,
+            onChange: savedOnChange,
+            onScroll: savedOnScroll,
+        });
         setScrollTop(scrollForLine(line, sub));
     }
 

@@ -109,6 +109,8 @@ struct MarkdownEditorArea: View {
                 text: $textContent,
                 selectedRange: $selectedRange,
                 currentDocumentURL: documentManager.currentDocument?.url,
+                editorTabID: documentManager.selectedTabID,
+                editorGeneration: documentManager.editorPresentation.generation,
                 isDark: themeService.isDarkMode,
                 viewMode: documentManager.viewMode,
                 editorTheme: themeService.currentTheme,

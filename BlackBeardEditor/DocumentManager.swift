@@ -38,6 +38,8 @@ class DocumentManager: ObservableObject {
     @Published var diffCoordinator = DiffModeCoordinator()
     /// Bumped when diff HTML changes so SwiftUI reloads the diff web view.
     @Published private(set) var diffRenderRevision: UInt = 0
+    /// Which tab/generation the shared WebView is allowed to read and write.
+    @Published private(set) var editorPresentation = EditorPresentationState()
 
     /// Comparison source / external file per editor tab.
     private var tabDiffSettingsByTabID: [UUID: TabDiffSettings] = [:]
@@ -62,6 +64,8 @@ class DocumentManager: ObservableObject {
     private var isApplyingUndoRedo = false
     private var lastUndoRedoActionTime: Date?
     private var editorFlushHandler: ((String) -> Void)?
+    private var isTabSwitchInProgress = false
+    private var queuedTabSelection: UUID?
     private var recoveryWriteWorkItems: [UUID: DispatchWorkItem] = [:]
     private var sessionSaveWorkItem: DispatchWorkItem?
     private var lastAutoSaveCheck: Date = .distantPast
@@ -197,11 +201,41 @@ class DocumentManager: ObservableObject {
     }
     
     // MARK: - Tabs
+
     func selectTab(_ id: UUID) {
         guard tabs.contains(where: { $0.id == id }) else { return }
+        guard id != selectedTabID else { return }
+
+        if isTabSwitchInProgress {
+            queuedTabSelection = id
+            return
+        }
+
+        guard let previous = selectedTabID else {
+            commitEditorTabSelection(to: id)
+            drainQueuedTabSelectionIfNeeded()
+            return
+        }
+
+        isTabSwitchInProgress = true
+        flushEditorContent { [weak self] content in
+            guard let self else { return }
+            self.applyContent(toTabID: previous, content: content, recordUndo: false)
+            self.isTabSwitchInProgress = false
+            self.commitEditorTabSelection(to: id)
+            self.drainQueuedTabSelectionIfNeeded()
+        }
+    }
+
+    private func commitEditorTabSelection(to id: UUID) {
         if let previous = selectedTabID, previous != id {
             captureDiffSettings(forTabID: previous)
         }
+
+        editorPresentation.generation &+= 1
+        editorPresentation.tabID = id
+        editorPresentation.isReady = false
+
         DocumentSecurityAccess.deactivate()
         selectedTabID = id
         applyDiffSettings(forTabID: id)
@@ -217,6 +251,36 @@ class DocumentManager: ObservableObject {
             reloadDiffModeForCurrentTab(resetSnapshotSelection: false)
         }
         scheduleSessionSave()
+    }
+
+    private func drainQueuedTabSelectionIfNeeded() {
+        guard !isTabSwitchInProgress,
+              let queued = queuedTabSelection,
+              queued != selectedTabID else {
+            queuedTabSelection = nil
+            return
+        }
+        queuedTabSelection = nil
+        selectTab(queued)
+    }
+
+    func markEditorPresentationReady(_ message: EditorContentMessage) {
+        guard message.tabID == editorPresentation.tabID,
+              message.generation == editorPresentation.generation else { return }
+        editorPresentation.isReady = true
+    }
+
+    func shouldAcceptEditorContent(_ message: EditorContentMessage, source: EditorContentDeliverySource) -> Bool {
+        guard message.tabID == editorPresentation.tabID,
+              message.generation == editorPresentation.generation else {
+            return false
+        }
+        switch source {
+        case .userEdit:
+            return editorPresentation.isReady
+        case .documentLoaded, .flush:
+            return true
+        }
     }
 
     func closeTab(_ id: UUID) {
@@ -244,13 +308,14 @@ class DocumentManager: ObservableObject {
         if selectedTabID == id {
             if tabs.isEmpty {
                 selectedTabID = nil
+                editorPresentation = EditorPresentationState()
                 NotificationCenter.default.post(
                     name: .editorExecJS,
                     object: "window.cmEditor?.clearDocumentCache?.();"
                 )
             } else {
-                let nextIndex = min(index, tabs.count - 1)
-                selectedTabID = tabs[nextIndex].id
+                let nextTab = tabs[min(index, tabs.count - 1)]
+                commitEditorTabSelection(to: nextTab.id)
             }
         }
         if let url = currentDocument?.url {
@@ -306,20 +371,8 @@ class DocumentManager: ObservableObject {
         }
         let tab = EditorTab(document: doc)
         tabs.append(tab)
-        if let previous = selectedTabID {
-            captureDiffSettings(forTabID: previous)
-        }
-        selectedTabID = tab.id
-        applyDiffSettings(forTabID: tab.id)
         resetUndoHistory(for: tab.id, content: doc.content)
-        if let url = doc.url {
-            DocumentSecurityAccess.activate(document: url)
-            persistLastOpenedDocument(path: url.path)
-        }
-        if viewMode == .diff {
-            reloadDiffModeForCurrentTab(resetSnapshotSelection: false)
-        }
-        scheduleSessionSave()
+        selectTab(tab.id)
     }
 
     private func nextUntitledFileName() -> String {
@@ -652,6 +705,12 @@ class DocumentManager: ObservableObject {
         }
 
         if explicitContent == nil {
+            if isTabSwitchInProgress
+                || editorPresentation.tabID != id
+                || !editorPresentation.isReady {
+                saveDocument(to: url, content: tabs[index].document.content)
+                return
+            }
             flushEditorContent(forSave: true) { [weak self] content in
                 self?.saveDocument(to: url, content: content)
             }
@@ -1161,12 +1220,17 @@ class DocumentManager: ObservableObject {
     }
     
     func updateContent(_ newContent: String, recordUndo: Bool = true) {
-        guard let id = selectedTabID,
-              let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        guard let id = selectedTabID else { return }
+        guard editorPresentation.tabID == id, editorPresentation.isReady else { return }
+        applyContent(toTabID: id, content: newContent, recordUndo: recordUndo)
+    }
+
+    private func applyContent(toTabID id: UUID, content newContent: String, recordUndo: Bool) {
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         var doc = tabs[index].document
         guard doc.content != newContent else { return }
 
-        if recordUndo && !isApplyingUndoRedo {
+        if recordUndo && !isApplyingUndoRedo && id == selectedTabID {
             ensureUndoHistory(for: id, content: doc.content)
             if var history = undoHistories[id] {
                 history.record(content: newContent)
@@ -1179,9 +1243,11 @@ class DocumentManager: ObservableObject {
         doc.hasUnsavedChanges = true
         doc.lastModifiedDate = Date()
         tabs[index].document = doc
-        scheduleStatisticsUpdate(tabIndex: index)
-        scheduleOutlineUpdate()
-        scheduleRecoveryBackup(for: id)
+        if id == selectedTabID {
+            scheduleStatisticsUpdate(tabIndex: index)
+            scheduleOutlineUpdate()
+            scheduleRecoveryBackup(for: id)
+        }
     }
 
     func resetUndoHistory(for tabID: UUID, content: String) {
@@ -2071,7 +2137,10 @@ class DocumentManager: ObservableObject {
 
         guard let doc = currentDocument,
               doc.hasUnsavedChanges,
-              doc.url != nil else { return }
+              doc.url != nil,
+              !isTabSwitchInProgress,
+              editorPresentation.tabID == selectedTabID,
+              editorPresentation.isReady else { return }
 
         saveDocument()
     }

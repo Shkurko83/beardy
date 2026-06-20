@@ -6,6 +6,8 @@ struct CodeMirrorWebView: NSViewRepresentable {
     @Binding var text: String
     @Binding var selectedRange: NSRange
     let currentDocumentURL: URL?
+    let editorTabID: UUID?
+    let editorGeneration: UInt
     let isDark: Bool
     let viewMode: ViewMode
     let editorTheme: EditorThemeIdentity
@@ -92,12 +94,37 @@ struct CodeMirrorWebView: NSViewRepresentable {
             context.coordinator.lastDocumentURL = docURL
         }
 
-        if !context.coordinator.isUpdatingFromJS && context.coordinator.lastKnownText != text {
+        let tabID = context.coordinator.parent.editorTabID
+        let generation = context.coordinator.parent.editorGeneration
+        let sessionChanged = context.coordinator.lastSessionTabID != tabID
+            || context.coordinator.lastSessionGeneration != generation
+
+        if sessionChanged, let tabID {
+            context.coordinator.lastSessionTabID = tabID
+            context.coordinator.lastSessionGeneration = generation
+            setEditorTabSession(tabID: tabID, generation: generation, webView: webView) {
+                self.pushContentToEditor(text, webView: webView, coordinator: context.coordinator)
+            }
+        } else if !context.coordinator.isUpdatingFromJS && context.coordinator.lastKnownText != text {
             pushContentToEditor(text, webView: webView, coordinator: context.coordinator)
         }
 
         updateThemeAndMode(webView, context: context)
         syncDocumentPath(webView, coordinator: context.coordinator)
+    }
+
+    private func setEditorTabSession(
+        tabID: UUID,
+        generation: UInt,
+        webView: WKWebView,
+        completion: @escaping () -> Void
+    ) {
+        let script = """
+        window.cmEditor?.setEditorTabSession?.({ tabId: '\(tabID.uuidString)', generation: \(generation) });
+        """
+        webView.evaluateJavaScript(script) { _, _ in
+            completion()
+        }
     }
 
     private func syncDocumentPath(_ webView: WKWebView, coordinator: Coordinator) {
@@ -285,6 +312,8 @@ struct CodeMirrorWebView: NSViewRepresentable {
         var lastAppearanceToken: String?
         var lastDocumentURL: URL?
         var lastDocumentBasePath: String?
+        var lastSessionTabID: UUID?
+        var lastSessionGeneration: UInt?
         private var pendingExecScripts: [String] = []
         private var spellCheckWorkItem: DispatchWorkItem?
         private var documentLoadExpectedCount = 0
@@ -327,22 +356,34 @@ struct CodeMirrorWebView: NSViewRepresentable {
                 self.parent.finishEditorSetup(webView: webView, viewMode: viewMode, coordinator: self)
             }
 
-            if useImport {
-                let initScript = "window.initializeEditor('', \(parent.isDark), null);"
+            let loadEditorContent = {
+                if useImport {
+                    let initScript = "window.initializeEditor('', \(self.parent.isDark), null);"
+                    webView.evaluateJavaScript(initScript) { _, error in
+                        if error != nil { return }
+                        self.parent.pushContentToEditor(self.parent.text, webView: webView, coordinator: self) {
+                            completeSetup()
+                        }
+                    }
+                    return
+                }
+
+                let escapedText = self.parent.escapeForJS(self.parent.text)
+                let initScript = "window.initializeEditor(`\(escapedText)`, \(self.parent.isDark), '\(viewMode)');"
                 webView.evaluateJavaScript(initScript) { _, error in
                     if error != nil { return }
-                    self.parent.pushContentToEditor(self.parent.text, webView: webView, coordinator: self) {
-                        completeSetup()
-                    }
+                    completeSetup()
                 }
-                return
             }
 
-            let escapedText = parent.escapeForJS(parent.text)
-            let initScript = "window.initializeEditor(`\(escapedText)`, \(parent.isDark), '\(viewMode)');"
-            webView.evaluateJavaScript(initScript) { _, error in
-                if error != nil { return }
-                completeSetup()
+            if let tabID = parent.editorTabID {
+                lastSessionTabID = tabID
+                lastSessionGeneration = parent.editorGeneration
+                parent.setEditorTabSession(tabID: tabID, generation: parent.editorGeneration, webView: webView) {
+                    loadEditorContent()
+                }
+            } else {
+                loadEditorContent()
             }
         }
 
@@ -373,25 +414,34 @@ struct CodeMirrorWebView: NSViewRepresentable {
                 }
             }
 
-            if message.name == "contentChanged", let newText = message.body as? String {
-                if shouldIgnoreContentChange(newText) { return }
+            if message.name == "contentChanged" {
+                guard let payload = Self.parseEditorContentMessage(message.body),
+                      DocumentManager.shared?.shouldAcceptEditorContent(payload, source: .userEdit) == true else {
+                    return
+                }
+                if shouldIgnoreContentChange(payload.content) { return }
                 isUpdatingFromJS = true
-                lastKnownText = newText
-                scheduleSpellCheck(for: newText)
+                lastKnownText = payload.content
+                scheduleSpellCheck(for: payload.content)
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
-                    self.parent.text = newText
+                    self.parent.text = payload.content
                     self.isUpdatingFromJS = false
                 }
             }
 
-            if message.name == "documentContentLoaded", let content = message.body as? String {
+            if message.name == "documentContentLoaded" {
+                guard let payload = Self.parseEditorContentMessage(message.body),
+                      DocumentManager.shared?.shouldAcceptEditorContent(payload, source: .documentLoaded) == true else {
+                    return
+                }
                 endDocumentLoad()
                 isUpdatingFromJS = true
-                lastKnownText = content
+                lastKnownText = payload.content
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
-                    self.parent.text = content
+                    self.parent.text = payload.content
+                    DocumentManager.shared?.markEditorPresentationReady(payload)
                     DocumentManager.shared?.refreshStatisticsForCurrentTab()
                     self.isUpdatingFromJS = false
                 }
@@ -508,6 +558,26 @@ struct CodeMirrorWebView: NSViewRepresentable {
             }
             spellCheckWorkItem = work
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.2, execute: work)
+        }
+
+        private static func parseEditorContentMessage(_ body: Any) -> EditorContentMessage? {
+            guard let dict = body as? [String: Any],
+                  let tabIdStr = dict["tabId"] as? String,
+                  let tabID = UUID(uuidString: tabIdStr),
+                  let content = dict["content"] as? String else {
+                return nil
+            }
+            let generation: UInt
+            if let value = dict["generation"] as? UInt {
+                generation = value
+            } else if let value = dict["generation"] as? Int, value >= 0 {
+                generation = UInt(value)
+            } else if let value = dict["generation"] as? Double, value >= 0 {
+                generation = UInt(value)
+            } else {
+                return nil
+            }
+            return EditorContentMessage(tabID: tabID, generation: generation, content: content)
         }
     }
 }

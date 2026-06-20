@@ -107,6 +107,12 @@ enum ThemeFamily: String, CaseIterable, Identifiable {
     case sunset = "sunset"
     case gruvbox = "gruvbox"
     case catppuccin = "catppuccin"
+    case midnight = "midnight"
+    case lavender = "lavender"
+    case paper = "paper"
+    case cobalt = "cobalt"
+    case sakura = "sakura"
+    case ink = "ink"
 
     var id: String { rawValue }
 
@@ -124,6 +130,12 @@ enum ThemeFamily: String, CaseIterable, Identifiable {
         case .sunset: return "Sunset"
         case .gruvbox: return "Gruvbox"
         case .catppuccin: return "Catppuccin"
+        case .midnight: return "Midnight"
+        case .lavender: return "Lavender"
+        case .paper: return "Paper"
+        case .cobalt: return "Cobalt"
+        case .sakura: return "Sakura"
+        case .ink: return "Ink"
         }
     }
 
@@ -476,6 +488,180 @@ enum ThemeFamily: String, CaseIterable, Identifiable {
                     tableHeader: Color(hex: "#e6e9ef"),
                     tableStripe: Color(hex: "#eff1f5")
                 )
+
+        case .midnight:
+            return isDark
+                ? ThemeColors(
+                    background: Color(hex: "#070b14"),
+                    text: Color(hex: "#c8d0e0"),
+                    secondaryText: Color(hex: "#6b7694"),
+                    heading: Color(hex: "#a5b4fc"),
+                    link: Color(hex: "#818cf8"),
+                    code: Color(hex: "#0f1629"),
+                    codeText: Color(hex: "#f472b6"),
+                    selection: Color(hex: "#1a2240"),
+                    border: Color(hex: "#252f4a"),
+                    tableHeader: Color(hex: "#0f1629"),
+                    tableStripe: Color(hex: "#070b14")
+                )
+                : ThemeColors(
+                    background: Color(hex: "#f5f7ff"),
+                    text: Color(hex: "#1e293b"),
+                    secondaryText: Color(hex: "#64748b"),
+                    heading: Color(hex: "#4338ca"),
+                    link: Color(hex: "#4f46e5"),
+                    code: Color(hex: "#e8ecff"),
+                    codeText: Color(hex: "#be185d"),
+                    selection: Color(hex: "#c7d2fe"),
+                    border: Color(hex: "#c7d2fe"),
+                    tableHeader: Color(hex: "#e8ecff"),
+                    tableStripe: Color(hex: "#f5f7ff")
+                )
+
+        case .lavender:
+            return isDark
+                ? ThemeColors(
+                    background: Color(hex: "#16121f"),
+                    text: Color(hex: "#e8e0f0"),
+                    secondaryText: Color(hex: "#9d8fb8"),
+                    heading: Color(hex: "#d8b4fe"),
+                    link: Color(hex: "#c084fc"),
+                    code: Color(hex: "#221c30"),
+                    codeText: Color(hex: "#f0abfc"),
+                    selection: Color(hex: "#2d2540"),
+                    border: Color(hex: "#3d3354"),
+                    tableHeader: Color(hex: "#221c30"),
+                    tableStripe: Color(hex: "#16121f")
+                )
+                : ThemeColors(
+                    background: Color(hex: "#faf5ff"),
+                    text: Color(hex: "#4c1d95"),
+                    secondaryText: Color(hex: "#7c6a9a"),
+                    heading: Color(hex: "#7e22ce"),
+                    link: Color(hex: "#9333ea"),
+                    code: Color(hex: "#f3e8ff"),
+                    codeText: Color(hex: "#a21caf"),
+                    selection: Color(hex: "#e9d5ff"),
+                    border: Color(hex: "#ddd6fe"),
+                    tableHeader: Color(hex: "#f3e8ff"),
+                    tableStripe: Color(hex: "#faf5ff")
+                )
+
+        case .paper:
+            return isDark
+                ? ThemeColors(
+                    background: Color(hex: "#1c1810"),
+                    text: Color(hex: "#e8dcc8"),
+                    secondaryText: Color(hex: "#a89878"),
+                    heading: Color(hex: "#d4a574"),
+                    link: Color(hex: "#c9956c"),
+                    code: Color(hex: "#2a2418"),
+                    codeText: Color(hex: "#e6b17a"),
+                    selection: Color(hex: "#3a3220"),
+                    border: Color(hex: "#4a4030"),
+                    tableHeader: Color(hex: "#2a2418"),
+                    tableStripe: Color(hex: "#1c1810")
+                )
+                : ThemeColors(
+                    background: Color(hex: "#faf6ee"),
+                    text: Color(hex: "#3d3428"),
+                    secondaryText: Color(hex: "#8a7960"),
+                    heading: Color(hex: "#8b6914"),
+                    link: Color(hex: "#a16207"),
+                    code: Color(hex: "#f0e8d8"),
+                    codeText: Color(hex: "#92400e"),
+                    selection: Color(hex: "#e8dcc8"),
+                    border: Color(hex: "#ddd0b8"),
+                    tableHeader: Color(hex: "#f0e8d8"),
+                    tableStripe: Color(hex: "#faf6ee")
+                )
+
+        case .cobalt:
+            return isDark
+                ? ThemeColors(
+                    background: Color(hex: "#0c1222"),
+                    text: Color(hex: "#cbd5e1"),
+                    secondaryText: Color(hex: "#64748b"),
+                    heading: Color(hex: "#38bdf8"),
+                    link: Color(hex: "#0ea5e9"),
+                    code: Color(hex: "#111827"),
+                    codeText: Color(hex: "#7dd3fc"),
+                    selection: Color(hex: "#1e293b"),
+                    border: Color(hex: "#334155"),
+                    tableHeader: Color(hex: "#111827"),
+                    tableStripe: Color(hex: "#0c1222")
+                )
+                : ThemeColors(
+                    background: Color(hex: "#ffffff"),
+                    text: Color(hex: "#0f172a"),
+                    secondaryText: Color(hex: "#475569"),
+                    heading: Color(hex: "#0369a1"),
+                    link: Color(hex: "#0284c7"),
+                    code: Color(hex: "#f0f9ff"),
+                    codeText: Color(hex: "#0c4a6e"),
+                    selection: Color(hex: "#bae6fd"),
+                    border: Color(hex: "#e2e8f0"),
+                    tableHeader: Color(hex: "#f0f9ff"),
+                    tableStripe: Color(hex: "#ffffff")
+                )
+
+        case .sakura:
+            return isDark
+                ? ThemeColors(
+                    background: Color(hex: "#1a1018"),
+                    text: Color(hex: "#f5dce8"),
+                    secondaryText: Color(hex: "#b08898"),
+                    heading: Color(hex: "#f9a8d4"),
+                    link: Color(hex: "#f472b6"),
+                    code: Color(hex: "#261620"),
+                    codeText: Color(hex: "#fda4af"),
+                    selection: Color(hex: "#3a2030"),
+                    border: Color(hex: "#4a3040"),
+                    tableHeader: Color(hex: "#261620"),
+                    tableStripe: Color(hex: "#1a1018")
+                )
+                : ThemeColors(
+                    background: Color(hex: "#fff5f8"),
+                    text: Color(hex: "#701a3a"),
+                    secondaryText: Color(hex: "#a85878"),
+                    heading: Color(hex: "#db2777"),
+                    link: Color(hex: "#e11d48"),
+                    code: Color(hex: "#ffe4ec"),
+                    codeText: Color(hex: "#be123c"),
+                    selection: Color(hex: "#fecdd3"),
+                    border: Color(hex: "#fecdd3"),
+                    tableHeader: Color(hex: "#ffe4ec"),
+                    tableStripe: Color(hex: "#fff5f8")
+                )
+
+        case .ink:
+            return isDark
+                ? ThemeColors(
+                    background: Color(hex: "#0a0a0a"),
+                    text: Color(hex: "#e5e5e5"),
+                    secondaryText: Color(hex: "#737373"),
+                    heading: Color(hex: "#ffffff"),
+                    link: Color(hex: "#d4d4d4"),
+                    code: Color(hex: "#171717"),
+                    codeText: Color(hex: "#fafafa"),
+                    selection: Color(hex: "#262626"),
+                    border: Color(hex: "#404040"),
+                    tableHeader: Color(hex: "#171717"),
+                    tableStripe: Color(hex: "#0a0a0a")
+                )
+                : ThemeColors(
+                    background: Color(hex: "#ffffff"),
+                    text: Color(hex: "#171717"),
+                    secondaryText: Color(hex: "#737373"),
+                    heading: Color(hex: "#000000"),
+                    link: Color(hex: "#404040"),
+                    code: Color(hex: "#f5f5f5"),
+                    codeText: Color(hex: "#262626"),
+                    selection: Color(hex: "#e5e5e5"),
+                    border: Color(hex: "#d4d4d4"),
+                    tableHeader: Color(hex: "#f5f5f5"),
+                    tableStripe: Color(hex: "#ffffff")
+                )
         }
     }
 
@@ -505,6 +691,18 @@ enum ThemeFamily: String, CaseIterable, Identifiable {
             return isDark ? .monokai : .solarizedLight
         case .catppuccin:
             return isDark ? .dracula : .xcode
+        case .midnight:
+            return isDark ? .githubDark : .xcode
+        case .lavender:
+            return isDark ? .dracula : .atomOneLight
+        case .paper:
+            return isDark ? .monokai : .solarizedLight
+        case .cobalt:
+            return isDark ? .githubDark : .github
+        case .sakura:
+            return isDark ? .dracula : .vs
+        case .ink:
+            return isDark ? .vs2015 : .vs
         }
     }
 }
