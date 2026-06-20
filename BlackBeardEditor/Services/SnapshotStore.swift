@@ -90,8 +90,12 @@ enum SnapshotStore {
         if let path = document.url?.path {
             sessionCache.removeValue(forKey: path)
             sessionCache.removeValue(forKey: URL(fileURLWithPath: path).standardizedFileURL.path)
+            sessionCache.removeValue(forKey: URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path)
         }
         sessionCache.removeValue(forKey: "id:\(document.id.uuidString)")
+
+        // Overwrite both storage locations with an empty history (delete alone can fail silently).
+        _ = save([], for: document)
 
         try? FileManager.default.removeItem(at: libraryURL(for: document))
 
@@ -104,6 +108,8 @@ enum SnapshotStore {
                 try? FileManager.default.removeItem(at: sidecar)
             }
         }
+
+        sessionCache[key] = []
     }
 
     /// Most recent ⌘S snapshot.
@@ -117,13 +123,14 @@ enum SnapshotStore {
         current: String
     ) -> DocumentSnapshot? {
         let candidates = snapshots.filter { $0.label != "Unsaved" }
-        if let match = candidates.first(where: { $0.content != current }) {
-            return match
-        }
-        if candidates.count >= 2, candidates[0].content == current {
+        guard !candidates.isEmpty else { return nil }
+
+        if candidates[0].content == current {
+            guard candidates.count >= 2 else { return nil }
             return candidates[1]
         }
-        return nil
+
+        return candidates[0]
     }
 
     /// Moves history from an untitled document id to a saved file path (Save As).

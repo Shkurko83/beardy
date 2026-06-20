@@ -600,8 +600,7 @@ class DocumentManager: ObservableObject {
             _ = SnapshotStore.append(
                 content: content,
                 label: SnapshotStore.onOpenLabel,
-                to: doc,
-                carryingForward: SnapshotStore.load(for: doc)
+                to: doc
             )
             if inNewTab {
                 openInNewTab(doc)
@@ -686,8 +685,7 @@ class DocumentManager: ObservableObject {
             diffCoordinator.snapshots = SnapshotStore.append(
                 content: snapshotContent,
                 label: SnapshotStore.saveLabel,
-                to: doc,
-                carryingForward: diffCoordinator.snapshots
+                to: doc
             )
             DocumentSecurityAccess.activate(document: url)
             saveToRecent(doc)
@@ -802,7 +800,7 @@ class DocumentManager: ObservableObject {
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
         SnapshotStore.clearHistory(for: doc)
-        diffCoordinator.snapshots = []
+        diffCoordinator.snapshots = SnapshotStore.load(for: doc)
         diffCoordinator.comparisonSource = .previousVersion
         diffCoordinator.selectedSnapshotID = nil
         diffCoordinator.externalBaseline = nil
