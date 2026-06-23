@@ -40,6 +40,11 @@
         return Number.isFinite(parsed) && parsed > 0 ? parsed : 22.4;
     }
 
+    function sourceLineBlockHeightPx(line) {
+        const h = hooks.getSourceLineBlockHeight?.(line);
+        return Number.isFinite(h) && h > 0 ? h : lineHeightPx();
+    }
+
     function estimateBlockHeight(block, lh) {
         const src = block?.source || '';
         const lines = src ? src.split('\n').length : 1;
@@ -62,6 +67,21 @@
     }
 
     function buildLayout(blocks) {
+        const external = hooks.getDocumentLayout?.();
+        if (external?.length === blocks.length) {
+            const lh = lineHeightPx();
+            state.layout = external.map((entry, index) => ({
+                index: entry.index ?? index,
+                line: Number.isFinite(entry.line) ? entry.line : 0,
+                top: entry.top ?? 0,
+                height: entry.height > 0
+                    ? entry.height
+                    : estimateBlockHeight(blocks[index], lh),
+                measured: !!entry.measured,
+            }));
+            return state.layout;
+        }
+
         const lh = lineHeightPx();
         let top = 0;
         state.layout = blocks.map((block, index) => {
@@ -112,6 +132,11 @@
         for (let i = fromIndex + 1; i < state.layout.length; i++) {
             state.layout[i].top += delta;
         }
+        hooks.syncDocumentLayout?.(state.layout);
+    }
+
+    function notifyLayoutSync() {
+        hooks.syncDocumentLayout?.(state.layout);
     }
 
     function totalContentHeight() {
@@ -354,8 +379,8 @@
         const nextIdx = seg.index + 1;
         const next = layout[nextIdx];
         const lineSpan = next && next.line > seg.line ? next.line - seg.line : 8;
-        const lh = lineHeightPx();
-        const frac = Math.max(0, Math.min(1, (line - seg.line + (subLinePx || 0) / lh) / lineSpan));
+        const srcBlockH = sourceLineBlockHeightPx(line);
+        const frac = Math.max(0, Math.min(1, (line - seg.line + (subLinePx || 0) / srcBlockH) / lineSpan));
         const segHeight = next
             ? Math.max(seg.height, next.top - seg.top)
             : seg.height;
@@ -406,6 +431,7 @@
 
         state.active = true;
         syncWindow();
+        notifyLayoutSync();
         hooks.onReady?.(state.layout);
         return true;
     }
@@ -463,6 +489,7 @@
             replaceBlockEl(i);
         }
         rebuildLayoutFrom(firstChange);
+        notifyLayoutSync();
 
         const { startIndex, endIndex } = visibleWindowIndices();
         updateSpacers(startIndex, endIndex);

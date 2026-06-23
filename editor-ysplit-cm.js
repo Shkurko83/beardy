@@ -1,8 +1,8 @@
 /**
- * CodeMirror 6 source pane for X-Split only (plain text, no syntax highlight).
- * Isolated from edit/split sourceCodeMirror.
+ * CodeMirror 6 source pane for Y-Split only (plain text, no syntax highlight).
+ * Isolated from edit/split/X-Split source editors.
  */
-(function experimentalCodeMirrorModule(global) {
+(function ySplitCodeMirrorModule(global) {
     'use strict';
 
     let view = null;
@@ -18,13 +18,13 @@
     }
 
     function getHost() {
-        return document.getElementById('experimental-cm-root');
+        return document.getElementById('ysplit-cm-root');
     }
 
     function applyDomState(active) {
         const ta = document.getElementById('markdown-textarea');
         const host = getHost();
-        document.body.classList.toggle('experimental-cm-active', !!active);
+        document.body.classList.toggle('ysplit-cm-active', !!active);
         if (ta) ta.style.display = active ? 'none' : '';
         if (host) host.style.display = active ? 'block' : 'none';
     }
@@ -96,7 +96,9 @@
 
         if (view) {
             syncText(text);
-            if (Number.isFinite(options.scrollTop)) {
+            if (Number.isFinite(options.initialLine)) {
+                setScrollTop(scrollForLine(options.initialLine, options.initialSub ?? 0));
+            } else if (Number.isFinite(options.scrollTop)) {
                 view.scrollDOM.scrollTop = options.scrollTop;
             }
             return view;
@@ -113,7 +115,9 @@
 
         view.scrollDOM.addEventListener('scroll', () => hooks.onScroll?.(), { passive: true });
 
-        if (Number.isFinite(options.scrollTop)) {
+        if (Number.isFinite(options.initialLine)) {
+            view.scrollDOM.scrollTop = scrollForLine(options.initialLine, options.initialSub ?? 0);
+        } else if (Number.isFinite(options.scrollTop)) {
             view.scrollDOM.scrollTop = options.scrollTop;
         }
         if (options.focus) {
@@ -159,25 +163,25 @@
         return Math.max(0, line.number - 1);
     }
 
-    function getVisibleSourceLineRange() {
-        if (!view) return { startLine: 0, endLine: 0 };
-        const scrollTop = view.scrollDOM.scrollTop;
-        const viewport = view.scrollDOM.clientHeight;
-        const topBlock = view.lineBlockAtHeight(scrollTop);
-        const bottomBlock = view.lineBlockAtHeight(scrollTop + Math.max(viewport, 1));
-        const startLine = Math.max(0, view.state.doc.lineAt(topBlock.from).number - 1);
-        const endLine = Math.max(
-            startLine,
-            view.state.doc.lineAt(bottomBlock.from).number - 1
-        );
-        return { startLine, endLine };
-    }
-
     function getSubLinePx() {
         if (!view) return 0;
         const scrollTop = view.scrollDOM.scrollTop;
         const block = view.lineBlockAtHeight(scrollTop);
         return Math.max(0, scrollTop - block.top);
+    }
+
+    /** MacDown anchor scan — approximate Y, called only for headings. */
+    function getLineBlockY(lineIndex) {
+        if (!view || lineIndex < 0) return 0;
+        const lineN = Math.min(Math.max(1, lineIndex + 1), view.state.doc.lines);
+        try {
+            const lineObj = view.state.doc.line(lineN);
+            const block = view.lineBlockAt(lineObj.from);
+            return block.top;
+        } catch {
+            const lh = view.defaultLineHeight || 22.4;
+            return 40 + lineIndex * lh;
+        }
     }
 
     function scrollForLine(line, subLinePx) {
@@ -230,19 +234,52 @@
         });
     }
 
-    global.experimentalCodeMirror = {
+    function getContent() {
+        return view ? view.state.doc.toString() : '';
+    }
+
+    function getVisibleSourceLineRange() {
+        if (!view) return { startLine: 0, endLine: 0 };
+        const scrollTop = view.scrollDOM.scrollTop;
+        const viewport = view.scrollDOM.clientHeight;
+        const topBlock = view.lineBlockAtHeight(scrollTop);
+        const bottomBlock = view.lineBlockAtHeight(scrollTop + Math.max(viewport, 1));
+        const startLine = Math.max(0, view.state.doc.lineAt(topBlock.from).number - 1);
+        const endLine = Math.max(
+            startLine,
+            view.state.doc.lineAt(bottomBlock.from).number - 1
+        );
+        return { startLine, endLine };
+    }
+
+    function getLineBlockHeight(lineIndex) {
+        if (!view) return getLineHeight();
+        const lineN = Math.min(Math.max(1, lineIndex + 1), view.state.doc.lines);
+        try {
+            const lineObj = view.state.doc.line(lineN);
+            const block = view.lineBlockAt(lineObj.from);
+            return block.height || getLineHeight();
+        } catch {
+            return getLineHeight();
+        }
+    }
+
+    global.ySplitCodeMirror = {
         isActive,
         mount,
         unmount,
         syncText,
         getScrollElement,
         getTopSourceLine,
-        getVisibleSourceLineRange,
         getSubLinePx,
+        getLineBlockY,
         scrollForLine,
         setScrollTop,
         getLineHeight,
         getLineCount,
+        getContent,
+        getVisibleSourceLineRange,
+        getLineBlockHeight,
         refreshTheme,
     };
 })(window);

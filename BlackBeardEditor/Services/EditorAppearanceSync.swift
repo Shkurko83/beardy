@@ -18,23 +18,20 @@ enum EditorAppearanceSync {
             focusDimLines: UserDefaults.standard.bool(forKey: AppConstants.Keys.focusDimInactiveLines),
             focusHideToolbar: readingChromeActive()
         )
-        NotificationCenter.default.post(name: .editorExecJS, object: js)
+        NotificationCenter.default.post(name: .editorExecJS, object: EditorExecJSPayload(script: js, target: .activeTab))
     }
 
     static func pushLineNumbers() {
         let enabled = UserDefaults.standard.bool(forKey: AppConstants.Keys.showCodeLineNumbers)
-        NotificationCenter.default.post(
-            name: .editorExecJS,
-            object: "window.cmEditor?.setShowLineNumbers(\(enabled));"
-        )
+        EditorExecJS.post("window.cmEditor?.setShowLineNumbers(\(enabled));", target: .allMounted)
     }
 
     static func pushFocusMode() {
         let dim = UserDefaults.standard.bool(forKey: AppConstants.Keys.focusDimInactiveLines)
         let active = readingChromeActive()
-        NotificationCenter.default.post(
-            name: .editorExecJS,
-            object: "window.cmEditor?.setFocusMode(\(active), \(dim), \(active));"
+        EditorExecJS.post(
+            "window.cmEditor?.setFocusMode(\(active), \(dim), \(active));",
+            target: .activeTab
         )
     }
 

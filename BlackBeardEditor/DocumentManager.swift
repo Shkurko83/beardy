@@ -63,9 +63,8 @@ class DocumentManager: ObservableObject {
     private var undoHistories: [UUID: DocumentUndoHistory] = [:]
     private var isApplyingUndoRedo = false
     private var lastUndoRedoActionTime: Date?
-    private var editorFlushHandler: ((String) -> Void)?
-    private var isTabSwitchInProgress = false
-    private var queuedTabSelection: UUID?
+    private var readyTabIDs: Set<UUID> = []
+    private var tabExpectedCharacterCounts: [UUID: Int] = [:]
     private var recoveryWriteWorkItems: [UUID: DispatchWorkItem] = [:]
     private var sessionSaveWorkItem: DispatchWorkItem?
     private var lastAutoSaveCheck: Date = .distantPast
@@ -206,35 +205,31 @@ class DocumentManager: ObservableObject {
         guard tabs.contains(where: { $0.id == id }) else { return }
         guard id != selectedTabID else { return }
 
-        if isTabSwitchInProgress {
-            queuedTabSelection = id
-            return
+        if let previous = selectedTabID {
+            EditorWebViewPool.shared.flushPendingSync(for: previous)
         }
 
-        guard let previous = selectedTabID else {
-            commitEditorTabSelection(to: id)
-            drainQueuedTabSelectionIfNeeded()
-            return
-        }
-
-        isTabSwitchInProgress = true
-        flushEditorContent { [weak self] content in
-            guard let self else { return }
-            self.applyContent(toTabID: previous, content: content, recordUndo: false)
-            self.isTabSwitchInProgress = false
-            self.commitEditorTabSelection(to: id)
-            self.drainQueuedTabSelectionIfNeeded()
-        }
+        onPrepareTabMount?(id)
+        commitEditorTabSelection(to: id)
+        EditorWebViewPool.shared.activateTab(id, documentManager: self)
     }
+
+    /// Called by the editor view before `selectedTabID` changes so the next WebView can mount in the same frame.
+    var onPrepareTabMount: ((UUID) -> Void)?
 
     private func commitEditorTabSelection(to id: UUID) {
         if let previous = selectedTabID, previous != id {
             captureDiffSettings(forTabID: previous)
+            readyTabIDs.remove(previous)
         }
 
-        editorPresentation.generation &+= 1
+        if let tab = tabs.first(where: { $0.id == id }) {
+            tabExpectedCharacterCounts[id] = tab.document.content.count
+        }
+
         editorPresentation.tabID = id
-        editorPresentation.isReady = false
+        editorPresentation.isReady = readyTabIDs.contains(id)
+        editorPresentation.expectedCharacterCount = tabExpectedCharacterCounts[id] ?? 0
 
         DocumentSecurityAccess.deactivate()
         selectedTabID = id
@@ -253,34 +248,66 @@ class DocumentManager: ObservableObject {
         scheduleSessionSave()
     }
 
-    private func drainQueuedTabSelectionIfNeeded() {
-        guard !isTabSwitchInProgress,
-              let queued = queuedTabSelection,
-              queued != selectedTabID else {
-            queuedTabSelection = nil
+    func markTabEditorReady(_ tabID: UUID) {
+        readyTabIDs.insert(tabID)
+        if tabID == selectedTabID {
+            editorPresentation.isReady = true
+            refreshStatisticsForCurrentTab()
+        }
+    }
+
+    func markTabEditorEvicted(_ tabID: UUID) {
+        readyTabIDs.remove(tabID)
+        tabExpectedCharacterCounts.removeValue(forKey: tabID)
+        if tabID == selectedTabID {
+            editorPresentation.isReady = false
+        }
+    }
+
+    func isTabEditorReady(_ tabID: UUID) -> Bool {
+        readyTabIDs.contains(tabID)
+    }
+
+    func applyEditorContent(tabID: UUID, content: String, recordUndo: Bool) {
+        if let model = tabs.first(where: { $0.id == tabID })?.document.content,
+           model.isEmpty,
+           content.count > 1024,
+           !readyTabIDs.contains(tabID) {
+            NSLog("Editor: ignored stray content for empty tab \(tabID)")
             return
         }
-        queuedTabSelection = nil
-        selectTab(queued)
+        applyContent(toTabID: tabID, content: content, recordUndo: recordUndo && tabID == selectedTabID)
+        tabExpectedCharacterCounts[tabID] = content.count
+        if tabID == selectedTabID {
+            editorPresentation.expectedCharacterCount = content.count
+        }
     }
 
     func markEditorPresentationReady(_ message: EditorContentMessage) {
-        guard message.tabID == editorPresentation.tabID,
-              message.generation == editorPresentation.generation else { return }
-        editorPresentation.isReady = true
+        markTabEditorReady(message.tabID)
     }
 
     func shouldAcceptEditorContent(_ message: EditorContentMessage, source: EditorContentDeliverySource) -> Bool {
-        guard message.tabID == editorPresentation.tabID,
-              message.generation == editorPresentation.generation else {
-            return false
-        }
+        guard tabs.contains(where: { $0.id == message.tabID }) else { return false }
         switch source {
         case .userEdit:
-            return editorPresentation.isReady
-        case .documentLoaded, .flush:
+            return isTabEditorReady(message.tabID)
+        case .documentLoaded:
+            return contentMatchesPresentationExpectation(message.content, tabID: message.tabID)
+        case .flush:
             return true
         }
+    }
+
+    private func contentMatchesPresentationExpectation(_ content: String, tabID: UUID) -> Bool {
+        let expected = tabExpectedCharacterCounts[tabID] ?? editorPresentation.expectedCharacterCount
+        let actual = content.count
+        if expected == 0 {
+            return actual == 0
+        }
+        if actual == expected { return true }
+        let tolerance = max(128, expected / 50)
+        return abs(actual - expected) <= tolerance
     }
 
     func closeTab(_ id: UUID) {
@@ -309,15 +336,13 @@ class DocumentManager: ObservableObject {
             if tabs.isEmpty {
                 selectedTabID = nil
                 editorPresentation = EditorPresentationState()
-                NotificationCenter.default.post(
-                    name: .editorExecJS,
-                    object: "window.cmEditor?.clearDocumentCache?.();"
-                )
+                EditorExecJS.post("window.cmEditor?.clearDocumentCache?.();", target: .allMounted)
             } else {
                 let nextTab = tabs[min(index, tabs.count - 1)]
-                commitEditorTabSelection(to: nextTab.id)
+                selectTab(nextTab.id)
             }
         }
+        NotificationCenter.default.post(name: .editorTabDidClose, object: id)
         if let url = currentDocument?.url {
             DocumentSecurityAccess.activate(document: url)
         } else {
@@ -371,6 +396,8 @@ class DocumentManager: ObservableObject {
         }
         let tab = EditorTab(document: doc)
         tabs.append(tab)
+        tabExpectedCharacterCounts[tab.id] = doc.content.count
+        readyTabIDs.remove(tab.id)
         resetUndoHistory(for: tab.id, content: doc.content)
         selectTab(tab.id)
     }
@@ -452,6 +479,7 @@ class DocumentManager: ObservableObject {
             )
             let tab = EditorTab(id: saved.id, document: doc)
             tabs.append(tab)
+            tabExpectedCharacterCounts[saved.id] = doc.content.count
             saveToRecent(doc)
             return
         }
@@ -461,6 +489,7 @@ class DocumentManager: ObservableObject {
             content: saved.untitledContent ?? ""
         )
         tabs.append(EditorTab(id: saved.id, document: doc))
+        tabExpectedCharacterCounts[saved.id] = doc.content.count
     }
 
     private func offerRecoveryBackupsIfNeeded() {
@@ -705,13 +734,12 @@ class DocumentManager: ObservableObject {
         }
 
         if explicitContent == nil {
-            if isTabSwitchInProgress
-                || editorPresentation.tabID != id
-                || !editorPresentation.isReady {
+            if !isTabEditorReady(id) {
                 saveDocument(to: url, content: tabs[index].document.content)
                 return
             }
-            flushEditorContent(forSave: true) { [weak self] content in
+            let fallback = tabs[index].document.content
+            EditorWebViewPool.shared.flushContent(for: id, fallback: fallback) { [weak self] content in
                 self?.saveDocument(to: url, content: content)
             }
             return
@@ -1026,7 +1054,7 @@ class DocumentManager: ObservableObject {
         return SnapshotStore.load(for: document).first(where: { $0.id == id })?.content
     }
 
-    /// Pulls the latest text from CodeMirror before save / entering Diff.
+    /// Pulls the latest text from the active tab's WebView before save / export / Diff.
     func flushEditorContent(
         allowDuringDiffTransition: Bool = false,
         forSave: Bool = false,
@@ -1036,43 +1064,16 @@ class DocumentManager: ObservableObject {
             completion(currentDocument?.content ?? "")
             return
         }
-
-        var finished = false
-        let finish: (String) -> Void = { content in
-            guard !finished else { return }
-            finished = true
-            self.editorFlushHandler = nil
-            completion(content)
+        guard let tabID = selectedTabID else {
+            completion(currentDocument?.content ?? "")
+            return
         }
-
-        editorFlushHandler = { content in
-            finish(content)
+        let fallback = tabs.first(where: { $0.id == tabID })?.document.content ?? ""
+        if !isTabEditorReady(tabID) {
+            completion(fallback)
+            return
         }
-
-        execEditorJS(
-            """
-            (function() {
-                var c = window.cmEditor?.getContent?.() || '';
-                if (window.webkit?.messageHandlers?.editorContentFlush) {
-                    window.webkit.messageHandlers.editorContentFlush.postMessage(c);
-                }
-            })();
-            """
-        )
-
-        let timeout = forSave ? 2.0 : 0.35
-        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) { [weak self] in
-            guard !finished else { return }
-            let fallback = self?.currentDocument?.content ?? ""
-            if forSave {
-                NSLog("SnapshotStore: editor flush timed out; using in-memory document content")
-            }
-            finish(fallback)
-        }
-    }
-
-    func deliverFlushedEditorContent(_ content: String) {
-        editorFlushHandler?(content)
+        EditorWebViewPool.shared.flushContent(for: tabID, fallback: fallback, completion: completion)
     }
 
     private func applyEditorContentForDiff(_ content: String) {
@@ -1221,8 +1222,8 @@ class DocumentManager: ObservableObject {
     
     func updateContent(_ newContent: String, recordUndo: Bool = true) {
         guard let id = selectedTabID else { return }
-        guard editorPresentation.tabID == id, editorPresentation.isReady else { return }
-        applyContent(toTabID: id, content: newContent, recordUndo: recordUndo)
+        guard isTabEditorReady(id) else { return }
+        applyEditorContent(tabID: id, content: newContent, recordUndo: recordUndo)
     }
 
     private func applyContent(toTabID id: UUID, content newContent: String, recordUndo: Bool) {
@@ -1913,8 +1914,8 @@ class DocumentManager: ObservableObject {
         insertText(markdown)
     }
 
-    private func execEditorJS(_ js: String) {
-        NotificationCenter.default.post(name: .editorExecJS, object: js)
+    private func execEditorJS(_ js: String, target: EditorExecTarget = .activeTab) {
+        EditorExecJS.post(js, target: target)
     }
 
     
@@ -2138,9 +2139,8 @@ class DocumentManager: ObservableObject {
         guard let doc = currentDocument,
               doc.hasUnsavedChanges,
               doc.url != nil,
-              !isTabSwitchInProgress,
-              editorPresentation.tabID == selectedTabID,
-              editorPresentation.isReady else { return }
+              let tabID = selectedTabID,
+              isTabEditorReady(tabID) else { return }
 
         saveDocument()
     }

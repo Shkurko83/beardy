@@ -1,5 +1,6 @@
 /**
  * CodeMirror 6 source pane for large documents (Edit + Split).
+ * Plain text only — no markdown syntax highlighting (matches X-Split).
  * Requires editor.bundle.js (window.CM) loaded first. Offline.
  */
 (function sourceCodeMirrorModule(global) {
@@ -79,10 +80,8 @@
     }
 
     function buildExtensions() {
-        const { EditorView, basicSetup, markdown } = global.CM;
+        const { EditorView } = global.CM;
         return [
-            basicSetup,
-            markdown(),
             EditorView.lineWrapping,
             buildTheme(),
             EditorView.updateListener.of((update) => {
@@ -111,6 +110,11 @@
 
         if (view) {
             syncFromTextarea(options.initialText);
+            if (Number.isFinite(options.initialLine)) {
+                setScrollTop(scrollForLine(options.initialLine, options.initialSub ?? 0));
+            } else if (Number.isFinite(options.scrollTop)) {
+                setScrollTop(options.scrollTop);
+            }
             return view;
         }
 
@@ -128,7 +132,9 @@
         scrollHandler = () => hooks.onScroll?.();
         view.scrollDOM.addEventListener('scroll', scrollHandler, { passive: true });
 
-        if (Number.isFinite(options.scrollTop)) {
+        if (Number.isFinite(options.initialLine)) {
+            view.scrollDOM.scrollTop = scrollForLine(options.initialLine, options.initialSub ?? 0);
+        } else if (Number.isFinite(options.scrollTop)) {
             view.scrollDOM.scrollTop = options.scrollTop;
         }
         if (options.focus) {
@@ -187,12 +193,23 @@
         const sub = getSubLinePx();
         const sel = view.state.selection.main;
         const text = view.state.doc.toString();
+        const savedOnChange = hooks.onChange;
+        const savedOnScroll = hooks.onScroll;
         unmount();
-        mount({ initialText: text });
-        setScrollTop(scrollForLine(line, sub));
-        if (view) {
-            view.dispatch({ selection: { anchor: sel.anchor, head: sel.head } });
-        }
+        mount({
+            initialText: text,
+            onChange: savedOnChange,
+            onScroll: savedOnScroll,
+        });
+        const restore = () => {
+            setScrollTop(scrollForLine(line, sub));
+            if (view) {
+                view.dispatch({ selection: { anchor: sel.anchor, head: sel.head } });
+            }
+        };
+        requestAnimationFrame(() => {
+            requestAnimationFrame(restore);
+        });
     }
 
     function getScrollElement() {

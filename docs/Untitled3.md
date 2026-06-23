@@ -1,4 +1,4 @@
-444
+555
 # Обход SSL/certificate pinning через Frida
 
 ## 1. Зачем атакующему обходить pinning и как работает Frida

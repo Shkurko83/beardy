@@ -275,6 +275,55 @@
                         display: block !important;
                     }
 
+                    /* Y-Split: MacDown-style header-anchored scroll sync */
+                    body.mode-ysplit #live-editor { display: none; }
+                    body.mode-ysplit #editor-container { display: flex; }
+                    body.mode-ysplit #markdown-pane {
+                        display: block;
+                        width: 50% !important;
+                        height: 100%;
+                    }
+                    body.mode-ysplit #preview-pane {
+                        display: block;
+                        width: 50% !important;
+                        height: 100%;
+                        overflow-x: hidden;
+                        overflow-y: auto;
+                        -webkit-overflow-scrolling: touch;
+                    }
+                    body.mode-ysplit #markdown-textarea {
+                        display: none !important;
+                    }
+                    #ysplit-cm-root {
+                        display: none;
+                        position: absolute;
+                        inset: 0;
+                        width: 100%;
+                        height: 100%;
+                        z-index: 4;
+                    }
+                    body.mode-ysplit #ysplit-cm-root,
+                    body.mode-ysplit.ysplit-cm-active #ysplit-cm-root {
+                        display: block;
+                    }
+                    body.mode-ysplit .markdown-editor-wrap {
+                        overflow-y: auto;
+                        overflow-x: hidden;
+                    }
+                    body.mode-ysplit.ysplit-cm-active .markdown-editor-wrap {
+                        overflow: hidden;
+                    }
+                    body.mode-ysplit.ysplit-cm-active .markdown-editor-body {
+                        height: 100%;
+                        min-height: 0;
+                    }
+                    body.mode-ysplit #codemirror-split-root,
+                    body.mode-ysplit #experimental-cm-root,
+                    body.mode-ysplit #markdown-spell-overlay,
+                    body.mode-ysplit #markdown-find-overlay {
+                        display: none !important;
+                    }
+
                     body.mode-live #live-editor { display: block; }
                     body.mode-live #editor-container { display: none; }
                     body.mode-live #markdown-pane { display: none; }
@@ -1273,6 +1322,7 @@
                     "></textarea>
                         <div id="codemirror-split-root" aria-label="Markdown source editor"></div>
                         <div id="experimental-cm-root" aria-label="Markdown source (X-Split)"></div>
+                        <div id="ysplit-cm-root" aria-label="Markdown source (Y-Split)"></div>
                         <div id="experimental-ace-root" aria-hidden="true" hidden></div>
                         <div id="markdown-spell-overlay" class="editor-source-metrics" aria-hidden="true"></div>
                         <div id="markdown-find-overlay" class="editor-source-metrics" aria-hidden="true"></div>
@@ -1288,9 +1338,13 @@
         <script src="Marked/marked.min.js"></script>
         <script src="editor.bundle.js"></script>
         <script src="codemirror-split.js"></script>
+        <script src="editor-document-index.js"></script>
         <script src="editor-virtual-preview.js"></script>
         <script src="editor-experimental-cm.js"></script>
         <script src="editor-experimental.js"></script>
+        <script src="editor-ysplit-sync.js"></script>
+        <script src="editor-ysplit-cm.js"></script>
+        <script src="editor-ysplit.js"></script>
         
         <script>
             console.log('🎉 Загрузка скрипта');
@@ -1539,7 +1593,7 @@
 
                 const mode = document.body.className.match(/mode-(\w+)/)?.[1] || 'edit';
                 // Split: always plain textarea — no syntax overlay (scroll sync uses line metrics).
-                if (mode === 'split' || mode === 'experimental') {
+                if (mode === 'split' || mode === 'experimental' || mode === 'ysplit') {
                     mirror.innerHTML = '';
                     mirror.style.display = 'none';
                     ta.classList.remove('source-mirror-active');
@@ -2105,6 +2159,10 @@
                     scheduleMermaid: scheduleMermaidRenderAfterLayout,
                     appendFootnotes: appendFootnotesSection,
                     rewriteImages: rewriteImagesInContainer,
+                    getDocumentLayout: () => window.documentIndex?.getLayout?.() ?? [],
+                    syncDocumentLayout: (layout) => {
+                        window.documentIndex?.applyMeasuredLayout?.(layout);
+                    },
                     preferSourceLineWindow: false,
                     getSourceLineWindow: () => (
                         window.experimentalCodeMirror?.getVisibleSourceLineRange?.()
@@ -2113,11 +2171,19 @@
                     getScrollElement: () => previewPane || preview,
                     getScrollTop: () => (previewPane || preview)?.scrollTop ?? 0,
                     onLayoutSettled: () => {
+                        if (window.virtualPreview?.isActive?.()) {
+                            window.documentIndex?.applyMeasuredLayout?.(
+                                window.virtualPreview.getLayout()
+                            );
+                        }
                         if (window.experimentalEditor?.isActive?.()) {
                             window.experimentalEditor.resyncAfterLayout?.();
                         }
                     },
                     onReady: () => {
+                        window.documentIndex?.applyMeasuredLayout?.(
+                            window.virtualPreview.getLayout()
+                        );
                         markPreviewRendered(currentContent ?? textarea?.value ?? '');
                         options.onComplete?.();
                     },
@@ -2168,12 +2234,12 @@
             function mountExperimentalPreview(text, options = {}) {
                 const container = preview;
                 if (!container) return;
-                const normalized = normalizeMarkdownImages(text || '');
-                const { text: withoutRefs, refs, footnotes, lineMap } = extractLinkReferenceDefinitions(normalized);
-                linkReferenceMap = refs;
-                footnoteMap = footnotes;
-                let blocks = parseMarkdownBlocks(withoutRefs, lineMap);
-                blocks = coalesceHTMLBlocks(blocks);
+                const doc = window.documentIndex.ensure(text || '');
+                linkReferenceMap = doc.refs;
+                footnoteMap = doc.footnotes;
+                const blocks = doc.blocks;
+                const footnotes = doc.footnotes;
+                const normalized = doc.normalizedText;
                 container.dataset.experimentalPreview = '1';
 
                 const vp = window.virtualPreview;
@@ -2376,6 +2442,447 @@
                 }
             }
 
+            function isYSplitMode() {
+                return document.body.classList.contains('mode-ysplit');
+            }
+
+            function clearYSplitScrollMaps() {
+                ysplitVpLastSyncLine = -1;
+            }
+
+            let ysplitVpLastSyncLine = -1;
+            let ysplitSuppressPreviewScroll = false;
+
+            function ysplitPreviewScrollMax() {
+                const el = previewPane;
+                return Math.max(0, (el?.scrollHeight ?? 0) - (el?.clientHeight ?? 0));
+            }
+
+            function ysplitLayoutYToPreviewScroll(layoutY) {
+                return Math.max(0, Math.min(layoutY ?? 0, ysplitPreviewScrollMax()));
+            }
+
+            function ysplitEnsurePreviewForSourceViewport() {
+                const range = window.ySplitCodeMirror?.getVisibleSourceLineRange?.();
+                if (!range || !window.virtualPreview?.isActive?.()) return;
+                window.virtualPreview.syncWindowFromSourceLines?.(
+                    range.startLine,
+                    range.endLine
+                );
+                ysplitVpLastSyncLine = range.startLine;
+            }
+
+            function ysplitSourceLineFraction(line, sub) {
+                const cm = window.ySplitCodeMirror;
+                const lh = cm?.getLineHeight?.() ?? 22.4;
+                const srcBlockH = Math.max(1, cm?.getLineBlockHeight?.(line) ?? lh);
+                return (sub || 0) / srcBlockH;
+            }
+
+            function ysplitInterpolateBlockPreviewY(blockLine, nextLine, line, sub, blockTop, blockHeight) {
+                const lineSpan = Math.max(1, nextLine - blockLine);
+                const lineFrac = (line - blockLine) + ysplitSourceLineFraction(line, sub);
+                const frac = Math.max(0, Math.min(1, lineFrac / lineSpan));
+                return blockTop + frac * Math.max(1, blockHeight);
+            }
+
+            function collectYSplitPreviewBlocks() {
+                if (window.virtualPreview?.isActive?.() && preview?.dataset.ysplitPreview) {
+                    return window.virtualPreview.getLayout().map((entry) => ({
+                        line: entry.line,
+                        top: entry.top,
+                    }));
+                }
+                const root = preview;
+                if (root?.dataset.ysplitPreview) {
+                    const domBlocks = [...root.querySelectorAll('.live-block[data-source-line]')]
+                        .map((el) => ({
+                            line: parseInt(el.getAttribute('data-source-line'), 10) || 0,
+                            top: getBlockTopInPreview(el),
+                            el,
+                        }))
+                        .sort((a, b) => a.line - b.line);
+                    if (domBlocks.length) return domBlocks;
+                }
+                const anchors = window.documentIndex?.getBlockLineAnchors?.() ?? [];
+                if (anchors.length) {
+                    return anchors.map((entry) => ({
+                        line: entry.line,
+                        top: entry.top,
+                    }));
+                }
+                return [];
+            }
+
+            function mapYSplitSourceLineToPreviewY(line, sub) {
+                const blocks = collectYSplitPreviewBlocks();
+                if (!blocks.length) return 0;
+                let segIndex = 0;
+                for (let i = 0; i < blocks.length; i++) {
+                    if (blocks[i].line <= line) segIndex = i;
+                    else break;
+                }
+                const seg = blocks[segIndex];
+                const next = blocks[segIndex + 1];
+                const lh = window.ySplitCodeMirror?.getLineHeight?.() ?? 22.4;
+                const nextLine = next && next.line > seg.line ? next.line : seg.line + 8;
+                const segHeight = next
+                    ? Math.max(next.top - seg.top, lh)
+                    : (seg.el?.offsetHeight ?? lh * 3);
+                return ysplitInterpolateBlockPreviewY(
+                    seg.line,
+                    nextLine,
+                    line,
+                    sub,
+                    seg.top,
+                    segHeight
+                );
+            }
+
+            function findYSplitBlockElForLine(line) {
+                const root = preview;
+                if (!root?.dataset.ysplitPreview) return null;
+                const blocks = [...root.querySelectorAll('.live-block[data-source-line]')];
+                let match = null;
+                let nextLine = null;
+                for (let i = 0; i < blocks.length; i++) {
+                    const el = blocks[i];
+                    const blockLine = parseInt(el.getAttribute('data-source-line'), 10) || 0;
+                    if (blockLine <= line) {
+                        match = el;
+                        const nextEl = blocks[i + 1];
+                        nextLine = nextEl
+                            ? (parseInt(nextEl.getAttribute('data-source-line'), 10) || blockLine + 1)
+                            : blockLine + 8;
+                    } else {
+                        break;
+                    }
+                }
+                if (!match) return null;
+                return { el: match, blockLine: parseInt(match.getAttribute('data-source-line'), 10) || 0, nextLine };
+            }
+
+            function ysplitGetPreviewYForSourceLine(line, sub) {
+                const cm = window.ySplitCodeMirror;
+                const hit = findYSplitBlockElForLine(line);
+                if (cm?.isActive?.() && hit) {
+                    const { el, blockLine, nextLine } = hit;
+                    const blockTop = getBlockTopInPreview(el);
+                    const blockH = Math.max(1, el.offsetHeight || cm.getLineHeight?.() || 22.4);
+                    return ysplitInterpolateBlockPreviewY(
+                        blockLine,
+                        nextLine ?? blockLine + 8,
+                        line,
+                        sub,
+                        blockTop,
+                        blockH
+                    );
+                }
+                if (window.virtualPreview?.isActive?.() && preview?.dataset.ysplitPreview) {
+                    return window.virtualPreview.getPreviewYForSourceLine?.(line, sub) ?? 0;
+                }
+                return mapYSplitSourceLineToPreviewY(line, sub);
+            }
+
+            function ysplitSetPreviewScrollTop(y) {
+                const el = previewPane;
+                if (!el) return;
+                const max = Math.max(0, el.scrollHeight - el.clientHeight);
+                const next = Math.max(0, Math.min(y ?? 0, max));
+                ysplitSuppressPreviewScroll = true;
+                el.scrollTop = next;
+                const vp = window.virtualPreview;
+                if (vp?.isActive?.() && preview?.dataset.ysplitPreview) {
+                    vp.syncWindowNow?.();
+                }
+                requestAnimationFrame(() => {
+                    ysplitSuppressPreviewScroll = false;
+                });
+            }
+
+            function mapYSplitSourceScrollToPreview() {
+                const cm = window.ySplitCodeMirror;
+                if (!cm?.isActive?.()) return null;
+                const line = cm.getTopSourceLine();
+                const sub = cm.getSubLinePx();
+                return ysplitGetPreviewYForSourceLine(line, sub);
+            }
+
+            function createYSplitPreviewHooks(options = {}) {
+                return {
+                    createBlockEl,
+                    highlightCodeBlocks,
+                    scheduleMermaid: scheduleMermaidRenderAfterLayout,
+                    appendFootnotes: appendFootnotesSection,
+                    rewriteImages: rewriteImagesInContainer,
+                    getDocumentLayout: () => window.documentIndex?.getLayout?.() ?? [],
+                    syncDocumentLayout: (layout) => {
+                        window.documentIndex?.applyMeasuredLayout?.(layout);
+                    },
+                    preferSourceLineWindow: true,
+                    getSourceLineWindow: () => (
+                        window.ySplitCodeMirror?.getVisibleSourceLineRange?.()
+                        ?? { startLine: 0, endLine: 0 }
+                    ),
+                    getScrollElement: () => previewPane || preview,
+                    getScrollTop: () => (previewPane || preview)?.scrollTop ?? 0,
+                    getSourceLineBlockHeight: (line) => (
+                        window.ySplitCodeMirror?.getLineBlockHeight?.(line) ?? 22.4
+                    ),
+                    onLayoutSettled: () => {
+                        if (window.ySplitEditor?.isActive?.()) {
+                            window.ySplitEditor.resyncAfterLayout?.();
+                        }
+                    },
+                    onReady: () => {
+                        markPreviewRendered(currentContent ?? textarea?.value ?? '');
+                        options.onComplete?.();
+                    },
+                };
+            }
+
+            function mountYSplitPreviewCore(text, options = {}) {
+                const container = preview;
+                if (!container) {
+                    options.onComplete?.();
+                    return;
+                }
+                const doc = window.documentIndex.ensure(text || '');
+                linkReferenceMap = doc.refs;
+                footnoteMap = doc.footnotes;
+                const blocks = doc.blocks;
+                const footnotes = doc.footnotes;
+                const normalized = doc.normalizedText;
+                container.dataset.ysplitPreview = '1';
+
+                const vp = window.virtualPreview;
+                const useVirtual = vp?.shouldUse?.(blocks.length, normalized.length);
+
+                if (useVirtual) {
+                    vp.configure({
+                        blockThreshold: PREVIEW_VIRTUAL_BLOCK_THRESHOLD,
+                        charThreshold: LARGE_DOC_CHAR_THRESHOLD,
+                        windowSize: PREVIEW_VIRTUAL_WINDOW,
+                        buffer: PREVIEW_VIRTUAL_BUFFER,
+                        sourceLineBuffer: PREVIEW_VIRTUAL_SOURCE_LINE_BUFFER,
+                        measureWhileScrolling: false,
+                    });
+                    const payload = {
+                        container,
+                        blocks,
+                        footnotes,
+                        readOnly: true,
+                        hooks: createYSplitPreviewHooks(options),
+                    };
+                    if (vp.isActive?.() && container.dataset.ysplitPreview) {
+                        vp.update(payload);
+                    } else {
+                        vp.mount(payload);
+                    }
+                    return;
+                }
+
+                if (vp?.isActive?.()) {
+                    vp.teardown();
+                }
+
+                container.innerHTML = '';
+                const batchSize = 80;
+                let index = 0;
+
+                const appendBatch = () => {
+                    const end = Math.min(index + batchSize, blocks.length);
+                    for (; index < end; index++) {
+                        container.appendChild(createBlockEl(blocks[index], index, { readOnly: true }));
+                    }
+                    if (index < blocks.length) {
+                        requestAnimationFrame(appendBatch);
+                        return;
+                    }
+                    highlightCodeBlocks(container);
+                    rewriteImagesInContainer(container);
+                    if (isElementVisibleForLayout(container)) {
+                        scheduleMermaidRenderAfterLayout([container]);
+                    }
+                    appendFootnotesSection(container, footnotes);
+                    markPreviewRendered(text);
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => options.onComplete?.());
+                    });
+                };
+                requestAnimationFrame(appendBatch);
+            }
+
+            function mountYSplitPreview(text, options = {}) {
+                mountYSplitPreviewCore(text, options);
+            }
+
+            function refreshYSplitPreview(text, options = {}) {
+                const container = preview;
+                if (!container?.dataset.ysplitPreview) {
+                    mountYSplitPreviewCore(text, options);
+                    return;
+                }
+                const doc = window.documentIndex.ensure(text || '');
+                linkReferenceMap = doc.refs;
+                footnoteMap = doc.footnotes;
+                const vp = window.virtualPreview;
+                if (vp?.isActive?.() && vp.shouldUse?.(doc.blocks.length, doc.normalizedText.length)) {
+                    vp.update({
+                        container,
+                        blocks: doc.blocks,
+                        footnotes: doc.footnotes,
+                        readOnly: true,
+                        hooks: createYSplitPreviewHooks(options),
+                    });
+                    markPreviewRendered(text);
+                    return;
+                }
+                mountYSplitPreviewCore(text, options);
+            }
+
+            function teardownYSplitPreview() {
+                clearYSplitScrollMaps();
+                if (window.virtualPreview?.isActive?.() && preview?.dataset.ysplitPreview) {
+                    window.virtualPreview.teardown();
+                }
+                window.virtualPreview?.configure?.({ measureWhileScrolling: false });
+                if (!preview?.dataset.ysplitPreview) return;
+                delete preview.dataset.ysplitPreview;
+                preview.innerHTML = '';
+                markPreviewStale();
+            }
+
+            function prepareYSplitSource(options = {}) {
+                const ta = textarea;
+                if (!ta) return;
+                ta.classList.remove('source-mirror-active');
+                const mirror = document.getElementById('markdown-spell-overlay');
+                if (mirror) {
+                    mirror.innerHTML = '';
+                    mirror.style.display = 'none';
+                }
+                const text = options.text ?? ta.value ?? currentContent ?? '';
+                const anchor = options.anchor;
+                window.ySplitCodeMirror?.mount({
+                    initialText: text,
+                    initialLine: Number.isFinite(anchor?.line) ? anchor.line : undefined,
+                    initialSub: Number.isFinite(anchor?.line) ? (anchor.sub ?? 0) : undefined,
+                    onChange: options.onChange,
+                    onScroll: options.onScroll,
+                });
+                applyYSplitTextareaHeight();
+            }
+
+            function applyYSplitTextareaHeight() {
+                const ta = textarea;
+                const wrap = markdownEditorScroll;
+                if (!ta || !wrap) return;
+                if (window.ySplitCodeMirror?.isActive?.()) {
+                    ta.style.height = '0';
+                    ta.style.minHeight = '0';
+                    ta.style.overflow = 'hidden';
+                    wrap.scrollTop = 0;
+                    syncSpellOverlayHeight();
+                }
+            }
+
+            function getYSplitHooks() {
+                return {
+                    getEditorText: () => {
+                        if (window.ySplitCodeMirror?.isActive?.()) {
+                            return window.ySplitCodeMirror.getContent?.()
+                                ?? currentContent
+                                ?? textarea?.value
+                                ?? '';
+                        }
+                        return currentContent ?? textarea?.value ?? '';
+                    },
+                    setEditorText: (value) => {
+                        currentContent = value;
+                    },
+                    commitToNative: (value) => {
+                        currentContent = value;
+                        if (textarea) textarea.value = value;
+                        markPreviewStale();
+                        scheduleContentSync(value);
+                    },
+                    getText: () => currentContent ?? textarea?.value ?? '',
+                    getSourceScrollEl: () => window.ySplitCodeMirror?.getScrollElement?.() ?? markdownEditorScroll,
+                    getPreviewScrollEl: () => previewPane,
+                    getPreviewContentEl: () => preview,
+                    getTopSourceLine: () => window.ySplitCodeMirror?.getTopSourceLine?.() ?? 0,
+                    getSubLinePx: () => window.ySplitCodeMirror?.getSubLinePx?.() ?? 0,
+                    getSourceLineHeight: () => window.ySplitCodeMirror?.getLineHeight?.() ?? 22.4,
+                    getSourceLineY: (lineIndex) => window.ySplitCodeMirror?.getLineBlockY?.(lineIndex) ?? 0,
+                    getDocumentHeadings: () => {
+                        const text = currentContent ?? textarea?.value ?? '';
+                        return window.documentIndex?.ensure?.(text)?.headings ?? [];
+                    },
+                    getPreviewTopForSourceLine: (lineIndex) => {
+                        const root = preview;
+                        if (!root) return null;
+                        const el = root.querySelector(
+                            `.live-block[data-source-line="${lineIndex}"]`
+                        );
+                        if (!el) return null;
+                        return getBlockTopInPreview(el);
+                    },
+                    isVirtualPreviewActive: () => (
+                        !!window.virtualPreview?.isActive?.()
+                        && !!preview?.dataset.ysplitPreview
+                    ),
+                    ensurePreviewForSourceViewport: ysplitEnsurePreviewForSourceViewport,
+                    getPreviewYForSourceLine: ysplitGetPreviewYForSourceLine,
+                    mapLayoutYToPreviewScroll: ysplitLayoutYToPreviewScroll,
+                    mapSourceLineToPreviewY: mapYSplitSourceLineToPreviewY,
+                    mapSourceScrollToPreview: mapYSplitSourceScrollToPreview,
+                    isPreviewScrollSuppressed: () => (
+                        ysplitSuppressPreviewScroll || window.ySplitEditor?.isSyncingPreview?.()
+                    ),
+                    setPreviewScrollTop: ysplitSetPreviewScrollTop,
+                    setSourceScrollForLine: (line, sub) => {
+                        window.ySplitCodeMirror?.setScrollTop?.(
+                            window.ySplitCodeMirror.scrollForLine(line, sub)
+                        );
+                    },
+                    prepareSource: prepareYSplitSource,
+                    teardownSource: () => {
+                        const text = window.ySplitCodeMirror?.unmount?.();
+                        if (text != null && textarea) {
+                            textarea.value = text;
+                            currentContent = text;
+                        }
+                    },
+                    deferPreviewMount: (work) => runDeferredDocumentWork(work, { timeout: 16 }),
+                    mountPreview: (text, opts) => mountYSplitPreview(text, opts),
+                    refreshPreview: (text, opts) => refreshYSplitPreview(text, opts),
+                    teardownPreview: teardownYSplitPreview,
+                    clearScrollMaps: clearYSplitScrollMaps,
+                };
+            }
+
+            function enterYSplitMode(anchor) {
+                lockScrollAnchor(anchor);
+                window.ySplitEditor?.enter?.({
+                    text: currentContent ?? textarea?.value ?? '',
+                    anchor,
+                    hooks: getYSplitHooks(),
+                    onReady: () => {
+                        window.ySplitEditor?.restoreScroll?.(anchor);
+                        unlockScrollAnchor();
+                    },
+                });
+            }
+
+            function leaveYSplitMode() {
+                const anchor = window.ySplitEditor?.leave?.();
+                if (!anchor) return;
+                if (typeof anchor.percent === 'number') {
+                    documentScrollPercent = anchor.percent;
+                }
+            }
+
             function isLiveActive() {
                 return document.body.classList.contains('mode-live');
             }
@@ -2541,6 +3048,12 @@
                     return;
                 }
                 finishActiveDocumentLoad();
+                if (isLoadingDocumentContent) {
+                    const loaded = (textarea?.value ?? currentContent ?? '').length > 0;
+                    if (loaded) {
+                        endDocumentContentLoad();
+                    }
+                }
             }
 
             function shouldShowDocumentLoader(text) {
@@ -2650,6 +3163,7 @@
                 if (isLoadingDocumentContent) return;
                 if (isApplyingHistory) return;
                 if (!editorTabSession.tabId) return;
+                window.documentIndex?.scheduleRebuild?.(text);
                 isSyncing = true;
                 postEditorContentMessage('contentChanged', text);
                 setTimeout(() => { isSyncing = false; }, 400);
@@ -2659,6 +3173,13 @@
             let contentImportExpected = 0;
             let isLoadingDocumentContent = false;
             let editorTabSession = { tabId: null, generation: 0 };
+
+            function isActiveImportGeneration(generation) {
+                const expected = Number(generation) || 0;
+                return expected > 0
+                    && expected === Number(editorTabSession.generation)
+                    && !!editorTabSession.tabId;
+            }
 
             function postEditorContentMessage(handlerName, content) {
                 const handler = window.webkit?.messageHandlers?.[handlerName];
@@ -2767,12 +3288,18 @@
                     return previewPane || preview;
                 }
                 if (document.body.classList.contains('mode-split')) {
-                    return getEditorScrollElement();
+                    if (splitScrollLeader === 'preview') {
+                        return previewPane || preview;
+                    }
+                    return getMarkdownScrollElement();
                 }
                 if (document.body.classList.contains('mode-experimental')) {
-                    return getEditorScrollElement();
+                    return getMarkdownScrollElement();
                 }
-                return markdownEditorScroll;
+                if (document.body.classList.contains('mode-ysplit')) {
+                    return getMarkdownScrollElement();
+                }
+                return getMarkdownScrollElement();
             }
 
             function updateDocumentScrollAnchorFromActive() {
@@ -2789,6 +3316,12 @@
                         sub: window.experimentalCodeMirror.getSubLinePx(),
                     };
                 }
+                if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
+                    return {
+                        line: window.ySplitCodeMirror.getTopSourceLine(),
+                        sub: window.ySplitCodeMirror.getSubLinePx(),
+                    };
+                }
                 if (isCm6SourceActive() && window.sourceCodeMirror?.getTopSourceLine) {
                     return {
                         line: window.sourceCodeMirror.getTopSourceLine(),
@@ -2798,6 +3331,17 @@
                 return null;
             }
 
+            function capturePreviewSourceLineAnchor() {
+                if (!window.virtualPreview?.isActive?.()) return null;
+                const previewY = getPreviewVisibleDocY();
+                const lineFrac = window.virtualPreview.getSourceLineForPreviewY(previewY);
+                const lh = window.sourceCodeMirror?.getView()?.defaultLineHeight
+                    || getGutterTypographyMetrics(textarea).lineHeight
+                    || 22;
+                const line = Math.floor(lineFrac);
+                return { line, sub: Math.max(0, (lineFrac - line) * lh) };
+            }
+
             function captureDocumentScrollAnchor() {
                 if (lockedScrollAnchor) {
                     return {
@@ -2805,6 +3349,7 @@
                         top: lockedScrollAnchor.top,
                         line: lockedScrollAnchor.line,
                         sub: lockedScrollAnchor.sub,
+                        previewScrollTop: lockedScrollAnchor.previewScrollTop,
                     };
                 }
                 updateDocumentScrollAnchorFromActive();
@@ -2820,6 +3365,21 @@
                     anchor.line = lineAnchor.line;
                     anchor.sub = lineAnchor.sub;
                 }
+                const mode = getActiveEditorMode();
+                if (mode === 'ysplit' || mode === 'experimental' || mode === 'split' || mode === 'preview') {
+                    const previewEl = previewPane || preview;
+                    if (previewEl) anchor.previewScrollTop = previewEl.scrollTop;
+                }
+                if (lineAnchor) {
+                    return anchor;
+                }
+                if (mode === 'preview' || (mode === 'split' && splitScrollLeader === 'preview')) {
+                    const previewLine = capturePreviewSourceLineAnchor();
+                    if (previewLine) {
+                        anchor.line = previewLine.line;
+                        anchor.sub = previewLine.sub;
+                    }
+                }
                 return anchor;
             }
 
@@ -2829,6 +3389,7 @@
                     top: anchor?.top ?? 0,
                     line: anchor?.line,
                     sub: anchor?.sub,
+                    previewScrollTop: anchor?.previewScrollTop,
                 };
             }
 
@@ -2842,48 +3403,71 @@
                 el.scrollTop = Math.round(percent * max);
             }
 
+            function applyScrollAnchorNow(anchor) {
+                if (!anchor) return;
+                const percent = anchor.percent ?? documentScrollPercent ?? 0;
+                const fallbackTop = anchor.top ?? 0;
+                const mode = getActiveEditorMode();
+                const hasLine = Number.isFinite(anchor.line);
+                const line = hasLine ? Math.max(0, Math.floor(anchor.line)) : 0;
+                const sub = anchor.sub ?? 0;
+
+                scrollAnchorRestoreBlocked = true;
+
+                if (mode === 'experimental') {
+                    window.experimentalEditor?.restoreScroll?.(anchor);
+                } else if (mode === 'ysplit') {
+                    window.ySplitEditor?.restoreScroll?.(anchor);
+                } else if (mode === 'split') {
+                    restoreSplitScrollFromAnchor(anchor);
+                } else if (mode === 'preview') {
+                    if (Number.isFinite(anchor.previewScrollTop)) {
+                        const previewEl = previewPane || preview;
+                        if (previewEl) previewEl.scrollTop = anchor.previewScrollTop;
+                        if (window.virtualPreview?.isActive?.()) {
+                            window.virtualPreview.syncWindowNow?.() || window.virtualPreview.onScroll?.();
+                        }
+                    } else if (hasLine && window.virtualPreview?.isActive?.()) {
+                        const previewY = window.virtualPreview.getPreviewYForSourceLine(line, sub);
+                        setFollowerScrollTop('preview', previewY);
+                        window.virtualPreview.syncWindowNow?.() || window.virtualPreview.onScroll?.();
+                    } else {
+                        applyScrollPercentToElement(previewPane || preview, percent);
+                        if (window.virtualPreview?.isActive?.()) {
+                            window.virtualPreview.onScroll?.();
+                        }
+                    }
+                } else if (mode === 'live') {
+                    applyScrollPercentToElement(getLiveScrollElement(), percent);
+                } else if (hasLine && isCm6SourceActive()) {
+                    window.sourceCodeMirror.setScrollTop(
+                        window.sourceCodeMirror.scrollForLine(line, sub)
+                    );
+                } else {
+                    applyScrollPercentToElement(getMarkdownScrollElement(), percent);
+                }
+
+                if (fallbackTop > 0) {
+                    const active = getActiveScrollElement();
+                    if (active && active.scrollTop < 4 && getScrollMetrics(active).max > 0) {
+                        active.scrollTop = fallbackTop;
+                    }
+                }
+
+                requestAnimationFrame(() => {
+                    scrollAnchorRestoreBlocked = false;
+                });
+            }
+
             function restoreDocumentScrollAnchor(anchor, options = {}) {
-                const percent = anchor?.percent ?? documentScrollPercent ?? 0;
-                const fallbackTop = anchor?.top ?? 0;
+                if (!anchor) return;
+                const percent = anchor.percent ?? documentScrollPercent ?? 0;
                 documentScrollPercent = percent;
+                const token = ++scrollRestoreToken;
 
                 const apply = () => {
-                    scrollAnchorRestoreBlocked = true;
-                    if (document.body.classList.contains('mode-experimental')) {
-                        window.experimentalEditor?.restoreScroll?.(anchor);
-                    } else if (document.body.classList.contains('mode-split')) {
-                        if (Number.isFinite(anchor?.line) && isCm6SourceActive()) {
-                            window.sourceCodeMirror.setScrollTop(
-                                window.sourceCodeMirror.scrollForLine(anchor.line, anchor.sub ?? 0)
-                            );
-                            if (shouldUseLargeDocPerf()) {
-                                syncSplitLargeFromEditor();
-                            } else if (ensureSplitLineMap() && splitSourceLineTops && splitPreviewLineTops) {
-                                syncSplitFromEditor();
-                            } else {
-                                restoreSplitScrollFromRatio(percent);
-                            }
-                        } else {
-                            restoreSplitScrollFromRatio(percent);
-                        }
-                    } else if (Number.isFinite(anchor?.line) && isCm6SourceActive()) {
-                        window.sourceCodeMirror.setScrollTop(
-                            window.sourceCodeMirror.scrollForLine(anchor.line, anchor.sub ?? 0)
-                        );
-                    } else {
-                        applyScrollPercentToElement(markdownEditorScroll, percent);
-                        applyScrollPercentToElement(previewPane, percent);
-                    }
-                    applyScrollPercentToElement(getLiveScrollElement(), percent);
-                    if (fallbackTop > 0) {
-                        const active = getActiveScrollElement();
-                        if (active && active.scrollTop < 4 && getScrollMetrics(active).max > 0) {
-                            active.scrollTop = fallbackTop;
-                        }
-                    }
-                    requestAnimationFrame(() => {
-                        scrollAnchorRestoreBlocked = false;
-                    });
+                    if (token !== scrollRestoreToken) return;
+                    applyScrollAnchorNow(anchor);
                 };
 
                 apply();
@@ -2897,11 +3481,13 @@
 
                 if (!options.persistent) return;
 
-                const token = ++scrollRestoreToken;
-                [50, 120, 250, 400, 600, 800, 1200].forEach((delay) => {
+                [50, 120, 250, 400, 600, 900].forEach((delay) => {
                     setTimeout(() => {
                         if (token !== scrollRestoreToken) return;
                         apply();
+                        if (isSplitMode()) {
+                            resyncSplitScrollAfterLayout();
+                        }
                     }, delay);
                 });
             }
@@ -2967,29 +3553,40 @@
                 document.head.appendChild(link);
             }
 
+            function restoreAppearanceScrollForActiveMode(anchor, options = {}) {
+                const persistent = !!options.persistent;
+                const apply = () => {
+                    if (document.body.classList.contains('mode-ysplit')) {
+                        if (persistent) {
+                            window.ySplitEditor?.restoreAppearanceScrollPersistent?.(anchor);
+                        } else {
+                            window.ySplitEditor?.restoreScroll?.(anchor);
+                        }
+                        return true;
+                    }
+                    if (document.body.classList.contains('mode-experimental')) {
+                        window.experimentalEditor?.restoreScroll?.(anchor);
+                        return true;
+                    }
+                    if (document.body.classList.contains('mode-split')) {
+                        restoreSplitScrollFromAnchor(anchor);
+                        return true;
+                    }
+                    restoreDocumentScrollAnchor(anchor, { persistent });
+                    return true;
+                };
+                apply();
+            }
+
             function finishAppearanceThemeUpdate(anchor, options = {}) {
                 applyEditorTypographyVariables();
                 refreshCodeBlockChromeOnly();
                 if (options.rehighlight) {
                     rehighlightCodeBlocks();
                 }
-                if (document.body.classList.contains('mode-experimental')) {
-                    window.experimentalEditor?.restoreScroll?.(anchor);
-                } else if (document.body.classList.contains('mode-split')) {
-                    if (Number.isFinite(anchor?.line) && isCm6SourceActive()) {
-                        window.sourceCodeMirror.setScrollTop(
-                            window.sourceCodeMirror.scrollForLine(anchor.line, anchor.sub ?? 0)
-                        );
-                        if (shouldUseLargeDocPerf()) {
-                            syncSplitLargeFromEditor();
-                        } else {
-                            syncSplitFromEditor();
-                        }
-                    } else {
-                        restoreSplitScrollFromRatio(anchor?.percent ?? documentScrollPercent ?? 0);
-                    }
-                } else {
-                    restoreDocumentScrollAnchor(anchor, { persistent: true });
+                const mode = getActiveEditorMode();
+                if (!(options.cmThemeRefreshed && mode === 'edit')) {
+                    restoreAppearanceScrollForActiveMode(anchor, { persistent: true });
                 }
                 unlockScrollAnchor();
             }
@@ -3041,14 +3638,26 @@
                 }
 
                 const finish = () => {
+                    let cmThemeRefreshed = false;
                     if (isCm6SourceActive()) {
                         window.sourceCodeMirror.refreshTheme();
+                        cmThemeRefreshed = true;
                     }
-                    if (isExperimentalMode()) {
-                        window.experimentalCodeMirror?.refreshTheme?.();
+                    if (isExperimentalMode() && window.experimentalCodeMirror?.isActive?.()) {
+                        window.experimentalCodeMirror.refreshTheme({ skipScrollRestore: true });
+                        cmThemeRefreshed = true;
                     }
-                    renderMarkdownSourceMirror();
-                    finishAppearanceThemeUpdate(anchor, { rehighlight: needsRehighlight });
+                    if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
+                        window.ySplitCodeMirror.refreshTheme({ skipScrollRestore: true });
+                        cmThemeRefreshed = true;
+                    }
+                    if (!cmThemeRefreshed) {
+                        renderMarkdownSourceMirror();
+                    }
+                    finishAppearanceThemeUpdate(anchor, {
+                        rehighlight: needsRehighlight,
+                        cmThemeRefreshed,
+                    });
                 };
 
                 swapHighlightThemeStylesheet(options.codeThemeURL, finish);
@@ -3058,6 +3667,17 @@
                 pendingAppearanceMerge = mergeAppearanceOptions(pendingAppearanceMerge, options);
                 if (!pendingAppearanceAnchor) {
                     pendingAppearanceAnchor = captureDocumentScrollAnchor();
+                    lockScrollAnchor(pendingAppearanceAnchor);
+                }
+
+                const merged = pendingAppearanceMerge;
+                if (merged) {
+                    if (typeof merged.isDark === 'boolean') {
+                        document.body.classList.toggle('dark', !!merged.isDark);
+                    }
+                    if (merged.themeCSS) {
+                        updateCustomThemeCSS(merged.themeCSS);
+                    }
                 }
 
                 if (pendingAppearanceRaf) {
@@ -3487,6 +4107,19 @@
             }
 
             function collectExperimentalPreviewBlocks() {
+                if (window.virtualPreview?.isActive?.()) {
+                    return window.virtualPreview.getLayout().map((entry) => ({
+                        line: entry.line,
+                        top: entry.top,
+                    }));
+                }
+                const anchors = window.documentIndex?.getBlockLineAnchors?.() ?? [];
+                if (anchors.length) {
+                    return anchors.map((entry) => ({
+                        line: entry.line,
+                        top: entry.top,
+                    }));
+                }
                 const root = preview;
                 if (!root?.dataset.experimentalPreview) return [];
                 return [...root.querySelectorAll('.live-block[data-source-line]')]
@@ -3554,6 +4187,10 @@
                 if (!ta || !wrap) return;
                 if (isExperimentalMode()) {
                     applyExperimentalTextareaHeight();
+                    return;
+                }
+                if (isYSplitMode()) {
+                    applyYSplitTextareaHeight();
                     return;
                 }
                 if (isSplitMode() && splitSourceLineTops?.length) {
@@ -3678,7 +4315,8 @@
             });
 
             function renderPreview(text, options = {}) {
-                const anchor = options.preserveScroll ? captureDocumentScrollAnchor() : null;
+                const anchor = options.scrollAnchor
+                    || (options.preserveScroll ? captureDocumentScrollAnchor() : null);
                 updateCachedSourceLineCount();
                 try {
                     mountDocumentBlocks(preview, text || '', { readOnly: true });
@@ -3694,7 +4332,11 @@
                     startSplitLineMapBuild(true);
                 }
                 if (anchor) {
-                    restoreDocumentScrollAnchor(anchor, { persistent: false });
+                    if (isSplitMode()) {
+                        restoreSplitScrollFromAnchor(anchor);
+                    } else {
+                        restoreDocumentScrollAnchor(anchor, { persistent: true });
+                    }
                 }
                 if (findState.active) scheduleFindRefresh();
             }
@@ -4016,9 +4658,13 @@
             function ensureCm6SourceView(options = {}) {
                 if (!window.sourceCodeMirror?.shouldUseCm6?.()) return false;
                 const text = options.text ?? textarea?.value ?? currentContent ?? '';
+                const line = options.line ?? options.scrollAnchor?.line;
+                const sub = options.sub ?? options.scrollAnchor?.sub ?? 0;
                 window.sourceCodeMirror.ensure({
                     initialText: text,
-                    scrollTop: markdownEditorScroll?.scrollTop,
+                    initialLine: Number.isFinite(line) ? line : undefined,
+                    initialSub: Number.isFinite(line) ? sub : undefined,
+                    scrollTop: Number.isFinite(line) ? undefined : markdownEditorScroll?.scrollTop,
                     focus: !!options.focus,
                     onChange: (value) => {
                         if (isSyncing || isApplyingHistory) return;
@@ -4030,6 +4676,11 @@
                         if (isSplitMode()) onEditorScroll();
                     },
                 });
+                if (Number.isFinite(line) && isCm6SourceActive()) {
+                    window.sourceCodeMirror.setScrollTop(
+                        window.sourceCodeMirror.scrollForLine(line, sub)
+                    );
+                }
                 return isCm6SourceActive();
             }
 
@@ -4134,6 +4785,7 @@
             function invalidateSplitBlockMap() {
                 splitBlockMapKey = '';
                 splitBlockMap = [];
+                window.documentIndex?.invalidate?.();
                 invalidateSplitLineMap();
             }
 
@@ -4156,6 +4808,14 @@
                 if (window.virtualPreview?.isActive?.()) {
                     const layout = window.virtualPreview.getLayout();
                     splitBlockMap = layout.map((entry) => ({
+                        line: entry.line,
+                        top: entry.top,
+                    }));
+                    return;
+                }
+                const anchors = window.documentIndex?.getBlockLineAnchors?.() ?? [];
+                if (anchors.length) {
+                    splitBlockMap = anchors.map((entry) => ({
                         line: entry.line,
                         top: entry.top,
                     }));
@@ -4396,7 +5056,7 @@
                     if (isSplitMode() && syncScroll && markdownEditorScroll) {
                         requestAnimationFrame(() => syncSplitFromEditor());
                     }
-                } else if (!isExperimentalMode()) {
+                } else if (!isExperimentalMode() && !isYSplitMode()) {
                     startSplitLineMapBuild(true);
                 }
             }
@@ -4584,6 +5244,31 @@
             }
 
             function restoreSplitScrollFromAnchor(anchor) {
+                if (Number.isFinite(anchor?.line) && isCm6SourceActive()) {
+                    const line = Math.floor(anchor.line);
+                    const sub = anchor.sub ?? 0;
+                    window.sourceCodeMirror.setScrollTop(
+                        window.sourceCodeMirror.scrollForLine(line, sub)
+                    );
+                    if (Number.isFinite(anchor.previewScrollTop)) {
+                        const previewEl = previewPane || preview;
+                        if (previewEl) previewEl.scrollTop = anchor.previewScrollTop;
+                        return;
+                    }
+                    if (shouldUseLargeDocPerf()) {
+                        syncSplitLargeFromEditor();
+                        return;
+                    }
+                    if (ensureSplitLineMap() && splitSourceLineTops && splitPreviewLineTops) {
+                        syncSplitFromEditor();
+                        return;
+                    }
+                }
+                if (Number.isFinite(anchor?.previewScrollTop)) {
+                    const previewEl = previewPane || preview;
+                    if (previewEl) previewEl.scrollTop = anchor.previewScrollTop;
+                    return;
+                }
                 restoreSplitScrollFromRatio(anchor?.percent ?? documentScrollPercent ?? 0);
             }
 
@@ -4624,7 +5309,10 @@
             }
 
             function onPreviewScroll() {
-                if (window.virtualPreview?.isActive?.() && !isExperimentalMode()) {
+                if (window.virtualPreview?.isActive?.()) {
+                    if (isYSplitMode() && (ysplitSuppressPreviewScroll || window.ySplitEditor?.isSyncingPreview?.())) {
+                        return;
+                    }
                     window.virtualPreview.onScroll();
                 }
                 if (!syncScroll || !isSplitMode()) return;
@@ -4644,44 +5332,8 @@
             }
 
             function collectOutlineHeadings(text) {
-                const normalized = normalizeMarkdownImages(text || '');
-                const lines = normalized.split('\n');
-                const headings = [];
-                let inFence = false;
-                let i = 0;
-
-                while (i < lines.length) {
-                    const line = lines[i];
-                    const trimmed = line.trim();
-
-                    if (trimmed.startsWith('```')) {
-                        inFence = !inFence;
-                        i++;
-                        continue;
-                    }
-                    if (inFence) {
-                        i++;
-                        continue;
-                    }
-
-                    if (isLinkReferenceDefinitionLine(line)) {
-                        const entry = consumeReferenceDefinitionLines(lines, i);
-                        i += entry ? entry.consumed : 1;
-                        continue;
-                    }
-
-                    const hMatch = line.match(/^(#{1,6})\s+(.+)/);
-                    if (hMatch && hMatch[2].trim()) {
-                        headings.push({
-                            lineNumber: i,
-                            level: hMatch[1].length,
-                            title: hMatch[2].trim(),
-                        });
-                    }
-                    i++;
-                }
-
-                return headings;
+                const source = text ?? getOutlineSourceText();
+                return window.documentIndex.ensure(source).headings;
             }
 
             function findRenderedHeadingByLineNumber(root, lineNumber) {
@@ -4703,6 +5355,9 @@
             function getMarkdownScrollElement() {
                 if (isExperimentalMode() && window.experimentalCodeMirror?.isActive?.()) {
                     return window.experimentalCodeMirror.getScrollElement() || markdownEditorScroll;
+                }
+                if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
+                    return window.ySplitCodeMirror.getScrollElement() || markdownEditorScroll;
                 }
                 if (isCm6SourceActive()) {
                     return window.sourceCodeMirror.getScrollElement() || markdownEditorScroll;
@@ -4842,9 +5497,16 @@
                     scheduleMermaid: scheduleMermaidRenderAfterLayout,
                     appendFootnotes: appendFootnotesSection,
                     rewriteImages: rewriteImagesInContainer,
+                    getDocumentLayout: () => window.documentIndex?.getLayout?.() ?? [],
+                    syncDocumentLayout: (layout) => {
+                        window.documentIndex?.applyMeasuredLayout?.(layout);
+                    },
                     getScrollElement: () => previewPane || preview,
                     getScrollTop: () => (previewPane || preview)?.scrollTop ?? 0,
                     onReady: () => {
+                        window.documentIndex?.applyMeasuredLayout?.(
+                            window.virtualPreview.getLayout()
+                        );
                         buildSplitBlockMap();
                         markPreviewRendered(currentContent ?? textarea?.value ?? '');
                     },
@@ -4854,12 +5516,12 @@
             function mountDocumentBlocks(container, text, options = {}) {
                 const readOnly = !!options.readOnly;
                 const incremental = options.incremental !== false && readOnly;
-                const normalized = normalizeMarkdownImages(text || '');
-                const { text: withoutRefs, refs, footnotes, lineMap } = extractLinkReferenceDefinitions(normalized);
-                linkReferenceMap = refs;
-                footnoteMap = footnotes;
-                let blocks = parseMarkdownBlocks(withoutRefs, lineMap);
-                blocks = coalesceHTMLBlocks(blocks);
+                const doc = window.documentIndex.ensure(text || '');
+                linkReferenceMap = doc.refs;
+                footnoteMap = doc.footnotes;
+                const blocks = doc.blocks;
+                const footnotes = doc.footnotes;
+                const normalized = doc.normalizedText;
 
                 if (incremental) {
                     const existing = [...container.querySelectorAll(':scope > .live-block')];
@@ -5191,24 +5853,70 @@
                     const generation = Number(session?.generation) || 0;
                     editorTabSession = { tabId, generation };
                     scheduleContentSync.cancel();
+                    window.documentIndex?.cancelScheduledRebuild?.();
+                    window.documentIndex?.invalidate?.();
                     contentImportChunks = [];
                     contentImportExpected = 0;
+                    currentContent = '';
+                    if (textarea) textarea.value = '';
+                    window.experimentalCodeMirror?.syncText?.('');
+                    if (window.sourceCodeMirror?.syncText) {
+                        window.sourceCodeMirror.syncText('');
+                    }
                     beginDocumentContentLoad();
                 },
 
-                beginContentImport(chunkCount) {
+                prepareTabSwitch() {
+                    const text = textarea?.value ?? currentContent ?? '';
+                    scheduleContentSync.flush(text);
+                    contentImportChunks = [];
+                    contentImportExpected = 0;
+                },
+
+                onTabActivated() {
+                    if (findState.active) scheduleFindRefresh.flush();
+                },
+
+                flushEditorContentForNative() {
+                    const text = textarea?.value ?? currentContent ?? '';
+                    scheduleContentSync.flush(text);
+                    const handler = window.webkit?.messageHandlers?.editorContentFlush;
+                    if (!handler || !editorTabSession.tabId) return;
+                    handler.postMessage({
+                        tabId: editorTabSession.tabId,
+                        generation: editorTabSession.generation,
+                        content: text,
+                    });
+                },
+
+                suspendForTabEviction() {
+                    scheduleContentSync.flush(textarea?.value ?? currentContent ?? '');
+                    if (window.virtualPreview?.isActive?.()) {
+                        window.virtualPreview.teardown();
+                    }
+                    schedulePreviewRender.cancel();
+                    scheduleLiveRebuild.cancel();
+                },
+
+                beginContentImport(chunkCount, generation) {
+                    if (!isActiveImportGeneration(generation)) return;
                     contentImportExpected = Math.max(0, Number(chunkCount) || 0);
                     contentImportChunks = new Array(contentImportExpected).fill('');
                     beginDocumentContentLoad();
                 },
 
-                appendContentImportChunk(index, chunk) {
+                appendContentImportChunk(index, chunk, generation) {
+                    if (!isActiveImportGeneration(generation)) return;
                     const slot = Number(index);
                     if (!Number.isFinite(slot) || slot < 0 || slot >= contentImportChunks.length) return;
                     contentImportChunks[slot] = String(chunk ?? '');
                 },
 
-                finishContentImport() {
+                finishContentImport(generation) {
+                    if (!isActiveImportGeneration(generation)) {
+                        console.warn('Ignored stale finishContentImport');
+                        return;
+                    }
                     const joined = contentImportChunks.join('');
                     contentImportChunks = [];
                     contentImportExpected = 0;
@@ -5219,11 +5927,56 @@
                             bytes[i] = binary.charCodeAt(i);
                         }
                         const text = new TextDecoder('utf-8').decode(bytes);
-                        this.updateContent(text);
+                        this.updateContentForLoad(text, generation);
                     } catch (error) {
                         console.error('Content import failed:', error);
                         endDocumentContentLoad();
                     }
+                },
+
+                updateContentForLoad(text, generation) {
+                    if (!isActiveImportGeneration(generation)) return;
+                    if (isApplyingHistory) return;
+                    const incoming = text ?? '';
+                    beginDocumentContentLoad();
+
+                    const incomingKey = getDocumentContentKey(incoming);
+                    const currentKey = getDocumentContentKey(currentContent);
+                    if (incomingKey !== currentKey) {
+                        clearDocumentRenderSurfaces();
+                    }
+
+                    currentContent = incoming;
+                    textarea.value = incoming;
+                    syncTextareaEditorHeight();
+                    refreshSourceMirrorAfterEdit();
+                    if (document.body.classList.contains('mode-edit')
+                        || document.body.classList.contains('mode-split')) {
+                        if (window.sourceCodeMirror?.shouldUseCm6?.()) {
+                            ensureCm6SourceView({ text: incoming });
+                        } else {
+                            teardownCm6SourceView();
+                        }
+                    }
+                    if (isExperimentalMode()) {
+                        window.experimentalCodeMirror?.syncText?.(incoming);
+                        window.experimentalEditor?.scheduleUpdate?.(incoming);
+                    }
+                    if (isYSplitMode()) {
+                        window.ySplitCodeMirror?.syncText?.(incoming);
+                        window.ySplitEditor?.scheduleUpdate?.(incoming);
+                    }
+                    schedulePreviewRender.cancel();
+                    scheduleLiveRebuild.cancel();
+                    scheduleContentSync.cancel();
+                    if (isPreviewActive()) {
+                        ensurePreviewRendered(incoming, { preserveScroll: true });
+                    }
+                    if (isLiveActive()) {
+                        ensureLiveEditor(incoming);
+                    }
+                    scheduleSpellCheckRequest();
+                    endDocumentContentLoad();
                 },
 
                 updateContent(text) {
@@ -5258,6 +6011,10 @@
                             window.experimentalCodeMirror?.syncText?.(incoming);
                             window.experimentalEditor?.scheduleUpdate?.(incoming);
                         }
+                        if (isYSplitMode()) {
+                            window.ySplitCodeMirror?.syncText?.(incoming);
+                            window.ySplitEditor?.scheduleUpdate?.(incoming);
+                        }
                         schedulePreviewRender.cancel();
                         scheduleLiveRebuild.cancel();
                         scheduleContentSync.cancel();
@@ -5282,6 +6039,7 @@
 
                 setTheme(isDark) {
                     const anchor = captureDocumentScrollAnchor();
+                    lockScrollAnchor(anchor);
                     const nextDark = !!isDark;
                     const wasDark = document.body.classList.contains('dark');
                     document.body.classList.toggle('dark', nextDark);
@@ -5299,19 +6057,19 @@
                     });
                     if (nextDark !== wasDark) {
                         rethemeAllMermaidInApp(anchor, { skipRestore: true });
-                    } else {
-                        restoreDocumentScrollAnchor(anchor, { persistent: true });
                     }
                     if (isCm6SourceActive()) {
                         window.sourceCodeMirror.refreshTheme();
                     }
-                    if (isExperimentalMode()) {
-                        window.experimentalCodeMirror?.refreshTheme?.();
+                    if (isExperimentalMode() && window.experimentalCodeMirror?.isActive?.()) {
+                        window.experimentalCodeMirror.refreshTheme({ skipScrollRestore: true });
+                    }
+                    if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
+                        window.ySplitCodeMirror.refreshTheme({ skipScrollRestore: true });
                     }
                     renderMarkdownSourceMirror();
-                    if (nextDark !== wasDark) {
-                        restoreDocumentScrollAnchor(anchor, { persistent: true });
-                    }
+                    restoreAppearanceScrollForActiveMode(anchor, { persistent: true });
+                    unlockScrollAnchor();
                 },
 
                 setViewMode(mode) {
@@ -5326,6 +6084,7 @@
                     }
 
                     const anchor = captureDocumentScrollAnchor();
+                    lockScrollAnchor(anchor);
                     const modeDebug = document.getElementById("mode-debug");
                     if (modeDebug) {
                         modeDebug.textContent = `MODE: ${mode}`;
@@ -5351,13 +6110,24 @@
                     if (mode !== 'experimental') {
                         leaveExperimentalMode();
                     }
+                    if (mode !== 'ysplit') {
+                        leaveYSplitMode();
+                    }
 
-                    flushPendingEditorUpdates({ skipPreviewIfCached: shouldUseLargeDocPerf() && mode !== 'experimental' });
+                    flushPendingEditorUpdates({
+                        skipPreviewIfCached: shouldUseLargeDocPerf()
+                            && mode !== 'experimental'
+                            && mode !== 'ysplit',
+                    });
                     syncTextareaEditorHeight();
                     renderMarkdownSourceMirror();
 
                     if (mode === 'edit' || mode === 'split') {
-                        ensureCm6SourceView({ text: currentContent });
+                        ensureCm6SourceView({
+                            text: currentContent,
+                            line: anchor.line,
+                            sub: anchor.sub,
+                        });
                     } else {
                         teardownCm6SourceView();
                     }
@@ -5372,11 +6142,14 @@
                     } else if (mode === 'experimental') {
                         updateCachedSourceLineCount();
                         enterExperimentalMode(anchor);
+                    } else if (mode === 'ysplit') {
+                        updateCachedSourceLineCount();
+                        enterYSplitMode(anchor);
                     } else if (mode === 'preview' || mode === 'split') {
                         updateCachedSourceLineCount();
                         if (!isPreviewRenderCached(currentContent)) {
                             runDeferredDocumentWork(() => {
-                                ensurePreviewRendered(currentContent);
+                                ensurePreviewRendered(currentContent, { scrollAnchor: anchor });
                                 if (mode === 'split' && !shouldUseLargeDocPerf()) {
                                     invalidateSplitLineMap();
                                     startSplitLineMapBuild(true);
@@ -5389,24 +6162,33 @@
                     }
 
                     requestAnimationFrame(() => {
-                        if (mode !== 'experimental') {
-                            restoreDocumentScrollAnchor(anchor, { persistent: false });
+                        if (mode !== 'experimental' && mode !== 'ysplit') {
+                            if (mode === 'split') {
+                                restoreSplitScrollFromAnchor(anchor);
+                            } else {
+                                restoreDocumentScrollAnchor(anchor, { persistent: true });
+                            }
                         }
                         if (mode === 'split') {
-                            updateCachedSourceLineCount();
-                            if (!shouldUseLargeDocPerf()) {
-                                startSplitLineMapBuild(true);
-                            }
-                            syncSplitFromEditor();
+                            resyncSplitScrollAfterLayout();
                         }
                         if (findState.active) scheduleFindRefresh.flush();
                         finishActiveDocumentLoad();
+                        if (isLoadingDocumentContent) {
+                            endDocumentContentLoad();
+                        }
                         if (window.requestIdleCallback) {
                             requestIdleCallback(
-                                () => scheduleMermaidRenderAfterLayout(getActiveMermaidRoots()),
+                                () => {
+                                    if (mode === 'split') {
+                                        resyncSplitScrollAfterLayout();
+                                    }
+                                    scheduleMermaidRenderAfterLayout(getActiveMermaidRoots());
+                                },
                                 { timeout: 1000 }
                             );
                         }
+                        setTimeout(() => unlockScrollAnchor(), 1200);
                     });
                 },
 
@@ -5601,6 +6383,9 @@
                     flushAllPendingLiveEdits();
                     if (isExperimentalMode()) {
                         window.experimentalEditor?.flushUpdate?.(textarea.value || currentContent || '');
+                    }
+                    if (isYSplitMode()) {
+                        window.ySplitEditor?.flushUpdate?.(textarea.value || currentContent || '');
                     }
                     if (isCm6SourceActive()) {
                         return window.sourceCodeMirror.getContent() || currentContent || '';
@@ -5940,6 +6725,12 @@
                             scheduleContentSync(text);
                             return;
                         }
+                        if (isYSplitMode()) {
+                            markPreviewStale();
+                            window.ySplitEditor?.scheduleUpdate?.(text);
+                            scheduleContentSync(text);
+                            return;
+                        }
                         if (isPreviewActive()) {
                             markPreviewStale();
                             schedulePreviewRender();
@@ -6046,6 +6837,7 @@
                         syncTextareaEditorHeight();
                         if (isSplitMode()) resyncSplitScrollAfterLayout();
                         if (isExperimentalMode()) window.experimentalEditor?.resyncAfterLayout?.();
+                        if (isYSplitMode()) window.ySplitEditor?.resyncAfterLayout?.();
                     }, 200));
 
                     console.log('✅ Синхронизация скролла включена');
@@ -9264,6 +10056,20 @@
                 return blocks;
             }
 
+            window.documentIndex?.configure?.({
+                normalizeImages: normalizeMarkdownImages,
+                extractReferences: extractLinkReferenceDefinitions,
+                parseBlocks: parseMarkdownBlocks,
+                coalesceHTMLBlocks,
+                contentKey: getDocumentContentKey,
+                lineHeightPx: () => {
+                    const root = window.getComputedStyle(document.documentElement);
+                    const parsed = parseFloat(root.getPropertyValue('--editor-line-height') || '');
+                    return Number.isFinite(parsed) && parsed > 0 ? parsed : 22.4;
+                },
+                debounceMs: 400,
+            });
+
             function detectBlockFromSource(source) {
                 const text = source || '';
 
@@ -9706,13 +10512,13 @@
                 liveEditor.innerHTML = '';
                 liveBlocks = [];
                 activeBlockIndex = -1;
-                const normalized = normalizeMarkdownImages(text || '');
-                const { text: withoutRefs, refs, footnotes, lineMap } = extractLinkReferenceDefinitions(normalized);
-                linkReferenceMap = refs;
-                footnoteMap = footnotes;
-                liveContent = withoutRefs;
+                const doc = window.documentIndex.ensure(text || '');
+                linkReferenceMap = doc.refs;
+                footnoteMap = doc.footnotes;
+                const footnotes = doc.footnotes;
+                liveContent = doc.bodyText || '';
 
-                let blocks = parseMarkdownBlocks(liveContent, lineMap);
+                let blocks = doc.blocks.map((block) => ({ ...block }));
                 let repairedSource = false;
 
                 blocks = blocks.map((block) => {
@@ -9730,6 +10536,7 @@
                     liveContent = repairedText;
                     currentContent = repairedText;
                     textarea.value = repairedText;
+                    window.documentIndex.rebuild(repairedText);
                     scheduleContentSync(repairedText);
                 }
 

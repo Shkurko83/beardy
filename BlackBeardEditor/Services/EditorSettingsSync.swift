@@ -30,7 +30,7 @@ enum EditorSettingsSync {
             });
         })();
         """
-        NotificationCenter.default.post(name: .editorExecJS, object: script)
+        EditorExecJS.post(script, target: .allMounted)
     }
 
     private static func escapeForJS(_ value: String) -> String {

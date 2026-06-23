@@ -67,12 +67,13 @@ enum SpellCheckSync {
         if let webView {
             webView.evaluateJavaScript(script, completionHandler: nil)
         } else {
-            NotificationCenter.default.post(name: .editorExecJS, object: """
-            (function() {
-                if (!window.cmEditor?.setSpellCheckRanges) return;
-                window.cmEditor.setSpellCheckRanges(\(json));
-            })();
-            """)
+            NotificationCenter.default.post(
+                name: .editorExecJS,
+                object: EditorExecJSPayload(
+                    script: "window.cmEditor?.setSpellCheckRanges(\(json));",
+                    target: .activeTab
+                )
+            )
         }
     }
 }

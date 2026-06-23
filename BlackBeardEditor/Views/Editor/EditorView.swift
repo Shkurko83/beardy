@@ -93,65 +93,92 @@ struct EditorView: View {
 struct MarkdownEditorArea: View {
     @EnvironmentObject var documentManager: DocumentManager
     @EnvironmentObject var themeService: ThemeService
+    @StateObject private var mountState = TabWebViewMountState()
     @State private var textContent: String = ""
     @State private var selectedRange: NSRange = NSRange(location: 0, length: 0)
     @FocusState private var isEditorFocused: Bool
     @State private var showFindPanel = false
     @State private var suppressContentSync = false
-    
+
     @AppStorage(AppConstants.Keys.previewSyncScroll) private var previewSyncScroll: Bool = true
     @Binding var scrollPosition: CGFloat
-    
+
     var body: some View {
-        VStack(spacing: 0) {
-            // CodeMirror Editor
-            CodeMirrorWebView(
-                text: $textContent,
-                selectedRange: $selectedRange,
-                currentDocumentURL: documentManager.currentDocument?.url,
-                editorTabID: documentManager.selectedTabID,
-                editorGeneration: documentManager.editorPresentation.generation,
-                isDark: themeService.isDarkMode,
-                viewMode: documentManager.viewMode,
-                editorTheme: themeService.currentTheme,
-                codeBlockTheme: themeService.currentCodeTheme,
-                appearanceToken: themeService.appearanceToken
-            )
-            .focused($isEditorFocused)
+        Group {
+            if let selectedID = documentManager.selectedTabID,
+               let tab = documentManager.tabs.first(where: { $0.id == selectedID }) {
+                CodeMirrorWebView(
+                    tabID: selectedID,
+                    isSelected: true,
+                    text: activeTextBinding,
+                    selectedRange: $selectedRange,
+                    currentDocumentURL: tab.document.url,
+                    isDark: themeService.isDarkMode,
+                    viewMode: documentManager.viewMode,
+                    editorTheme: themeService.currentTheme,
+                    codeBlockTheme: themeService.currentCodeTheme,
+                    appearanceToken: themeService.appearanceToken
+                )
+                .id(selectedID)
+            }
         }
+        .focused($isEditorFocused)
         .onAppear {
-            loadDocumentContent()
+            documentManager.onPrepareTabMount = { id in
+                mountState.markVisited(id, documentManager: documentManager)
+            }
+            if let id = documentManager.selectedTabID {
+                syncActiveTabContent()
+                mountState.markVisited(id, documentManager: documentManager)
+            }
             isEditorFocused = true
             EditorAppearanceSync.pushToEditor()
             EditorSettingsSync.pushToEditor()
             TypingSettingsSync.pushToEditor()
         }
-        .onChange(of: documentManager.selectedTabID) { _, _ in
-            loadDocumentContent()
+        .onChange(of: documentManager.selectedTabID) { _, newID in
+            syncActiveTabContent()
+            if let newID {
+                mountState.markVisited(newID, documentManager: documentManager)
+            }
             documentManager.refreshStatisticsForCurrentTab()
             EditorAppearanceSync.pushToEditor()
         }
+        .onDisappear {
+            documentManager.onPrepareTabMount = nil
+        }
+        .onChange(of: documentManager.tabs.map(\.id)) { _, ids in
+            mountState.pruneClosedTabs(openTabIDs: Set(ids))
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .editorTabDidClose)) { notification in
+            guard let tabID = notification.object as? UUID else { return }
+            mountState.forget(tabID, documentManager: documentManager)
+        }
         .onChange(of: textContent) { _, newValue in
             guard !suppressContentSync else { return }
+            guard let tabID = documentManager.selectedTabID,
+                  documentManager.isTabEditorReady(tabID) else { return }
             documentManager.updateContent(newValue)
         }
         .onReceive(NotificationCenter.default.publisher(for: .editorHistoryContentApplied)) { notification in
-            guard let content = notification.object as? String else { return }
+            guard let content = notification.object as? String,
+                  let tabID = documentManager.selectedTabID else { return }
             suppressContentSync = true
             textContent = content
             suppressContentSync = false
+            EditorWebViewPool.shared.pushContent(tabID: tabID, content: content)
         }
         .onChange(of: previewSyncScroll) { _, enabled in
-            NotificationCenter.default.post(
-                name: .editorExecJS,
-                object: "window.cmEditor?.setSyncScroll(\(enabled));"
-            )
+            EditorExecJS.post("window.cmEditor?.setSyncScroll(\(enabled));", target: .activeTab)
         }
         .onChange(of: documentManager.focusMode) { _, _ in
             EditorAppearanceSync.pushFocusMode()
         }
         .onChange(of: documentManager.viewMode) { _, _ in
             EditorAppearanceSync.pushFocusMode()
+            if let tabID = documentManager.selectedTabID {
+                EditorWebViewPool.shared.activateTab(tabID, documentManager: documentManager)
+            }
         }
         .findReplacePanel(
             isPresented: $showFindPanel,
@@ -165,8 +192,18 @@ struct MarkdownEditorArea: View {
             showFindPanel = true
         }
     }
-    
-    private func loadDocumentContent() {
+
+    private var activeTextBinding: Binding<String> {
+        Binding(
+            get: { textContent },
+            set: { newValue in
+                guard documentManager.selectedTabID != nil else { return }
+                textContent = newValue
+            }
+        )
+    }
+
+    private func syncActiveTabContent() {
         suppressContentSync = true
         if let doc = documentManager.currentDocument, let tabID = documentManager.selectedTabID {
             documentManager.ensureUndoHistory(for: tabID, content: doc.content)

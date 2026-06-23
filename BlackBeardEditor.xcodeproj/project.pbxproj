@@ -15,8 +15,12 @@
 		EB763A7A2F11736F00B17ECA /* codemirror-editor.html in Resources */ = {isa = PBXBuildFile; fileRef = EB763A792F11735D00B17ECA /* codemirror-editor.html */; };
 		EBAC00022F2900000040C1BB /* Ace in Resources */ = {isa = PBXBuildFile; fileRef = EBAC00012F2900000040C1BB /* Ace */; };
 		EBCM00022F2600000040C1BB /* codemirror-split.js in Resources */ = {isa = PBXBuildFile; fileRef = EBCM00012F2600000040C1BB /* codemirror-split.js */; };
+		EBDI00022F2B00000040C1BB /* editor-document-index.js in Resources */ = {isa = PBXBuildFile; fileRef = EBDI00012F2B00000040C1BB /* editor-document-index.js */; };
 		EBEX00022F2800000040C1BB /* editor-experimental.js in Resources */ = {isa = PBXBuildFile; fileRef = EBEX00012F2800000040C1BB /* editor-experimental.js */; };
 		EBEXCM022F2A00000040C1BB /* editor-experimental-cm.js in Resources */ = {isa = PBXBuildFile; fileRef = EBEXCM012F2A00000040C1BB /* editor-experimental-cm.js */; };
+		EBYS00022F2C00000040C1BB /* editor-ysplit.js in Resources */ = {isa = PBXBuildFile; fileRef = EBYS00012F2C00000040C1BB /* editor-ysplit.js */; };
+		EBYSCM022F2C00000040C1BB /* editor-ysplit-cm.js in Resources */ = {isa = PBXBuildFile; fileRef = EBYSCM012F2C00000040C1BB /* editor-ysplit-cm.js */; };
+		EBYSSYNC22F2C00000040C1BB /* editor-ysplit-sync.js in Resources */ = {isa = PBXBuildFile; fileRef = EBYSSYNC12F2C00000040C1BB /* editor-ysplit-sync.js */; };
 		EBHL00022F2500000040C1BB /* HighlightJS in Resources */ = {isa = PBXBuildFile; fileRef = EBHL00012F2500000040C1BB /* HighlightJS */; };
 		EBKX00022F2500000040C1BB /* KaTeX in Resources */ = {isa = PBXBuildFile; fileRef = EBKX00012F2500000040C1BB /* KaTeX */; };
 		EBMK00022F2700000040C1BB /* Marked in Resources */ = {isa = PBXBuildFile; fileRef = EBMK00012F2700000040C1BB /* Marked */; };
@@ -33,8 +37,12 @@
 		EB763A792F11735D00B17ECA /* codemirror-editor.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = "codemirror-editor.html"; sourceTree = "<group>"; };
 		EBAC00012F2900000040C1BB /* Ace */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Ace; sourceTree = "<group>"; };
 		EBCM00012F2600000040C1BB /* codemirror-split.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "codemirror-split.js"; sourceTree = "<group>"; };
+		EBDI00012F2B00000040C1BB /* editor-document-index.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "editor-document-index.js"; sourceTree = "<group>"; };
 		EBEX00012F2800000040C1BB /* editor-experimental.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "editor-experimental.js"; sourceTree = "<group>"; };
 		EBEXCM012F2A00000040C1BB /* editor-experimental-cm.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "editor-experimental-cm.js"; sourceTree = "<group>"; };
+		EBYS00012F2C00000040C1BB /* editor-ysplit.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "editor-ysplit.js"; sourceTree = "<group>"; };
+		EBYSCM012F2C00000040C1BB /* editor-ysplit-cm.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "editor-ysplit-cm.js"; sourceTree = "<group>"; };
+		EBYSSYNC12F2C00000040C1BB /* editor-ysplit-sync.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "editor-ysplit-sync.js"; sourceTree = "<group>"; };
 		EBHL00012F2500000040C1BB /* HighlightJS */ = {isa = PBXFileReference; lastKnownFileType = folder; path = HighlightJS; sourceTree = "<group>"; };
 		EBKX00012F2500000040C1BB /* KaTeX */ = {isa = PBXFileReference; lastKnownFileType = folder; path = KaTeX; sourceTree = "<group>"; };
 		EBMK00012F2700000040C1BB /* Marked */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Marked; sourceTree = "<group>"; };
@@ -91,8 +99,12 @@
 				EB763A792F11735D00B17ECA /* codemirror-editor.html */,
 				EBCM00012F2600000040C1BB /* codemirror-split.js */,
 				EBVP00012F2700000040C1BB /* editor-virtual-preview.js */,
+				EBDI00012F2B00000040C1BB /* editor-document-index.js */,
 				EBEX00012F2800000040C1BB /* editor-experimental.js */,
 				EBEXCM012F2A00000040C1BB /* editor-experimental-cm.js */,
+				EBYS00012F2C00000040C1BB /* editor-ysplit.js */,
+				EBYSCM012F2C00000040C1BB /* editor-ysplit-cm.js */,
+				EBYSSYNC12F2C00000040C1BB /* editor-ysplit-sync.js */,
 				EBAC00012F2900000040C1BB /* Ace */,
 				EBMK00012F2700000040C1BB /* Marked */,
 				EB763A6A2F0E725700B17ECA /* prosemirror-editor.html */,
@@ -186,8 +198,12 @@
 				EB763A7A2F11736F00B17ECA /* codemirror-editor.html in Resources */,
 				EBCM00022F2600000040C1BB /* codemirror-split.js in Resources */,
 				EBVP00022F2700000040C1BB /* editor-virtual-preview.js in Resources */,
+				EBDI00022F2B00000040C1BB /* editor-document-index.js in Resources */,
 				EBEX00022F2800000040C1BB /* editor-experimental.js in Resources */,
 				EBEXCM022F2A00000040C1BB /* editor-experimental-cm.js in Resources */,
+				EBYS00022F2C00000040C1BB /* editor-ysplit.js in Resources */,
+				EBYSCM022F2C00000040C1BB /* editor-ysplit-cm.js in Resources */,
+				EBYSSYNC22F2C00000040C1BB /* editor-ysplit-sync.js in Resources */,
 				EBAC00022F2900000040C1BB /* Ace in Resources */,
 				EBMK00022F2700000040C1BB /* Marked in Resources */,
 				EB763A6B2F0E725C00B17ECA /* prosemirror-editor.html in Resources */,

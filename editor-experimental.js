@@ -149,6 +149,11 @@
         if (!anchor) return;
         armEchoSuppress('source');
         hooks.setSourceScrollForLine?.(anchor.line ?? 0, anchor.sub ?? 0);
+        if (Number.isFinite(anchor.previewScrollTop)) {
+            armEchoSuppress('preview');
+            hooks.setPreviewScrollTop?.(anchor.previewScrollTop);
+            return;
+        }
         armEchoSuppress('preview');
         syncFromSource();
     }
@@ -160,6 +165,11 @@
         const max = Math.max(0, sourceEl.scrollHeight - sourceEl.clientHeight);
         armEchoSuppress('source');
         sourceEl.scrollTop = ratio * max;
+        if (Number.isFinite(anchor?.previewScrollTop)) {
+            armEchoSuppress('preview');
+            hooks.setPreviewScrollTop?.(anchor.previewScrollTop);
+            return;
+        }
         armEchoSuppress('preview');
         syncFromSource();
     }

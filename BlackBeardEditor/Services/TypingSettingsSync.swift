@@ -65,7 +65,7 @@ enum TypingSettingsSync {
             });
         })();
         """
-        NotificationCenter.default.post(name: .editorExecJS, object: script)
+        EditorExecJS.post(script, target: .allMounted)
 
         if spellCheck {
             let refresh = """
@@ -73,7 +73,7 @@ enum TypingSettingsSync {
                 if (window.cmEditor?.requestSpellCheckRefresh) window.cmEditor.requestSpellCheckRefresh();
             })();
             """
-            NotificationCenter.default.post(name: .editorExecJS, object: refresh)
+            EditorExecJS.post(refresh, target: .activeTab)
         } else {
             SpellCheckSync.clearMarks(on: nil)
         }

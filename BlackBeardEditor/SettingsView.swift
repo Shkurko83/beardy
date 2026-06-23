@@ -500,7 +500,10 @@ struct AppearanceSettingsView: View {
                             .onChange(of: previewSyncScroll) { _, enabled in
                                 NotificationCenter.default.post(
                                     name: .editorExecJS,
-                                    object: "window.cmEditor?.setSyncScroll(\(enabled));"
+                                    object: EditorExecJSPayload(
+                                        script: "window.cmEditor?.setSyncScroll(\(enabled));",
+                                        target: .activeTab
+                                    )
                                 )
                             }
                     }

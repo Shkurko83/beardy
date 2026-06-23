@@ -6,9 +6,11 @@ struct EditorPresentationState: Equatable {
     var generation: UInt = 0
     /// WebView finished loading `tabID` for `generation`.
     var isReady: Bool = false
+    /// Character count Swift pushed for the active session (integrity check).
+    var expectedCharacterCount: Int = 0
 
     var isReadyForSelectedTab: Bool {
-        guard isReady, let tabID else { return false }
+        guard isReady, tabID != nil else { return false }
         return true
     }
 }
@@ -23,4 +25,10 @@ enum EditorContentDeliverySource {
     case userEdit
     case documentLoaded
     case flush
+}
+
+struct EditorFlushMessage: Equatable {
+    let tabID: UUID
+    let generation: UInt
+    let content: String
 }
