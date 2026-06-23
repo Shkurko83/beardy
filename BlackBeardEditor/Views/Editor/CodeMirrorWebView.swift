@@ -192,9 +192,7 @@ struct CodeMirrorWebView: NSViewRepresentable {
         case .edit: return "edit"
         case .live: return "live"
         case .preview: return "preview"
-        case .split: return "split"
-        case .experimental: return "experimental"
-        case .ySplit: return "ysplit"
+        case .split: return "ysplit"
         case .diff: return "preview"
         }
     }

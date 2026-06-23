@@ -171,37 +171,6 @@
                     }
                     body.mode-preview #swap-button { display: none; }
 
-                    body.mode-split #live-editor { display: none; }
-                    body.mode-split #editor-container { display: flex; }
-                    body.mode-split #markdown-pane {
-                        display: block;
-                        width: 50% !important;
-                        height: 100%;
-                    }
-                    body.mode-split #preview-pane {
-                        display: block;
-                        width: 50% !important;
-                        height: 100%;
-                        overflow-x: hidden;
-                        overflow-y: auto;
-                        -webkit-overflow-scrolling: touch;
-                    }
-                    body.mode-split #markdown-textarea {
-                        display: block;
-                        position: relative;
-                        width: 100%;
-                        min-height: 100%;
-                        height: auto;
-                        opacity: 1;
-                        pointer-events: auto;
-                        overflow: hidden;
-                        padding: 40px 60px;
-                        z-index: 2;
-                    }
-                    body.mode-split .markdown-editor-wrap {
-                        overflow-y: auto;
-                        overflow-x: hidden;
-                    }
                     #codemirror-split-root {
                         display: none;
                         position: absolute;
@@ -221,59 +190,6 @@
                         display: none !important;
                     }
 
-                    /* Experimental X-Split: plain textarea + flow preview + line map sync */
-                    body.mode-experimental #live-editor { display: none; }
-                    body.mode-experimental #editor-container { display: flex; }
-                    body.mode-experimental #markdown-pane {
-                        display: block;
-                        width: 50% !important;
-                        height: 100%;
-                    }
-                    body.mode-experimental #preview-pane {
-                        display: block;
-                        width: 50% !important;
-                        height: 100%;
-                        overflow-x: hidden;
-                        overflow-y: auto;
-                        -webkit-overflow-scrolling: touch;
-                    }
-                    body.mode-experimental #markdown-textarea {
-                        display: none !important;
-                    }
-                    #experimental-cm-root {
-                        display: none;
-                        position: absolute;
-                        inset: 0;
-                        width: 100%;
-                        height: 100%;
-                        z-index: 4;
-                    }
-                    body.mode-experimental #experimental-cm-root,
-                    body.mode-experimental.experimental-cm-active #experimental-cm-root {
-                        display: block;
-                    }
-                    body.mode-experimental #experimental-ace-root {
-                        display: none !important;
-                    }
-                    body.mode-experimental .markdown-editor-wrap {
-                        overflow-y: auto;
-                        overflow-x: hidden;
-                    }
-                    body.mode-experimental.experimental-cm-active .markdown-editor-wrap {
-                        overflow: hidden;
-                    }
-                    body.mode-experimental.experimental-cm-active .markdown-editor-body {
-                        height: 100%;
-                        min-height: 0;
-                    }
-                    body.mode-experimental #codemirror-split-root,
-                    body.mode-experimental #markdown-spell-overlay,
-                    body.mode-experimental #markdown-find-overlay {
-                        display: none !important;
-                    }
-                    body.mode-experimental.cm6-source-active #markdown-textarea {
-                        display: block !important;
-                    }
 
                     /* Y-Split: MacDown-style header-anchored scroll sync */
                     body.mode-ysplit #live-editor { display: none; }
@@ -318,7 +234,6 @@
                         min-height: 0;
                     }
                     body.mode-ysplit #codemirror-split-root,
-                    body.mode-ysplit #experimental-cm-root,
                     body.mode-ysplit #markdown-spell-overlay,
                     body.mode-ysplit #markdown-find-overlay {
                         display: none !important;
@@ -1321,9 +1236,7 @@
                         color: inherit;
                     "></textarea>
                         <div id="codemirror-split-root" aria-label="Markdown source editor"></div>
-                        <div id="experimental-cm-root" aria-label="Markdown source (X-Split)"></div>
                         <div id="ysplit-cm-root" aria-label="Markdown source (Y-Split)"></div>
-                        <div id="experimental-ace-root" aria-hidden="true" hidden></div>
                         <div id="markdown-spell-overlay" class="editor-source-metrics" aria-hidden="true"></div>
                         <div id="markdown-find-overlay" class="editor-source-metrics" aria-hidden="true"></div>
                     </div>
@@ -1340,8 +1253,6 @@
         <script src="codemirror-split.js"></script>
         <script src="editor-document-index.js"></script>
         <script src="editor-virtual-preview.js"></script>
-        <script src="editor-experimental-cm.js"></script>
-        <script src="editor-experimental.js"></script>
         <script src="editor-ysplit-sync.js"></script>
         <script src="editor-ysplit-cm.js"></script>
         <script src="editor-ysplit.js"></script>
@@ -1592,8 +1503,8 @@
                 if (!mirror || !ta) return;
 
                 const mode = document.body.className.match(/mode-(\w+)/)?.[1] || 'edit';
-                // Split: always plain textarea — no syntax overlay (scroll sync uses line metrics).
-                if (mode === 'split' || mode === 'experimental' || mode === 'ysplit') {
+                // Y-Split: plain textarea — no syntax overlay.
+                if (mode === 'ysplit') {
                     mirror.innerHTML = '';
                     mirror.style.display = 'none';
                     ta.classList.remove('source-mirror-active');
@@ -2144,303 +2055,10 @@
             }
 
             function isPreviewActive() {
-                return document.body.classList.contains('mode-split')
+                return document.body.classList.contains('mode-ysplit')
                     || document.body.classList.contains('mode-preview');
             }
 
-            function isExperimentalMode() {
-                return document.body.classList.contains('mode-experimental');
-            }
-
-            function createExperimentalPreviewHooks(options = {}) {
-                return {
-                    createBlockEl,
-                    highlightCodeBlocks,
-                    scheduleMermaid: scheduleMermaidRenderAfterLayout,
-                    appendFootnotes: appendFootnotesSection,
-                    rewriteImages: rewriteImagesInContainer,
-                    getDocumentLayout: () => window.documentIndex?.getLayout?.() ?? [],
-                    syncDocumentLayout: (layout) => {
-                        window.documentIndex?.applyMeasuredLayout?.(layout);
-                    },
-                    preferSourceLineWindow: false,
-                    getSourceLineWindow: () => (
-                        window.experimentalCodeMirror?.getVisibleSourceLineRange?.()
-                        ?? { startLine: 0, endLine: 0 }
-                    ),
-                    getScrollElement: () => previewPane || preview,
-                    getScrollTop: () => (previewPane || preview)?.scrollTop ?? 0,
-                    onLayoutSettled: () => {
-                        if (window.virtualPreview?.isActive?.()) {
-                            window.documentIndex?.applyMeasuredLayout?.(
-                                window.virtualPreview.getLayout()
-                            );
-                        }
-                        if (window.experimentalEditor?.isActive?.()) {
-                            window.experimentalEditor.resyncAfterLayout?.();
-                        }
-                    },
-                    onReady: () => {
-                        window.documentIndex?.applyMeasuredLayout?.(
-                            window.virtualPreview.getLayout()
-                        );
-                        markPreviewRendered(currentContent ?? textarea?.value ?? '');
-                        options.onComplete?.();
-                    },
-                };
-            }
-
-            function mapExperimentalSourceLineToPreviewY(line, sub) {
-                const blocks = collectExperimentalPreviewBlocks();
-                if (!blocks.length) return 0;
-                let seg = blocks[0];
-                for (const block of blocks) {
-                    if (block.line <= line) seg = block;
-                    else break;
-                }
-                const idx = blocks.indexOf(seg);
-                const next = blocks[idx + 1];
-                const lh = window.experimentalCodeMirror?.getLineHeight?.() ?? 22.4;
-                const lineSpan = next && next.line > seg.line ? next.line - seg.line : 8;
-                const frac = Math.max(0, Math.min(1, (line - seg.line + (sub || 0) / lh) / lineSpan));
-                const segHeight = next
-                    ? Math.max(next.top - seg.top, lh)
-                    : (seg.el?.offsetHeight ?? lh * 3);
-                return seg.top + frac * segHeight;
-            }
-
-            function mapExperimentalPreviewYToSourceLine(y) {
-                const blocks = collectExperimentalPreviewBlocks();
-                if (!blocks.length) return { line: 0, sub: 0 };
-                let idx = 0;
-                for (let i = 0; i < blocks.length; i++) {
-                    if (blocks[i].top <= y) idx = i;
-                    else break;
-                }
-                const seg = blocks[idx];
-                const next = blocks[idx + 1];
-                const lh = window.experimentalCodeMirror?.getLineHeight?.() ?? 22.4;
-                const segHeight = next
-                    ? Math.max(next.top - seg.top, lh)
-                    : (seg.el?.offsetHeight ?? lh * 3);
-                const offset = Math.max(0, y - seg.top);
-                const frac = segHeight > 0 ? offset / segHeight : 0;
-                const lineSpan = next && next.line > seg.line ? next.line - seg.line : 8;
-                const lineFrac = seg.line + frac * lineSpan;
-                const line = Math.floor(lineFrac);
-                return { line, sub: (lineFrac - line) * lh };
-            }
-
-            function mountExperimentalPreview(text, options = {}) {
-                const container = preview;
-                if (!container) return;
-                const doc = window.documentIndex.ensure(text || '');
-                linkReferenceMap = doc.refs;
-                footnoteMap = doc.footnotes;
-                const blocks = doc.blocks;
-                const footnotes = doc.footnotes;
-                const normalized = doc.normalizedText;
-                container.dataset.experimentalPreview = '1';
-
-                const vp = window.virtualPreview;
-                const useVirtual = vp?.shouldUse?.(blocks.length, normalized.length);
-
-                if (useVirtual) {
-                    vp.configure({
-                        blockThreshold: PREVIEW_VIRTUAL_BLOCK_THRESHOLD,
-                        charThreshold: LARGE_DOC_CHAR_THRESHOLD,
-                        windowSize: PREVIEW_VIRTUAL_WINDOW,
-                        buffer: PREVIEW_VIRTUAL_BUFFER,
-                        sourceLineBuffer: PREVIEW_VIRTUAL_SOURCE_LINE_BUFFER,
-                        measureWhileScrolling: false,
-                    });
-                    const payload = {
-                        container,
-                        blocks,
-                        footnotes,
-                        readOnly: true,
-                        hooks: createExperimentalPreviewHooks(options),
-                    };
-                    if (vp.isActive?.()) {
-                        vp.update(payload);
-                    } else {
-                        vp.mount(payload);
-                    }
-                    return;
-                }
-
-                if (vp?.isActive?.()) {
-                    vp.teardown();
-                }
-
-                container.innerHTML = '';
-                blocks.forEach((block, index) => {
-                    container.appendChild(createBlockEl(block, index, { readOnly: true }));
-                });
-                highlightCodeBlocks(container);
-                rewriteImagesInContainer(container);
-                if (isElementVisibleForLayout(container)) {
-                    scheduleMermaidRenderAfterLayout([container]);
-                }
-                appendFootnotesSection(container, footnotes);
-                markPreviewRendered(text);
-                options.onComplete?.();
-            }
-
-            function teardownExperimentalPreview() {
-                if (window.virtualPreview?.isActive?.() && preview?.dataset.experimentalPreview) {
-                    window.virtualPreview.teardown();
-                }
-                window.virtualPreview?.configure?.({ measureWhileScrolling: false });
-                if (!preview?.dataset.experimentalPreview) return;
-                delete preview.dataset.experimentalPreview;
-                preview.innerHTML = '';
-                markPreviewStale();
-            }
-
-            function prepareExperimentalSource(options = {}) {
-                const ta = textarea;
-                if (!ta) return;
-                ta.classList.remove('source-mirror-active');
-                const mirror = document.getElementById('markdown-spell-overlay');
-                if (mirror) {
-                    mirror.innerHTML = '';
-                    mirror.style.display = 'none';
-                }
-                const text = options.text ?? ta.value ?? currentContent ?? '';
-                window.experimentalCodeMirror?.mount({
-                    initialText: text,
-                    onChange: options.onChange,
-                    onScroll: options.onScroll,
-                });
-                if (typeof applyExperimentalTextareaHeight === 'function') {
-                    applyExperimentalTextareaHeight();
-                }
-                if (markdownEditorScroll) markdownEditorScroll.scrollTop = 0;
-            }
-
-            function experimentalSetPreviewScrollTop(y, opts) {
-                const el = previewPane;
-                if (!el) return;
-                const max = Math.max(0, el.scrollHeight - el.clientHeight);
-                el.scrollTop = Math.max(0, Math.min(y ?? 0, max));
-                if (window.virtualPreview?.isActive?.() && preview?.dataset.experimentalPreview) {
-                    if (opts?.fromSource) {
-                        window.virtualPreview.syncWindowNow?.();
-                    } else {
-                        window.virtualPreview.onScroll();
-                    }
-                }
-            }
-
-            function experimentalGetPreviewDocY() {
-                return Math.max(0, previewPane?.scrollTop ?? 0);
-            }
-
-            function experimentalPreviewScrollMax() {
-                const el = previewPane;
-                return Math.max(0, (el?.scrollHeight ?? 0) - (el?.clientHeight ?? 0));
-            }
-
-            function experimentalLayoutYToPreviewScroll(layoutY) {
-                const maxScroll = experimentalPreviewScrollMax();
-                return Math.max(0, Math.min(layoutY ?? 0, maxScroll));
-            }
-
-            function experimentalPreviewScrollToLayoutY(scrollTop) {
-                return Math.max(0, scrollTop ?? 0);
-            }
-
-            function experimentalGetSourceLineForLayoutY(layoutY) {
-                const vp = window.virtualPreview;
-                if (!vp?.isActive?.()) return 0;
-                return vp.getSourceLineForPreviewY?.(layoutY) ?? 0;
-            }
-
-            function experimentalEnsurePreviewForSourceViewport() {
-                const range = window.experimentalCodeMirror?.getVisibleSourceLineRange?.();
-                if (!range || !window.virtualPreview?.isActive?.()) return;
-                window.virtualPreview.syncWindowFromSourceLines?.(
-                    range.startLine,
-                    range.endLine
-                );
-            }
-
-            function getExperimentalHooks() {
-                return {
-                    getText: () => textarea?.value ?? currentContent ?? '',
-                    getSourceScrollEl: () => window.experimentalCodeMirror?.getScrollElement?.() ?? markdownEditorScroll,
-                    getPreviewScrollEl: () => previewPane,
-                    getTopSourceLine: () => window.experimentalCodeMirror?.getTopSourceLine?.() ?? 0,
-                    getSubLinePx: () => window.experimentalCodeMirror?.getSubLinePx?.() ?? 0,
-                    getSourceLineHeight: () => window.experimentalCodeMirror?.getLineHeight?.() ?? 22.4,
-                    getSourceLineCount: () => window.experimentalCodeMirror?.getLineCount?.() ?? 1,
-                    setSourceScrollForLine: (line, sub) => {
-                        window.experimentalCodeMirror?.setScrollTop?.(
-                            window.experimentalCodeMirror.scrollForLine(line, sub)
-                        );
-                    },
-                    getPreviewDocY: experimentalGetPreviewDocY,
-                    setPreviewScrollTop: experimentalSetPreviewScrollTop,
-                    mapLayoutYToPreviewScroll: experimentalLayoutYToPreviewScroll,
-                    mapPreviewScrollToLayoutY: experimentalPreviewScrollToLayoutY,
-                    getSourceLineForLayoutY: experimentalGetSourceLineForLayoutY,
-                    ensurePreviewForSourceViewport: experimentalEnsurePreviewForSourceViewport,
-                    isVirtualPreviewActive: () => (
-                        !!window.virtualPreview?.isActive?.()
-                        && !!preview?.dataset.experimentalPreview
-                    ),
-                    getPreviewYForSourceLine: (line, sub) => (
-                        window.virtualPreview?.getPreviewYForSourceLine?.(line, sub) ?? 0
-                    ),
-                    onPreviewViewportScroll: () => {
-                        if (window.virtualPreview?.isActive?.() && preview?.dataset.experimentalPreview) {
-                            window.virtualPreview.onScroll();
-                        }
-                    },
-                    mapSourceLineToPreviewY: mapExperimentalSourceLineToPreviewY,
-                    mapPreviewYToSourceLine: mapExperimentalPreviewYToSourceLine,
-                    prepareSource: prepareExperimentalSource,
-                    teardownSource: () => {
-                        const text = window.experimentalCodeMirror?.unmount?.();
-                        if (text != null && textarea) {
-                            textarea.value = text;
-                            currentContent = text;
-                        }
-                    },
-                    mountPreview: (text, opts) => mountExperimentalPreview(text, opts),
-                    teardownPreview: teardownExperimentalPreview,
-                    syncTextareaValue: (value) => {
-                        currentContent = value;
-                        if (textarea) textarea.value = value;
-                        markPreviewStale();
-                        scheduleContentSync(value);
-                    },
-                    syncSourceText: (value) => {
-                        window.experimentalCodeMirror?.syncText?.(value);
-                    },
-                };
-            }
-
-            function enterExperimentalMode(anchor) {
-                lockScrollAnchor(anchor);
-                window.experimentalEditor?.enter?.({
-                    text: currentContent ?? textarea?.value ?? '',
-                    anchor,
-                    hooks: getExperimentalHooks(),
-                    onReady: () => {
-                        restoreDocumentScrollAnchor(anchor, { persistent: true });
-                        unlockScrollAnchor();
-                    },
-                });
-            }
-
-            function leaveExperimentalMode() {
-                const anchor = window.experimentalEditor?.leave?.();
-                if (anchor && typeof anchor.percent === 'number') {
-                    documentScrollPercent = anchor.percent;
-                }
-            }
 
             function isYSplitMode() {
                 return document.body.classList.contains('mode-ysplit');
@@ -2994,7 +2612,7 @@
             function clearDocumentRenderSurfaces() {
                 renderedPreviewKey = null;
                 renderedLiveKey = null;
-                invalidateSplitBlockMap();
+                window.documentIndex?.invalidate?.();
                 const previewEl = document.getElementById('preview-content');
                 if (previewEl) previewEl.innerHTML = '';
                 const liveEl = getLiveScrollElement();
@@ -3032,7 +2650,7 @@
                 if (window.virtualPreview?.isActive?.()) {
                     window.virtualPreview.teardown();
                 }
-                invalidateSplitBlockMap();
+                window.documentIndex?.invalidate?.();
             }
 
             function invalidateRenderedLiveCache() {
@@ -3287,15 +2905,6 @@
                 if (document.body.classList.contains('mode-preview')) {
                     return previewPane || preview;
                 }
-                if (document.body.classList.contains('mode-split')) {
-                    if (splitScrollLeader === 'preview') {
-                        return previewPane || preview;
-                    }
-                    return getMarkdownScrollElement();
-                }
-                if (document.body.classList.contains('mode-experimental')) {
-                    return getMarkdownScrollElement();
-                }
                 if (document.body.classList.contains('mode-ysplit')) {
                     return getMarkdownScrollElement();
                 }
@@ -3310,12 +2919,6 @@
             }
 
             function captureCm6LineAnchor() {
-                if (isExperimentalMode() && window.experimentalCodeMirror?.isActive?.()) {
-                    return {
-                        line: window.experimentalCodeMirror.getTopSourceLine(),
-                        sub: window.experimentalCodeMirror.getSubLinePx(),
-                    };
-                }
                 if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
                     return {
                         line: window.ySplitCodeMirror.getTopSourceLine(),
@@ -3366,14 +2969,14 @@
                     anchor.sub = lineAnchor.sub;
                 }
                 const mode = getActiveEditorMode();
-                if (mode === 'ysplit' || mode === 'experimental' || mode === 'split' || mode === 'preview') {
+                if (mode === 'ysplit' || mode === 'preview') {
                     const previewEl = previewPane || preview;
                     if (previewEl) anchor.previewScrollTop = previewEl.scrollTop;
                 }
                 if (lineAnchor) {
                     return anchor;
                 }
-                if (mode === 'preview' || (mode === 'split' && splitScrollLeader === 'preview')) {
+                if (mode === 'preview') {
                     const previewLine = capturePreviewSourceLineAnchor();
                     if (previewLine) {
                         anchor.line = previewLine.line;
@@ -3414,12 +3017,8 @@
 
                 scrollAnchorRestoreBlocked = true;
 
-                if (mode === 'experimental') {
-                    window.experimentalEditor?.restoreScroll?.(anchor);
-                } else if (mode === 'ysplit') {
+                if (mode === 'ysplit') {
                     window.ySplitEditor?.restoreScroll?.(anchor);
-                } else if (mode === 'split') {
-                    restoreSplitScrollFromAnchor(anchor);
                 } else if (mode === 'preview') {
                     if (Number.isFinite(anchor.previewScrollTop)) {
                         const previewEl = previewPane || preview;
@@ -3429,7 +3028,8 @@
                         }
                     } else if (hasLine && window.virtualPreview?.isActive?.()) {
                         const previewY = window.virtualPreview.getPreviewYForSourceLine(line, sub);
-                        setFollowerScrollTop('preview', previewY);
+                        const previewEl2 = previewPane || preview;
+                        if (previewEl2) previewEl2.scrollTop = previewY;
                         window.virtualPreview.syncWindowNow?.() || window.virtualPreview.onScroll?.();
                     } else {
                         applyScrollPercentToElement(previewPane || preview, percent);
@@ -3485,9 +3085,6 @@
                     setTimeout(() => {
                         if (token !== scrollRestoreToken) return;
                         apply();
-                        if (isSplitMode()) {
-                            resyncSplitScrollAfterLayout();
-                        }
                     }, delay);
                 });
             }
@@ -3564,15 +3161,7 @@
                         }
                         return true;
                     }
-                    if (document.body.classList.contains('mode-experimental')) {
-                        window.experimentalEditor?.restoreScroll?.(anchor);
-                        return true;
-                    }
-                    if (document.body.classList.contains('mode-split')) {
-                        restoreSplitScrollFromAnchor(anchor);
-                        return true;
-                    }
-                    restoreDocumentScrollAnchor(anchor, { persistent });
+restoreDocumentScrollAnchor(anchor, { persistent });
                     return true;
                 };
                 apply();
@@ -3643,11 +3232,7 @@
                         window.sourceCodeMirror.refreshTheme();
                         cmThemeRefreshed = true;
                     }
-                    if (isExperimentalMode() && window.experimentalCodeMirror?.isActive?.()) {
-                        window.experimentalCodeMirror.refreshTheme({ skipScrollRestore: true });
-                        cmThemeRefreshed = true;
-                    }
-                    if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
+if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
                         window.ySplitCodeMirror.refreshTheme({ skipScrollRestore: true });
                         cmThemeRefreshed = true;
                     }
@@ -3946,7 +3531,7 @@
             }
 
             function captureTypographyScrollAnchor() {
-                if (document.body.classList.contains('mode-split')) {
+                if (document.body.classList.contains('mode-ysplit')) {
                     const sourceEl = getMarkdownScrollElement();
                     if (sourceEl) {
                         const metrics = getScrollMetrics(sourceEl);
@@ -3959,14 +3544,10 @@
             function relayoutAfterTypographyChange(anchor) {
                 syncTextareaEditorHeight();
                 const restoreLayout = () => {
-                    if (document.body.classList.contains('mode-split')) {
-                        if (!shouldUseLargeDocPerf()) {
-                            invalidateSplitLineMap();
-                        }
-                        restoreSplitScrollFromRatio(anchor?.percent ?? documentScrollPercent ?? 0);
-                    } else {
-                        restoreDocumentScrollAnchor(anchor, { persistent: true });
+                    if (document.body.classList.contains('mode-ysplit')) {
+                        window.ySplitEditor?.resyncAfterLayout?.();
                     }
+                    restoreDocumentScrollAnchor(anchor, { persistent: true });
                 };
                 requestAnimationFrame(() => {
                     restoreLayout();
@@ -4085,119 +3666,19 @@
                 return measurePrefixContentHeight(ta, offset);
             }
 
-            function applyExperimentalTextareaHeight() {
-                const ta = textarea;
-                const wrap = markdownEditorScroll;
-                if (!ta || !wrap) return;
-                if (window.experimentalCodeMirror?.isActive?.()) {
-                    ta.style.height = '0';
-                    ta.style.minHeight = '0';
-                    ta.style.overflow = 'hidden';
-                    wrap.scrollTop = 0;
-                    syncSpellOverlayHeight();
-                    return;
-                }
-                const textLen = ta.value.length;
-                const minHeight = wrap.clientHeight;
-                const metrics = getGutterTypographyMetrics(ta);
-                const lineCount = textLen ? (ta.value.match(/\n/g)?.length ?? 0) + 1 : 1;
-                const estimated = lineCount * metrics.lineHeight + metrics.paddingTop + metrics.paddingBottom;
-                ta.style.height = `${Math.max(estimated, minHeight)}px`;
-                syncSpellOverlayHeight();
-            }
 
-            function collectExperimentalPreviewBlocks() {
-                if (window.virtualPreview?.isActive?.()) {
-                    return window.virtualPreview.getLayout().map((entry) => ({
-                        line: entry.line,
-                        top: entry.top,
-                    }));
-                }
-                const anchors = window.documentIndex?.getBlockLineAnchors?.() ?? [];
-                if (anchors.length) {
-                    return anchors.map((entry) => ({
-                        line: entry.line,
-                        top: entry.top,
-                    }));
-                }
-                const root = preview;
-                if (!root?.dataset.experimentalPreview) return [];
-                return [...root.querySelectorAll('.live-block[data-source-line]')]
-                    .map((el) => ({
-                        line: parseInt(el.getAttribute('data-source-line'), 10) || 0,
-                        top: getBlockTopInPreview(el),
-                        el,
-                    }))
-                    .sort((a, b) => a.line - b.line);
-            }
 
-            function buildExperimentalPreviewLineTops(sourceLineTops) {
-                const lineCount = sourceLineTops.length;
-                const previewTops = new Float64Array(lineCount);
-                const blocks = collectExperimentalPreviewBlocks();
-                const segments = [{ line: 0, previewTop: 0 }];
-                blocks.forEach((block) => {
-                    const last = segments[segments.length - 1];
-                    if (!last || last.line !== block.line) {
-                        segments.push({ line: block.line, previewTop: block.top });
-                    }
-                });
-                const lastBlock = blocks[blocks.length - 1];
-                const previewEnd = lastBlock
-                    ? lastBlock.top + lastBlock.el.offsetHeight
-                    : (preview?.scrollHeight ?? 0);
-                segments.push({ line: Math.max(0, lineCount - 1), previewTop: previewEnd });
-                segments.sort((a, b) => a.line - b.line);
 
-                for (let s = 0; s < segments.length - 1; s++) {
-                    const seg = segments[s];
-                    const next = segments[s + 1];
-                    const l0 = seg.line;
-                    const l1 = Math.min(next.line, lineCount - 1);
-                    const p0 = seg.previewTop;
-                    const p1 = next.previewTop;
-                    const y0 = sourceLineTops[l0] ?? 0;
-                    const y1 = sourceLineTops[l1] ?? y0;
-                    for (let line = l0; line <= l1 && line < lineCount; line++) {
-                        const sy = sourceLineTops[line] ?? y0;
-                        const span = y1 - y0;
-                        const t = span > 0 ? (sy - y0) / span : 0;
-                        previewTops[line] = p0 + t * (p1 - p0);
-                    }
-                }
-                previewTops[0] = 0;
-                return previewTops;
-            }
-
-            function buildExperimentalScrollMap() {
-                const ta = textarea;
-                if (!ta || !preview?.dataset.experimentalPreview) return null;
-                const lines = getLogicalLines(ta.value ?? '');
-                const lineCount = Math.max(1, lines.length);
-                const m = getGutterTypographyMetrics(ta);
-                const sourceTops = new Float64Array(lineCount);
-                for (let i = 0; i < lineCount; i++) sourceTops[i] = i * m.lineHeight;
-                const previewTops = buildExperimentalPreviewLineTops(sourceTops);
-                return { sourceTops, previewTops };
-            }
 
             function syncTextareaEditorHeight() {
                 const ta = textarea;
                 const wrap = markdownEditorScroll;
                 if (!ta || !wrap) return;
-                if (isExperimentalMode()) {
-                    applyExperimentalTextareaHeight();
-                    return;
-                }
-                if (isYSplitMode()) {
+if (isYSplitMode()) {
                     applyYSplitTextareaHeight();
                     return;
                 }
-                if (isSplitMode() && splitSourceLineTops?.length) {
-                    applySplitTextareaHeightFromLineTops(splitSourceLineTops);
-                    return;
-                }
-                const textLen = ta.value.length;
+const textLen = ta.value.length;
                 const minHeight = wrap.clientHeight;
                 if (textLen >= LARGE_DOC_CHAR_THRESHOLD) {
                     const metrics = getGutterTypographyMetrics(ta);
@@ -4317,7 +3798,6 @@
             function renderPreview(text, options = {}) {
                 const anchor = options.scrollAnchor
                     || (options.preserveScroll ? captureDocumentScrollAnchor() : null);
-                updateCachedSourceLineCount();
                 try {
                     mountDocumentBlocks(preview, text || '', { readOnly: true });
                     markPreviewRendered(text);
@@ -4326,17 +3806,8 @@
                     preview.textContent = text;
                     invalidateRenderedPreviewCache();
                 }
-                buildSplitBlockMap();
-                if (isSplitMode() && !shouldUseLargeDocPerf()) {
-                    invalidateSplitLineMap();
-                    startSplitLineMapBuild(true);
-                }
                 if (anchor) {
-                    if (isSplitMode()) {
-                        restoreSplitScrollFromAnchor(anchor);
-                    } else {
-                        restoreDocumentScrollAnchor(anchor, { persistent: true });
-                    }
+                    restoreDocumentScrollAnchor(anchor, { persistent: true });
                 }
                 if (findState.active) scheduleFindRefresh();
             }
@@ -4585,7 +4056,7 @@
                     return document.getElementById('live-editor');
                 }
                 if (document.body.classList.contains('mode-preview')
-                    || document.body.classList.contains('mode-split')) {
+                    || document.body.classList.contains('mode-ysplit')) {
                     return document.getElementById('preview-content');
                 }
                 return null;
@@ -4672,9 +4143,7 @@
                         currentContent = value;
                         textarea.dispatchEvent(new Event('input', { bubbles: true }));
                     },
-                    onScroll: () => {
-                        if (isSplitMode()) onEditorScroll();
-                    },
+
                 });
                 if (Number.isFinite(line) && isCm6SourceActive()) {
                     window.sourceCodeMirror.setScrollTop(
@@ -4743,56 +4212,6 @@
                 return getMarkdownScrollElement();
             }
 
-            function isSplitMode() {
-                return document.body.classList.contains('mode-split');
-            }
-
-            function clampRatio(value) {
-                if (!Number.isFinite(value)) return 0;
-                return Math.max(0, Math.min(1, value));
-            }
-
-            // Split scroll: per-line Y map (source docY ↔ preview docY).
-            const SPLIT_LINE_MAP_ASYNC_LINE_THRESHOLD = 12000;
-            const SPLIT_LINE_MAP_BATCH = 500;
-
-            let splitScrollLeader = null;
-            let splitSuppressScroll = false;
-            let splitSyncRaf = 0;
-            let pendingSplitSyncFrom = null;
-            let cachedSourceLineCount = 1;
-            let splitBlockMap = [];
-            let splitBlockMapKey = '';
-            let splitSourceLineTops = null;
-            let splitPreviewLineTops = null;
-            let splitLineMapKey = '';
-            let splitLineMapReady = false;
-            let splitLineMapBuildToken = 0;
-
-            function updateCachedSourceLineCount() {
-                const text = textarea?.value ?? currentContent ?? '';
-                cachedSourceLineCount = text ? (text.match(/\n/g)?.length ?? 0) + 1 : 1;
-            }
-
-            function invalidateSplitLineMap() {
-                splitLineMapKey = '';
-                splitSourceLineTops = null;
-                splitPreviewLineTops = null;
-                splitLineMapReady = false;
-                splitLineMapBuildToken++;
-            }
-
-            function invalidateSplitBlockMap() {
-                splitBlockMapKey = '';
-                splitBlockMap = [];
-                window.documentIndex?.invalidate?.();
-                invalidateSplitLineMap();
-            }
-
-            function getPreviewContentRoot() {
-                return document.getElementById('preview-content');
-            }
-
             function getBlockTopInPreview(el) {
                 const scrollEl = previewPane;
                 if (!scrollEl || !el) return 0;
@@ -4801,511 +4220,10 @@
                 return elRect.top - scrollRect.top + scrollEl.scrollTop;
             }
 
-            function buildSplitBlockMap() {
-                const key = renderedPreviewKey || getDocumentContentKey(currentContent ?? '');
-                if (splitBlockMapKey === key && splitBlockMap.length) return;
-                splitBlockMapKey = key;
-                if (window.virtualPreview?.isActive?.()) {
-                    const layout = window.virtualPreview.getLayout();
-                    splitBlockMap = layout.map((entry) => ({
-                        line: entry.line,
-                        top: entry.top,
-                    }));
-                    return;
-                }
-                const anchors = window.documentIndex?.getBlockLineAnchors?.() ?? [];
-                if (anchors.length) {
-                    splitBlockMap = anchors.map((entry) => ({
-                        line: entry.line,
-                        top: entry.top,
-                    }));
-                    return;
-                }
-                const root = getPreviewContentRoot();
-                if (!root) {
-                    splitBlockMap = [];
-                    return;
-                }
-                splitBlockMap = [...root.querySelectorAll('.live-block[data-source-line]')]
-                    .map((el) => ({
-                        line: parseInt(el.getAttribute('data-source-line'), 10) || 0,
-                        top: getBlockTopInPreview(el),
-                        el,
-                    }))
-                    .sort((a, b) => a.line - b.line);
-            }
-
-            function buildSourceLineTopsFull(ta, lines) {
-                const lineCount = Math.max(1, lines.length);
-                const tops = new Float64Array(lineCount);
-                const mirror = ensureTextareaMirror();
-                copyTextareaMirrorStyles(ta, mirror);
-                const mirrorStyle = window.getComputedStyle(mirror);
-                const padTop = parseFloat(mirrorStyle.paddingTop) || 0;
-                const padBottom = parseFloat(mirrorStyle.paddingBottom) || 0;
-                mirror.replaceChildren();
-                tops[0] = 0;
-                for (let i = 0; i < lineCount; i++) {
-                    if (i > 0) mirror.appendChild(document.createTextNode('\n'));
-                    mirror.appendChild(document.createTextNode(lines[i] || '\u200b'));
-                    if (i < lineCount - 1) {
-                        tops[i + 1] = Math.max(0, mirror.offsetHeight - padTop - padBottom);
-                    }
-                }
-                return tops;
-            }
-
-            function applySplitTextareaHeightFromLineTops(tops) {
-                if (!isSplitMode() || !tops?.length) return;
-                const ta = textarea;
-                const wrap = markdownEditorScroll;
-                if (!ta || !wrap) return;
-                const m = getGutterTypographyMetrics(ta);
-                const content = (tops[tops.length - 1] ?? 0) + m.lineHeight;
-                const nextHeight = content + m.paddingTop + m.paddingBottom;
-                ta.style.height = `${Math.max(nextHeight, wrap.clientHeight)}px`;
-                syncSpellOverlayHeight();
-            }
-
-            function finishSplitLineMapBuild(key, sourceTops) {
-                const currentKey = renderedPreviewKey || getDocumentContentKey(currentContent ?? '');
-                if (key !== currentKey) return;
-                splitSourceLineTops = sourceTops;
-                buildSplitBlockMap();
-                splitPreviewLineTops = buildPreviewLineTops(sourceTops);
-                applySplitTextareaHeightFromLineTops(sourceTops);
-                splitLineMapKey = key;
-                splitLineMapReady = true;
-                if (isSplitMode() && syncScroll) {
-                    requestAnimationFrame(() => syncSplitFromEditor());
-                }
-                if (isSplitMode() && window.requestIdleCallback) {
-                    requestIdleCallback(() => {
-                        if (!splitSourceLineTops || !isSplitMode()) return;
-                        splitBlockMapKey = '';
-                        buildSplitBlockMap();
-                        splitPreviewLineTops = buildPreviewLineTops(splitSourceLineTops);
-                        syncSplitFromEditor();
-                    }, { timeout: 3000 });
-                }
-            }
-
-            function startSplitLineMapBuild(forceAsync = false) {
-                if (shouldUseLargeDocPerf()) return;
-                const ta = textarea;
-                if (!ta) return;
-                const key = renderedPreviewKey || getDocumentContentKey(currentContent ?? '');
-                if (splitLineMapKey === key && splitLineMapReady && splitSourceLineTops) return;
-
-                updateCachedSourceLineCount();
-                const lines = getLogicalLines(ta.value ?? '');
-                const lineCount = Math.max(1, lines.length);
-                const textLen = ta.value.length;
-                const useAsync = forceAsync
-                    || (lineCount > SPLIT_LINE_MAP_ASYNC_LINE_THRESHOLD && textLen >= LARGE_DOC_CHAR_THRESHOLD);
-
-                if (!useAsync) {
-                    finishSplitLineMapBuild(key, buildSourceLineTopsFull(ta, lines));
-                    return;
-                }
-
-                const token = ++splitLineMapBuildToken;
-                splitLineMapReady = false;
-                const mirror = ensureTextareaMirror();
-                copyTextareaMirrorStyles(ta, mirror);
-                const mirrorStyle = window.getComputedStyle(mirror);
-                const padTop = parseFloat(mirrorStyle.paddingTop) || 0;
-                const padBottom = parseFloat(mirrorStyle.paddingBottom) || 0;
-                const tops = new Float64Array(lineCount);
-                mirror.replaceChildren();
-                tops[0] = 0;
-                let index = 0;
-
-                const batch = () => {
-                    if (token !== splitLineMapBuildToken) return;
-                    const end = Math.min(index + SPLIT_LINE_MAP_BATCH, lineCount);
-                    for (; index < end; index++) {
-                        if (index > 0) mirror.appendChild(document.createTextNode('\n'));
-                        mirror.appendChild(document.createTextNode(lines[index] || '\u200b'));
-                        if (index < lineCount - 1) {
-                            tops[index + 1] = Math.max(0, mirror.offsetHeight - padTop - padBottom);
-                        }
-                    }
-                    if (index < lineCount) {
-                        requestAnimationFrame(batch);
-                    } else {
-                        finishSplitLineMapBuild(key, tops);
-                    }
-                };
-                requestAnimationFrame(batch);
-            }
-
-            function ensureSplitLineMap() {
-                if (shouldUseLargeDocPerf()) return false;
-                const key = renderedPreviewKey || getDocumentContentKey(currentContent ?? '');
-                if (splitLineMapKey === key && splitLineMapReady && splitSourceLineTops && splitPreviewLineTops) {
-                    return true;
-                }
-                startSplitLineMapBuild(true);
-                return false;
-            }
-
-            function buildSplitScrollMap() {
-                startSplitLineMapBuild();
-                return splitSourceLineTops;
-            }
-
-            const scheduleSplitLineMapRebuild = debounce(() => {
-                if (!isSplitMode() || shouldUseLargeDocPerf()) return;
-                invalidateSplitLineMap();
-                startSplitLineMapBuild(true);
-            }, 600);
-
-            function buildPreviewLineTops(sourceLineTops) {
-                const lineCount = sourceLineTops.length;
-                const previewTops = new Float64Array(lineCount);
-                buildSplitBlockMap();
-
-                const segments = [{ line: 0, previewTop: 0 }];
-                splitBlockMap.forEach((block) => {
-                    const last = segments[segments.length - 1];
-                    if (!last || last.line !== block.line) {
-                        segments.push({ line: block.line, previewTop: block.top });
-                    }
-                });
-
-                const lastBlock = splitBlockMap[splitBlockMap.length - 1];
-                const root = getPreviewContentRoot();
-                const previewEnd = lastBlock
-                    ? lastBlock.top + lastBlock.el.offsetHeight
-                    : (root?.scrollHeight ?? 0);
-                segments.push({ line: Math.max(0, lineCount - 1), previewTop: previewEnd });
-
-                segments.sort((a, b) => a.line - b.line);
-
-                for (let s = 0; s < segments.length - 1; s++) {
-                    const seg = segments[s];
-                    const next = segments[s + 1];
-                    const l0 = seg.line;
-                    const l1 = Math.min(next.line, lineCount - 1);
-                    const p0 = seg.previewTop;
-                    const p1 = next.previewTop;
-                    const y0 = sourceLineTops[l0] ?? 0;
-                    const y1 = sourceLineTops[l1] ?? y0;
-                    for (let line = l0; line <= l1 && line < lineCount; line++) {
-                        const sy = sourceLineTops[line] ?? y0;
-                        const span = y1 - y0;
-                        const t = span > 0 ? (sy - y0) / span : 0;
-                        previewTops[line] = p0 + t * (p1 - p0);
-                    }
-                }
-                previewTops[0] = 0;
-                return previewTops;
-            }
-
-            function getEditorVisibleDocY() {
-                if (isCm6SourceActive()) {
-                    const scrollEl = window.sourceCodeMirror.getScrollElement();
-                    return Math.max(0, scrollEl?.scrollTop ?? 0);
-                }
-                const ta = textarea;
-                const m = getGutterTypographyMetrics(ta);
-                const base = (ta?.offsetTop || 0) + m.paddingTop;
-                const paddingLead = Math.max(0, base - OUTLINE_SCROLL_TOP_INSET);
-                return Math.max(0, markdownEditorScroll.scrollTop - paddingLead);
-            }
-
-            function getPreviewVisibleDocY() {
-                return Math.max(0, previewPane.scrollTop);
-            }
-
-            function editorScrollForDocY(docY) {
-                const ta = textarea;
-                const m = getGutterTypographyMetrics(ta);
-                const base = (ta?.offsetTop || 0) + m.paddingTop;
-                const paddingLead = Math.max(0, base - OUTLINE_SCROLL_TOP_INSET);
-                return Math.max(0, paddingLead + docY);
-            }
-
-            function previewScrollForDocY(docY) {
-                return Math.max(0, docY);
-            }
-
-            function mapDocYAcrossLineTops(sourceTops, targetTops, docY) {
-                const n = sourceTops?.length ?? 0;
-                if (!n || !targetTops?.length) return docY;
-                if (docY <= sourceTops[0]) return targetTops[0];
-                if (docY >= sourceTops[n - 1]) return targetTops[n - 1];
-                let lo = 0;
-                let hi = n - 1;
-                while (lo < hi - 1) {
-                    const mid = (lo + hi) >> 1;
-                    if (sourceTops[mid] <= docY) lo = mid;
-                    else hi = mid;
-                }
-                const span = sourceTops[hi] - sourceTops[lo];
-                const t = span > 0 ? (docY - sourceTops[lo]) / span : 0;
-                return targetTops[lo] + t * (targetTops[hi] - targetTops[lo]);
-            }
-
-            function rebuildPreviewBlockLineIndex() {
-                splitBlockMapKey = '';
-                buildSplitBlockMap();
-                if (splitSourceLineTops) {
-                    splitPreviewLineTops = buildPreviewLineTops(splitSourceLineTops);
-                    if (isSplitMode() && syncScroll && markdownEditorScroll) {
-                        requestAnimationFrame(() => syncSplitFromEditor());
-                    }
-                } else if (!isExperimentalMode() && !isYSplitMode()) {
-                    startSplitLineMapBuild(true);
-                }
-            }
-
-            function setFollowerScrollTop(pane, top) {
-                if (pane === 'editor' && isCm6SourceActive()) {
-                    const scrollEl = window.sourceCodeMirror.getScrollElement();
-                    if (!scrollEl) return;
-                    const max = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight);
-                    const next = Math.max(0, Math.min(top, max));
-                    splitSuppressScroll = true;
-                    window.sourceCodeMirror.setScrollTop(next);
-                    requestAnimationFrame(() => {
-                        requestAnimationFrame(() => {
-                            splitSuppressScroll = false;
-                        });
-                    });
-                    return;
-                }
-                const el = pane === 'editor' ? markdownEditorScroll : previewPane;
-                if (!el) return;
-                const max = Math.max(0, el.scrollHeight - el.clientHeight);
-                const next = Math.max(0, Math.min(top, max));
-                splitSuppressScroll = true;
-                el.scrollTop = next;
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        splitSuppressScroll = false;
-                    });
-                });
-            }
-
-            function syncSplitScrollRatio(from, to) {
-                const source = from === 'editor' ? markdownEditorScroll : previewPane;
-                const target = to === 'editor' ? markdownEditorScroll : previewPane;
-                if (!source || !target) return;
-                const sourceMax = Math.max(0, source.scrollHeight - source.clientHeight);
-                const targetMax = Math.max(0, target.scrollHeight - target.clientHeight);
-                if (sourceMax <= 0 || targetMax <= 0) return;
-                const ratio = source.scrollTop / sourceMax;
-                if (!scrollAnchorRestoreBlocked && from === 'editor') {
-                    documentScrollPercent = ratio;
-                }
-                setFollowerScrollTop(to, ratio * targetMax);
-            }
-
-            function syncSplitLargeFromEditor() {
-                if (window.virtualPreview?.isActive?.()) {
-                    if (isCm6SourceActive()) {
-                        const line = window.sourceCodeMirror.getTopSourceLine();
-                        const sub = window.sourceCodeMirror.getSubLinePx();
-                        const previewY = window.virtualPreview.getPreviewYForSourceLine(line, sub);
-                        setFollowerScrollTop('preview', previewY);
-                    } else {
-                        syncSplitScrollRatio('editor', 'preview');
-                    }
-                    return true;
-                }
-                if (isCm6SourceActive() && splitBlockMap.length) {
-                    const line = window.sourceCodeMirror.getTopSourceLine();
-                    const sub = window.sourceCodeMirror.getSubLinePx();
-                    const block = splitBlockMap.find((b, i, arr) => {
-                        const next = arr[i + 1];
-                        return b.line <= line && (!next || next.line > line);
-                    }) || splitBlockMap[0];
-                    const next = splitBlockMap[splitBlockMap.indexOf(block) + 1];
-                    const lineSpan = next && next.line > block.line ? next.line - block.line : 1;
-                    const pxPerLine = next ? Math.max(1, (next.top - block.top) / lineSpan) : 22;
-                    const previewY = block.top + ((line - block.line) * pxPerLine) + sub * (pxPerLine / (window.sourceCodeMirror.getView()?.defaultLineHeight || 22));
-                    setFollowerScrollTop('preview', Math.max(0, previewY));
-                    return true;
-                }
-                return false;
-            }
-
-            function syncSplitLargeFromPreview() {
-                if (window.virtualPreview?.isActive?.()) {
-                    const previewY = getPreviewVisibleDocY();
-                    const lineFrac = window.virtualPreview.getSourceLineForPreviewY(previewY);
-                    const line = Math.floor(lineFrac);
-                    const sub = (lineFrac - line) * (window.sourceCodeMirror?.getView()?.defaultLineHeight || 22);
-                    if (isCm6SourceActive()) {
-                        setFollowerScrollTop('editor', window.sourceCodeMirror.scrollForLine(line, sub));
-                    } else {
-                        syncSplitScrollRatio('preview', 'editor');
-                    }
-                    return true;
-                }
-                return false;
-            }
-
-            function syncSplitFromEditor() {
-                if (shouldUseLargeDocPerf()) {
-                    if (syncSplitLargeFromEditor()) {
-                        if (!scrollAnchorRestoreBlocked) {
-                            const src = isCm6SourceActive()
-                                ? window.sourceCodeMirror.getScrollElement()
-                                : markdownEditorScroll;
-                            if (src) {
-                                const max = Math.max(0, src.scrollHeight - src.clientHeight);
-                                if (max > 0) documentScrollPercent = src.scrollTop / max;
-                            }
-                        }
-                        return;
-                    }
-                    syncSplitScrollRatio('editor', 'preview');
-                    return;
-                }
-                if (!ensureSplitLineMap() || !splitSourceLineTops || !splitPreviewLineTops) {
-                    syncSplitScrollRatio('editor', 'preview');
-                    return;
-                }
-                const editorDocY = getEditorVisibleDocY();
-                const previewDocY = mapDocYAcrossLineTops(
-                    splitSourceLineTops,
-                    splitPreviewLineTops,
-                    editorDocY
-                );
-                setFollowerScrollTop('preview', previewScrollForDocY(previewDocY));
-                if (!scrollAnchorRestoreBlocked && markdownEditorScroll) {
-                    const max = Math.max(0, markdownEditorScroll.scrollHeight - markdownEditorScroll.clientHeight);
-                    if (max > 0) documentScrollPercent = markdownEditorScroll.scrollTop / max;
-                }
-            }
-
-            function syncSplitFromPreview() {
-                if (shouldUseLargeDocPerf()) {
-                    if (syncSplitLargeFromPreview()) return;
-                    syncSplitScrollRatio('preview', 'editor');
-                    return;
-                }
-                if (!ensureSplitLineMap() || !splitSourceLineTops || !splitPreviewLineTops) {
-                    syncSplitScrollRatio('preview', 'editor');
-                    return;
-                }
-                const previewDocY = getPreviewVisibleDocY();
-                const editorDocY = mapDocYAcrossLineTops(
-                    splitPreviewLineTops,
-                    splitSourceLineTops,
-                    previewDocY
-                );
-                setFollowerScrollTop('editor', editorScrollForDocY(editorDocY));
-            }
-
-            function runSplitScrollSync(from) {
-                if (!syncScroll || !isSplitMode()) return;
-                pendingSplitSyncFrom = from;
-                if (splitSyncRaf) return;
-                splitSyncRaf = requestAnimationFrame(() => {
-                    splitSyncRaf = 0;
-                    const leader = pendingSplitSyncFrom;
-                    pendingSplitSyncFrom = null;
-                    if (!leader) return;
-                    if (leader === 'editor') syncSplitFromEditor();
-                    else syncSplitFromPreview();
-                });
-            }
-
-            function restoreSplitScrollFromRatio(ratio) {
-                if (!markdownEditorScroll || !previewPane) return;
-                const r = clampRatio(ratio);
-                documentScrollPercent = r;
-                const editorScrollEl = isCm6SourceActive()
-                    ? window.sourceCodeMirror.getScrollElement()
-                    : markdownEditorScroll;
-                const em = Math.max(0, editorScrollEl.scrollHeight - editorScrollEl.clientHeight);
-                const pm = Math.max(0, previewPane.scrollHeight - previewPane.clientHeight);
-                const editorScroll = em > 0 ? r * em : 0;
-                splitSuppressScroll = true;
-                if (isCm6SourceActive()) {
-                    window.sourceCodeMirror.setScrollTop(editorScroll);
-                } else {
-                    markdownEditorScroll.scrollTop = editorScroll;
-                }
-                if (shouldUseLargeDocPerf()) {
-                    syncSplitLargeFromEditor();
-                } else if (ensureSplitLineMap() && splitSourceLineTops && splitPreviewLineTops) {
-                    syncSplitFromEditor();
-                } else {
-                    setFollowerScrollTop('preview', pm > 0 ? r * pm : 0);
-                }
-                requestAnimationFrame(() => {
-                    splitSuppressScroll = false;
-                });
-            }
-
-            function restoreSplitScrollFromAnchor(anchor) {
-                if (Number.isFinite(anchor?.line) && isCm6SourceActive()) {
-                    const line = Math.floor(anchor.line);
-                    const sub = anchor.sub ?? 0;
-                    window.sourceCodeMirror.setScrollTop(
-                        window.sourceCodeMirror.scrollForLine(line, sub)
-                    );
-                    if (Number.isFinite(anchor.previewScrollTop)) {
-                        const previewEl = previewPane || preview;
-                        if (previewEl) previewEl.scrollTop = anchor.previewScrollTop;
-                        return;
-                    }
-                    if (shouldUseLargeDocPerf()) {
-                        syncSplitLargeFromEditor();
-                        return;
-                    }
-                    if (ensureSplitLineMap() && splitSourceLineTops && splitPreviewLineTops) {
-                        syncSplitFromEditor();
-                        return;
-                    }
-                }
-                if (Number.isFinite(anchor?.previewScrollTop)) {
-                    const previewEl = previewPane || preview;
-                    if (previewEl) previewEl.scrollTop = anchor.previewScrollTop;
-                    return;
-                }
-                restoreSplitScrollFromRatio(anchor?.percent ?? documentScrollPercent ?? 0);
-            }
-
-            function resyncSplitScrollAfterLayout() {
-                if (!isSplitMode()) return;
-                if (shouldUseLargeDocPerf()) {
-                    if (window.virtualPreview?.isActive?.()) {
-                        window.virtualPreview.scheduleSyncWindow?.();
-                    }
-                    syncSplitFromEditor();
-                    return;
-                }
-                invalidateSplitLineMap();
-                startSplitLineMapBuild(true);
-            }
-
-            function bindSplitScrollInteraction() {
-                const markEditor = () => { splitScrollLeader = 'editor'; };
-                const markPreview = () => { splitScrollLeader = 'preview'; };
-
-                markdownEditorScroll?.addEventListener('wheel', markEditor, { passive: true, capture: true });
-                markdownEditorScroll?.addEventListener('pointerdown', markEditor, { passive: true, capture: true });
-                markdownEditorScroll?.addEventListener('touchstart', markEditor, { passive: true, capture: true });
-                textarea?.addEventListener('wheel', markEditor, { passive: true, capture: true });
-
-                previewPane?.addEventListener('wheel', markPreview, { passive: true, capture: true });
-                previewPane?.addEventListener('pointerdown', markPreview, { passive: true, capture: true });
-                previewPane?.addEventListener('touchstart', markPreview, { passive: true, capture: true });
-            }
-
             function onEditorScroll() {
-                if (!syncScroll || !isSplitMode()) return;
-                if (splitSuppressScroll) return;
-                if (splitScrollLeader === 'preview') return;
-                splitScrollLeader = 'editor';
-                updateCachedSourceLineCount();
-                runSplitScrollSync('editor');
+                if (textarea?.classList.contains('source-mirror-active')) {
+                    syncSpellOverlayGeometry();
+                }
             }
 
             function onPreviewScroll() {
@@ -5315,11 +4233,6 @@
                     }
                     window.virtualPreview.onScroll();
                 }
-                if (!syncScroll || !isSplitMode()) return;
-                if (splitSuppressScroll) return;
-                if (splitScrollLeader === 'editor') return;
-                splitScrollLeader = 'preview';
-                runSplitScrollSync('preview');
             }
 
             function rememberScrollAnchorFrom(sourceEl) {
@@ -5353,10 +4266,7 @@
             }
 
             function getMarkdownScrollElement() {
-                if (isExperimentalMode() && window.experimentalCodeMirror?.isActive?.()) {
-                    return window.experimentalCodeMirror.getScrollElement() || markdownEditorScroll;
-                }
-                if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
+if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
                     return window.ySplitCodeMirror.getScrollElement() || markdownEditorScroll;
                 }
                 if (isCm6SourceActive()) {
@@ -5430,7 +4340,7 @@
                     return scrollRenderedHeadingToLine(liveRoot, lineNumber);
                 }
 
-                if (mode === 'split') {
+                if (mode === 'ysplit') {
                     const previewRoot = document.getElementById('preview-content');
                     const sourceOk = scrollSourceToLine(lineNumber);
                     const previewOk = scrollRenderedHeadingToLine(previewRoot, lineNumber);
@@ -5507,7 +4417,6 @@
                         window.documentIndex?.applyMeasuredLayout?.(
                             window.virtualPreview.getLayout()
                         );
-                        buildSplitBlockMap();
                         markPreviewRendered(currentContent ?? textarea?.value ?? '');
                     },
                 };
@@ -5547,12 +4456,12 @@
                             rewriteImagesInContainer(container);
                         }
                         appendFootnotesSection(container, footnotes);
-                        rebuildPreviewBlockLineIndex();
+                        window.documentIndex?.invalidate?.();
                         return;
                     }
                 }
 
-                if (readOnly && normalized.length >= CHUNKED_PREVIEW_CHAR_THRESHOLD && !isSplitMode()) {
+                if (readOnly && normalized.length >= CHUNKED_PREVIEW_CHAR_THRESHOLD && !isYSplitMode()) {
                     mountDocumentBlocksChunked(container, blocks, footnotes, options);
                     return;
                 }
@@ -5596,11 +4505,6 @@
                     scheduleMermaidRenderAfterLayout([container]);
                 }
                 appendFootnotesSection(container, footnotes);
-                buildSplitBlockMap();
-                if (isSplitMode() && !shouldUseLargeDocPerf()) {
-                    invalidateSplitLineMap();
-                    startSplitLineMapBuild(true);
-                }
             }
 
             function mountDocumentBlocksChunked(container, blocks, footnotes, options = {}) {
@@ -5626,7 +4530,7 @@
                         scheduleMermaidRenderAfterLayout([container]);
                     }
                     appendFootnotesSection(container, footnotes);
-                    rebuildPreviewBlockLineIndex();
+                    window.documentIndex?.invalidate?.();
                     markPreviewRendered(currentContent ?? textarea?.value ?? '');
                     if (typeof options.onComplete === 'function') {
                         options.onComplete();
@@ -5653,7 +4557,7 @@
 
             function isSourceFindPaneVisible() {
                 const mode = getActiveEditorMode();
-                return mode === 'edit' || mode === 'split';
+                return mode === 'edit' || mode === 'ysplit';
             }
 
             function offsetToLineIndex(text, offset) {
@@ -5827,7 +4731,7 @@
                     }
                 }
 
-                if (mode === 'preview' || mode === 'split') {
+                if (mode === 'preview' || mode === 'ysplit') {
                     const previewRoot = document.getElementById('preview-content');
                     const previewScroll = document.getElementById('preview-pane');
                     navigateFindInRenderedRoot(previewRoot, previewScroll);
@@ -5859,7 +4763,7 @@
                     contentImportExpected = 0;
                     currentContent = '';
                     if (textarea) textarea.value = '';
-                    window.experimentalCodeMirror?.syncText?.('');
+                    window.ySplitCodeMirror?.syncText?.('');
                     if (window.sourceCodeMirror?.syncText) {
                         window.sourceCodeMirror.syncText('');
                     }
@@ -5950,17 +4854,12 @@
                     textarea.value = incoming;
                     syncTextareaEditorHeight();
                     refreshSourceMirrorAfterEdit();
-                    if (document.body.classList.contains('mode-edit')
-                        || document.body.classList.contains('mode-split')) {
+                    if (document.body.classList.contains('mode-edit')) {
                         if (window.sourceCodeMirror?.shouldUseCm6?.()) {
                             ensureCm6SourceView({ text: incoming });
                         } else {
                             teardownCm6SourceView();
                         }
-                    }
-                    if (isExperimentalMode()) {
-                        window.experimentalCodeMirror?.syncText?.(incoming);
-                        window.experimentalEditor?.scheduleUpdate?.(incoming);
                     }
                     if (isYSplitMode()) {
                         window.ySplitCodeMirror?.syncText?.(incoming);
@@ -5999,17 +4898,12 @@
                         textarea.value = incoming;
                         syncTextareaEditorHeight();
                         refreshSourceMirrorAfterEdit();
-                        if (document.body.classList.contains('mode-edit')
-                            || document.body.classList.contains('mode-split')) {
+                        if (document.body.classList.contains('mode-edit')) {
                             if (window.sourceCodeMirror?.shouldUseCm6?.()) {
                                 ensureCm6SourceView({ text: incoming });
                             } else {
                                 teardownCm6SourceView();
                             }
-                        }
-                        if (isExperimentalMode()) {
-                            window.experimentalCodeMirror?.syncText?.(incoming);
-                            window.experimentalEditor?.scheduleUpdate?.(incoming);
                         }
                         if (isYSplitMode()) {
                             window.ySplitCodeMirror?.syncText?.(incoming);
@@ -6061,9 +4955,6 @@
                     if (isCm6SourceActive()) {
                         window.sourceCodeMirror.refreshTheme();
                     }
-                    if (isExperimentalMode() && window.experimentalCodeMirror?.isActive?.()) {
-                        window.experimentalCodeMirror.refreshTheme({ skipScrollRestore: true });
-                    }
                     if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
                         window.ySplitCodeMirror.refreshTheme({ skipScrollRestore: true });
                     }
@@ -6077,6 +4968,7 @@
                         pendingInitialViewMode = mode;
                         return;
                     }
+                    if (mode === 'split' || mode === 'experimental') mode = 'ysplit';
 
                     const previousMode = getActiveEditorMode();
                     if (previousMode === 'live' && mode !== 'live' && activeBlockIndex >= 0) {
@@ -6107,22 +4999,17 @@
                     preserved.forEach((cls) => document.body.classList.add(cls));
                     document.body.classList.add(`mode-${mode}`);
 
-                    if (mode !== 'experimental') {
-                        leaveExperimentalMode();
-                    }
                     if (mode !== 'ysplit') {
                         leaveYSplitMode();
                     }
 
                     flushPendingEditorUpdates({
-                        skipPreviewIfCached: shouldUseLargeDocPerf()
-                            && mode !== 'experimental'
-                            && mode !== 'ysplit',
+                        skipPreviewIfCached: shouldUseLargeDocPerf() && mode !== 'ysplit',
                     });
                     syncTextareaEditorHeight();
                     renderMarkdownSourceMirror();
 
-                    if (mode === 'edit' || mode === 'split') {
+                    if (mode === 'edit') {
                         ensureCm6SourceView({
                             text: currentContent,
                             line: anchor.line,
@@ -6139,38 +5026,19 @@
                             ensureLiveEditor(currentContent);
                         }
                         attachLiveCaretTracking();
-                    } else if (mode === 'experimental') {
-                        updateCachedSourceLineCount();
-                        enterExperimentalMode(anchor);
                     } else if (mode === 'ysplit') {
-                        updateCachedSourceLineCount();
                         enterYSplitMode(anchor);
-                    } else if (mode === 'preview' || mode === 'split') {
-                        updateCachedSourceLineCount();
+                    } else if (mode === 'preview') {
                         if (!isPreviewRenderCached(currentContent)) {
                             runDeferredDocumentWork(() => {
                                 ensurePreviewRendered(currentContent, { scrollAnchor: anchor });
-                                if (mode === 'split' && !shouldUseLargeDocPerf()) {
-                                    invalidateSplitLineMap();
-                                    startSplitLineMapBuild(true);
-                                }
                             }, { timeout: 16 });
-                        } else if (mode === 'split' && !shouldUseLargeDocPerf()) {
-                            invalidateSplitLineMap();
-                            startSplitLineMapBuild(true);
                         }
                     }
 
                     requestAnimationFrame(() => {
-                        if (mode !== 'experimental' && mode !== 'ysplit') {
-                            if (mode === 'split') {
-                                restoreSplitScrollFromAnchor(anchor);
-                            } else {
-                                restoreDocumentScrollAnchor(anchor, { persistent: true });
-                            }
-                        }
-                        if (mode === 'split') {
-                            resyncSplitScrollAfterLayout();
+                        if (mode !== 'ysplit') {
+                            restoreDocumentScrollAnchor(anchor, { persistent: true });
                         }
                         if (findState.active) scheduleFindRefresh.flush();
                         finishActiveDocumentLoad();
@@ -6180,9 +5048,6 @@
                         if (window.requestIdleCallback) {
                             requestIdleCallback(
                                 () => {
-                                    if (mode === 'split') {
-                                        resyncSplitScrollAfterLayout();
-                                    }
                                     scheduleMermaidRenderAfterLayout(getActiveMermaidRoots());
                                 },
                                 { timeout: 1000 }
@@ -6381,9 +5246,6 @@
 
                 getContent() {
                     flushAllPendingLiveEdits();
-                    if (isExperimentalMode()) {
-                        window.experimentalEditor?.flushUpdate?.(textarea.value || currentContent || '');
-                    }
                     if (isYSplitMode()) {
                         window.ySplitEditor?.flushUpdate?.(textarea.value || currentContent || '');
                     }
@@ -6456,8 +5318,7 @@
                         }
                         currentContent = incoming;
                         textarea.value = incoming;
-                        if (document.body.classList.contains('mode-edit')
-                            || document.body.classList.contains('mode-split')) {
+                        if (document.body.classList.contains('mode-edit')) {
                             if (window.sourceCodeMirror?.shouldUseCm6?.()) {
                                 ensureCm6SourceView({ text: incoming });
                             } else {
@@ -6501,7 +5362,7 @@
                     document.body.style.height = 'auto';
                     document.body.style.overflow = 'visible';
 
-                    document.body.classList.remove('mode-edit', 'mode-split', 'mode-live');
+                    document.body.classList.remove('mode-edit', 'mode-ysplit', 'mode-live');
                     document.body.classList.add('mode-preview');
 
                     ['swap-button', 'markdown-pane', 'live-editor'].forEach((id) => {
@@ -6718,13 +5579,6 @@
                         if (isSyncing || isApplyingHistory) return;
                         const text = textarea.value;
                         currentContent = text;
-                        updateCachedSourceLineCount();
-                        if (isExperimentalMode()) {
-                            markPreviewStale();
-                            window.experimentalEditor?.scheduleUpdate?.(text);
-                            scheduleContentSync(text);
-                            return;
-                        }
                         if (isYSplitMode()) {
                             markPreviewStale();
                             window.ySplitEditor?.scheduleUpdate?.(text);
@@ -6760,9 +5614,6 @@
                             scheduleTextareaHeightSync();
                         } else {
                             syncTextareaEditorHeight();
-                        }
-                        if (isSplitMode()) {
-                            scheduleSplitLineMapRebuild();
                         }
                     });
 
@@ -6815,18 +5666,11 @@
 
                     if (markdownEditorScroll) {
                         markdownEditorScroll.addEventListener('scroll', onEditorScroll, { passive: true });
-                        markdownEditorScroll.addEventListener('scroll', () => {
-                            if (textarea?.classList.contains('source-mirror-active')) {
-                                syncSpellOverlayGeometry();
-                            }
-                        }, { passive: true });
                     }
 
                     if (previewPane) {
                         previewPane.addEventListener('scroll', onPreviewScroll, { passive: true });
                     }
-
-                    bindSplitScrollInteraction();
 
                     const liveScrollEl = getLiveScrollElement();
                     if (liveScrollEl) {
@@ -6835,8 +5679,6 @@
 
                     window.addEventListener('resize', debounce(() => {
                         syncTextareaEditorHeight();
-                        if (isSplitMode()) resyncSplitScrollAfterLayout();
-                        if (isExperimentalMode()) window.experimentalEditor?.resyncAfterLayout?.();
                         if (isYSplitMode()) window.ySplitEditor?.resyncAfterLayout?.();
                     }, 200));
 
@@ -8238,7 +7080,7 @@
                     return liveEditor ? [liveEditor] : [];
                 }
                 if (document.body.classList.contains('mode-preview')
-                    || document.body.classList.contains('mode-split')) {
+                    || document.body.classList.contains('mode-ysplit')) {
                     return preview ? [preview] : [];
                 }
                 return [];
@@ -8377,7 +7219,7 @@
                     return;
                 }
 
-                invalidateSplitBlockMap();
+                window.documentIndex?.invalidate?.();
             }
 
             function isLikelyDisplayMathLine(line) {

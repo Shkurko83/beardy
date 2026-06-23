@@ -47,6 +47,16 @@ class DocumentManager: ObservableObject {
     private static let viewModeDefaultsKey = "selectedViewMode"
     private static var hasPerformedStartupAction = false
 
+    /// Maps legacy stored mode names to current `ViewMode` raw values.
+    private static func normalizedViewModeRaw(_ raw: String) -> String {
+        switch raw {
+        case "Experimental", "YSplit":
+            return ViewMode.split.rawValue
+        default:
+            return raw
+        }
+    }
+
     /// Preview (eye) or Focus Mode (⇧⌘F) — read-only chrome with hidden panels/toolbar.
     var isReadingChromeMode: Bool {
         isReadingChromeActive
@@ -106,10 +116,11 @@ class DocumentManager: ObservableObject {
         loadRecentDocuments()
         loadFavorites()
         loadFolders()
-        if let raw = UserDefaults.standard.string(forKey: Self.viewModeDefaultsKey),
-           let stored = ViewMode(rawValue: raw),
-           stored != .diff {
-            viewMode = stored
+        if let raw = UserDefaults.standard.string(forKey: Self.viewModeDefaultsKey) {
+            let normalized = Self.normalizedViewModeRaw(raw)
+            if let stored = ViewMode(rawValue: normalized), stored != .diff {
+                viewMode = stored
+            }
         }
         focusMode = UserDefaults.standard.bool(forKey: AppConstants.Keys.focusMode)
         syncReadingChromePanels()
