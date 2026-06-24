@@ -2226,7 +2226,7 @@
                 return ysplitGetPreviewYForSourceLine(line, sub);
             }
 
-            function createYSplitPreviewHooks(options = {}) {
+            function createYSplitPreviewHooks(options = {}, hookOpts = {}) {
                 return {
                     createBlockEl,
                     highlightCodeBlocks,
@@ -2254,7 +2254,9 @@
                     },
                     onReady: () => {
                         markPreviewRendered(currentContent ?? textarea?.value ?? '');
-                        options.onComplete?.();
+                        if (!hookOpts.skipOnComplete) {
+                            options.onComplete?.();
+                        }
                     },
                 };
             }
@@ -2335,28 +2337,109 @@
                 mountYSplitPreviewCore(text, options);
             }
 
+            function ysplitApplyPreviewScrollAnchor(anchor) {
+                if (!anchor) return;
+                ysplitSuppressPreviewScroll = true;
+                if (Number.isFinite(anchor.previewScrollTop)) {
+                    ysplitSetPreviewScrollTop(anchor.previewScrollTop);
+                } else if (Number.isFinite(anchor.line)) {
+                    const y = ysplitGetPreviewYForSourceLine(anchor.line, anchor.sub ?? 0);
+                    ysplitSetPreviewScrollTop(y);
+                }
+                requestAnimationFrame(() => {
+                    ysplitSuppressPreviewScroll = false;
+                });
+            }
+
             function refreshYSplitPreview(text, options = {}) {
                 const container = preview;
-                if (!container?.dataset.ysplitPreview) {
+                if (!container) {
+                    options.onComplete?.();
+                    return;
+                }
+
+                const scrollAnchor = options.scrollAnchor;
+                const finish = (didChange = true) => {
+                    if (didChange) {
+                        markPreviewRendered(text);
+                        ysplitApplyPreviewScrollAnchor(scrollAnchor);
+                    }
+                    requestAnimationFrame(() => {
+                        options.onComplete?.();
+                    });
+                };
+
+                if (!container.dataset.ysplitPreview) {
                     mountYSplitPreviewCore(text, options);
                     return;
                 }
+
                 const doc = window.documentIndex.ensure(text || '');
                 linkReferenceMap = doc.refs;
                 footnoteMap = doc.footnotes;
+                const blocks = doc.blocks;
+                const footnotes = doc.footnotes;
+                const normalized = doc.normalizedText;
                 const vp = window.virtualPreview;
-                if (vp?.isActive?.() && vp.shouldUse?.(doc.blocks.length, doc.normalizedText.length)) {
+                const refreshHooks = createYSplitPreviewHooks({}, { skipOnComplete: true });
+
+                if (vp?.isActive?.() && vp.shouldUse?.(blocks.length, normalized.length)) {
+                    ysplitSuppressPreviewScroll = true;
                     vp.update({
                         container,
-                        blocks: doc.blocks,
-                        footnotes: doc.footnotes,
+                        blocks,
+                        footnotes,
                         readOnly: true,
-                        hooks: createYSplitPreviewHooks(options),
+                        hooks: refreshHooks,
                     });
-                    markPreviewRendered(text);
+                    finish();
                     return;
                 }
-                mountYSplitPreviewCore(text, options);
+
+                if (vp?.isActive?.()) {
+                    vp.teardown();
+                }
+
+                const existing = [...container.querySelectorAll(':scope > .live-block')];
+                const canPatch = existing.length === blocks.length
+                    && existing.length > 0
+                    && existing.every((el, i) => el.getAttribute('data-type') === blocks[i].type);
+
+                if (canPatch) {
+                    ysplitSuppressPreviewScroll = true;
+                    let anyChange = false;
+                    blocks.forEach((block, index) => {
+                        const el = existing[index];
+                        const nextSource = block.source || '';
+                        if ((el.dataset.blockSource ?? '') === nextSource) return;
+                        anyChange = true;
+                        const newEl = createBlockEl(block, index, { readOnly: true });
+                        el.replaceWith(newEl);
+                        if (block.type === 'code-fence') highlightCodeBlocks(newEl);
+                        if (block.type === 'mermaid' && isElementVisibleForLayout(newEl)) {
+                            scheduleMermaidRenderAfterLayout([newEl]);
+                        }
+                    });
+                    if (anyChange) rewriteImagesInContainer(container);
+                    appendFootnotesSection(container, footnotes);
+                    if (anyChange) window.documentIndex?.invalidate?.();
+                    finish(anyChange);
+                    return;
+                }
+
+                ysplitSuppressPreviewScroll = true;
+                const nextChildren = blocks.map((block, index) => (
+                    createBlockEl(block, index, { readOnly: true })
+                ));
+                container.replaceChildren(...nextChildren);
+                highlightCodeBlocks(container);
+                rewriteImagesInContainer(container);
+                if (isElementVisibleForLayout(container)) {
+                    scheduleMermaidRenderAfterLayout([container]);
+                }
+                appendFootnotesSection(container, footnotes);
+                window.documentIndex?.invalidate?.();
+                finish(true);
             }
 
             function teardownYSplitPreview() {
@@ -2456,7 +2539,9 @@
                     mapSourceLineToPreviewY: mapYSplitSourceLineToPreviewY,
                     mapSourceScrollToPreview: mapYSplitSourceScrollToPreview,
                     isPreviewScrollSuppressed: () => (
-                        ysplitSuppressPreviewScroll || window.ySplitEditor?.isSyncingPreview?.()
+                        ysplitSuppressPreviewScroll
+                        || window.ySplitEditor?.isSyncingPreview?.()
+                        || window.ySplitEditor?.isPreviewRefreshing?.()
                     ),
                     setPreviewScrollTop: ysplitSetPreviewScrollTop,
                     setSourceScrollForLine: (line, sub) => {
@@ -4228,7 +4313,11 @@ const textLen = ta.value.length;
 
             function onPreviewScroll() {
                 if (window.virtualPreview?.isActive?.()) {
-                    if (isYSplitMode() && (ysplitSuppressPreviewScroll || window.ySplitEditor?.isSyncingPreview?.())) {
+                    if (isYSplitMode() && (
+                        ysplitSuppressPreviewScroll
+                        || window.ySplitEditor?.isSyncingPreview?.()
+                        || window.ySplitEditor?.isPreviewRefreshing?.()
+                    )) {
                         return;
                     }
                     window.virtualPreview.onScroll();

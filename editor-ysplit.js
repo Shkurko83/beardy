@@ -22,6 +22,7 @@
     let syncRaf = 0;
     let syncingPreview = false;
     let previewUserNudge = false;
+    let previewRefreshing = false;
 
     let sourceScrollHandler = null;
     let previewScrollHandler = null;
@@ -38,7 +39,7 @@
     function syncScrollers() {
         const sourceEl = hooks.getSourceScrollEl?.();
         const previewEl = hooks.getPreviewScrollEl?.();
-        if (!active || !sourceEl || !previewEl || syncingPreview || previewUserNudge) return;
+        if (!active || !sourceEl || !previewEl || syncingPreview || previewUserNudge || previewRefreshing) return;
 
         let previewY;
 
@@ -89,9 +90,22 @@
     }
 
     function onSourceScroll() {
-        if (!active || syncingPreview) return;
+        if (!active || syncingPreview || previewRefreshing) return;
         previewUserNudge = false;
         scheduleSyncScrollers();
+    }
+
+    function beginPreviewRefresh() {
+        previewRefreshing = true;
+    }
+
+    function endPreviewRefresh(done) {
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                previewRefreshing = false;
+                done?.();
+            });
+        });
     }
 
     function onPreviewUserScroll() {
@@ -161,14 +175,18 @@
             if (!active) return;
             const value = pendingPreviewText ?? hooks.getEditorText?.() ?? '';
             pendingPreviewText = null;
-            preserveScrollOnMount = true;
+            const scrollAnchor = captureSourceAnchor();
+            const previewEl = hooks.getPreviewScrollEl?.();
+            if (previewEl) scrollAnchor.previewScrollTop = previewEl.scrollTop;
+            beginPreviewRefresh();
             hooks.refreshPreview?.(value, {
+                scrollAnchor,
                 onComplete: () => {
-                    if (!active) return;
-                    anchorsReady = false;
-                    updateHeaderLocations();
-                    previewUserNudge = false;
-                    syncScrollers();
+                    endPreviewRefresh(() => {
+                        if (!active) return;
+                        anchorsReady = false;
+                        updateHeaderLocations();
+                    });
                 },
             });
         }, PREVIEW_DEBOUNCE_MS);
@@ -334,13 +352,18 @@
         pendingPreviewText = null;
         hooks.setEditorText?.(value);
         hooks.commitToNative?.(value);
-        preserveScrollOnMount = true;
+        const scrollAnchor = captureSourceAnchor();
+        const previewEl = hooks.getPreviewScrollEl?.();
+        if (previewEl) scrollAnchor.previewScrollTop = previewEl.scrollTop;
+        beginPreviewRefresh();
         hooks.refreshPreview?.(value, {
+            scrollAnchor,
             onComplete: () => {
-                anchorsReady = false;
-                updateHeaderLocations();
-                previewUserNudge = false;
-                syncScrollers();
+                endPreviewRefresh(() => {
+                    if (!active) return;
+                    anchorsReady = false;
+                    updateHeaderLocations();
+                });
             },
         });
     }
@@ -367,7 +390,7 @@
     }
 
     function resyncAfterLayout() {
-        if (!active || previewUserNudge) return;
+        if (!active || previewUserNudge || previewRefreshing) return;
         syncScrollers();
     }
 
@@ -383,5 +406,6 @@
         isActive: () => active,
         isSyncingPreview: () => syncingPreview,
         isPreviewUserNudge: () => previewUserNudge,
+        isPreviewRefreshing: () => previewRefreshing,
     };
 })(window);
