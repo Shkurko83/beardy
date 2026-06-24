@@ -189,6 +189,14 @@
                     body.cm6-source-active #markdown-find-overlay {
                         display: none !important;
                     }
+                    body.mode-edit.cm6-source-active .markdown-editor-wrap {
+                        overflow: hidden;
+                        height: 100%;
+                    }
+                    body.mode-edit.cm6-source-active .markdown-editor-body {
+                        height: 100%;
+                        min-height: 0;
+                    }
 
 
                     /* Y-Split: MacDown-style header-anchored scroll sync */
@@ -207,7 +215,7 @@
                         overflow-y: auto;
                         -webkit-overflow-scrolling: touch;
                     }
-                    body.mode-ysplit #markdown-textarea {
+                    body.mode-ysplit.ysplit-cm-active #markdown-textarea {
                         display: none !important;
                     }
                     #ysplit-cm-root {
@@ -218,7 +226,6 @@
                         height: 100%;
                         z-index: 4;
                     }
-                    body.mode-ysplit #ysplit-cm-root,
                     body.mode-ysplit.ysplit-cm-active #ysplit-cm-root {
                         display: block;
                     }
@@ -249,6 +256,36 @@
                     }
                     body.dark.mode-ysplit.ysplit-cm-active #ysplit-cm-root .cm-selectionBackground {
                         background-color: rgba(56, 139, 253, 0.28) !important;
+                    }
+                    #ysplit-cm-root .cm-find-hit,
+                    #codemirror-split-root .cm-find-hit,
+                    #ysplit-cm-root .cm-find-hit span,
+                    #codemirror-split-root .cm-find-hit span {
+                        background: rgba(255, 214, 10, 0.45) !important;
+                        border-radius: 2px;
+                        color: inherit;
+                    }
+                    #ysplit-cm-root .cm-find-hit-current,
+                    #codemirror-split-root .cm-find-hit-current,
+                    #ysplit-cm-root .cm-find-hit-current span,
+                    #codemirror-split-root .cm-find-hit-current span {
+                        background: rgba(255, 149, 0, 0.72) !important;
+                        border-radius: 2px;
+                        box-shadow: 0 0 0 1px rgba(255, 149, 0, 0.9);
+                        color: inherit;
+                    }
+                    body.dark #ysplit-cm-root .cm-find-hit,
+                    body.dark #codemirror-split-root .cm-find-hit,
+                    body.dark #ysplit-cm-root .cm-find-hit span,
+                    body.dark #codemirror-split-root .cm-find-hit span {
+                        background: rgba(255, 214, 10, 0.35) !important;
+                    }
+                    body.dark #ysplit-cm-root .cm-find-hit-current,
+                    body.dark #codemirror-split-root .cm-find-hit-current,
+                    body.dark #ysplit-cm-root .cm-find-hit-current span,
+                    body.dark #codemirror-split-root .cm-find-hit-current span {
+                        background: rgba(255, 159, 10, 0.55) !important;
+                        box-shadow: 0 0 0 1px rgba(255, 159, 10, 0.85);
                     }
 
                     body.mode-live #live-editor { display: block; }
@@ -2311,6 +2348,9 @@
                     } else {
                         vp.mount(payload);
                     }
+                    requestAnimationFrame(() => {
+                        options.onComplete?.();
+                    });
                     return;
                 }
 
@@ -2761,6 +2801,13 @@
                     const mode = pendingInitialViewMode;
                     pendingInitialViewMode = null;
                     window.cmEditor.setViewMode(mode);
+                    finishActiveDocumentLoad();
+                    if (isLoadingDocumentContent) {
+                        const loaded = (textarea?.value ?? currentContent ?? '').length > 0;
+                        if (loaded) {
+                            endDocumentContentLoad();
+                        }
+                    }
                     return;
                 }
                 finishActiveDocumentLoad();
@@ -4294,12 +4341,17 @@ const textLen = ta.value.length;
                     },
 
                 });
+                if (!isCm6SourceActive()) {
+                    window.sourceCodeMirror.unmount?.();
+                    syncTextareaEditorHeight();
+                    return false;
+                }
                 if (Number.isFinite(line) && isCm6SourceActive()) {
                     window.sourceCodeMirror.setScrollTop(
                         window.sourceCodeMirror.scrollForLine(line, sub)
                     );
                 }
-                return isCm6SourceActive();
+                return true;
             }
 
             function teardownCm6SourceView() {
@@ -4744,6 +4796,21 @@ if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
             }
 
             function scrollSourceToRange(start, end) {
+                if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
+                    window.ySplitCodeMirror.setFindHighlights?.(
+                        findState.ranges,
+                        findState.currentIndex
+                    );
+                    return window.ySplitCodeMirror.scrollToRange?.(start, end) ?? false;
+                }
+                if (isCm6SourceActive()) {
+                    window.sourceCodeMirror.setFindHighlights?.(
+                        findState.ranges,
+                        findState.currentIndex
+                    );
+                    return window.sourceCodeMirror.scrollToRange?.(start, end) ?? false;
+                }
+
                 const ta = textarea;
                 if (!ta) return false;
 
@@ -4804,26 +4871,173 @@ if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
                 return spans[spans.length - 1];
             }
 
-            function highlightSubstringInElement(el, text, isCurrent, caseSensitive) {
+            function countNeedleOccurrencesBefore(text, needle, beforeIndex, caseSensitive) {
+                if (!needle) return 0;
+                const hay = caseSensitive ? text : text.toLowerCase();
+                const ned = caseSensitive ? needle : needle.toLowerCase();
+                const limit = Math.max(0, Math.min(beforeIndex, text.length));
+                let count = 0;
+                let idx = 0;
+                while ((idx = hay.indexOf(ned, idx)) >= 0 && idx < limit) {
+                    count++;
+                    idx += Math.max(1, ned.length);
+                }
+                return count;
+            }
+
+            function getRenderedFindHighlightRoot(span) {
+                const isCodeFence = span.el.dataset.type === 'code-fence';
+                return isCodeFence
+                    ? (span.el.querySelector('pre code, pre.hljs') || span.el)
+                    : span.el;
+            }
+
+            function getFindHighlightContext(span, range, docText) {
+                const needle = docText.slice(range.start, range.end);
+                const localStart = range.start - span.start;
+                if (!needle) return null;
+
+                if (span.el.dataset.type === 'code-fence') {
+                    const { inner } = parseCodeFenceSource(span.source);
+                    const lines = span.source.split('\n');
+                    const innerStart = (lines[0] || '').length + 1;
+                    const innerLocal = localStart - innerStart;
+                    if (innerLocal >= 0 && innerLocal <= inner.length) {
+                        return {
+                            root: getRenderedFindHighlightRoot(span),
+                            text: inner,
+                            beforeIndex: innerLocal,
+                            needle,
+                        };
+                    }
+                }
+
+                return {
+                    root: span.el,
+                    text: span.source,
+                    beforeIndex: localStart,
+                    needle,
+                };
+            }
+
+            function highlightFindMatchInRenderedSpan(span, range, rangeIndex, spans, isCurrent) {
+                const docText = currentContent ?? textarea?.value ?? '';
+                const ctx = getFindHighlightContext(span, range, docText);
+                if (!ctx) return false;
+                const occurrence = countNeedleOccurrencesBefore(
+                    ctx.text,
+                    ctx.needle,
+                    ctx.beforeIndex,
+                    findState.caseSensitive
+                );
+                return highlightSubstringInElement(
+                    ctx.root,
+                    ctx.needle,
+                    isCurrent,
+                    findState.caseSensitive,
+                    occurrence
+                );
+            }
+
+            function highlightRangeInElement(el, localStart, localEnd, isCurrent) {
+                if (!el || localEnd <= localStart) return false;
+                const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+                let offset = 0;
+                let highlighted = false;
+                let node;
+                while ((node = walker.nextNode())) {
+                    const len = (node.textContent || '').length;
+                    const nodeStart = offset;
+                    const nodeEnd = offset + len;
+                    if (localEnd <= nodeStart) break;
+                    if (localStart < nodeEnd && localEnd > nodeStart) {
+                        const s = Math.max(0, localStart - nodeStart);
+                        const e = Math.min(len, localEnd - nodeStart);
+                        try {
+                            const range = document.createRange();
+                            range.setStart(node, s);
+                            range.setEnd(node, e);
+                            const mark = document.createElement('mark');
+                            mark.className = isCurrent ? 'find-hit-current' : 'find-hit';
+                            range.surroundContents(mark);
+                            highlighted = true;
+                        } catch (_) { /* continue */ }
+                    }
+                    offset = nodeEnd;
+                }
+                return highlighted;
+            }
+
+            function navigateFindPreviewCompanion(current) {
+                if (!current) return;
+                const previewRoot = document.getElementById('preview-content');
+                const previewScroll = document.getElementById('preview-pane');
+                if (!previewRoot) return;
+
+                const vp = window.virtualPreview;
+                if (vp?.isActive?.() && previewRoot.dataset.ysplitPreview) {
+                    const text = currentContent ?? textarea?.value ?? '';
+                    const line = offsetToLineIndex(text, current.start);
+                    vp.syncWindowFromSourceLines?.(line, line);
+                }
+
+                clearFindHighlightsInRoot(previewRoot);
+                const spans = getSourceBlockSpans(previewRoot);
+                let currentMark = null;
+
+                findState.ranges.forEach((range, index) => {
+                    const span = findBlockSpanForOffset(spans, range.start);
+                    if (!span) return;
+                    const isCurrent = index === findState.currentIndex;
+                    const highlighted = highlightFindMatchInRenderedSpan(
+                        span,
+                        range,
+                        index,
+                        spans,
+                        isCurrent
+                    );
+                    if (isCurrent && highlighted) {
+                        currentMark = span.el.querySelector('mark.find-hit-current');
+                    }
+                });
+
+                const currentSpan = findBlockSpanForOffset(spans, current.start);
+                if (!currentSpan) return;
+                if (previewScroll) {
+                    if (currentMark) {
+                        smoothScrollElementToTop(previewScroll, currentMark);
+                    } else {
+                        smoothScrollElementToTop(previewScroll, currentSpan.el);
+                    }
+                }
+            }
+
+            function highlightSubstringInElement(el, text, isCurrent, caseSensitive, occurrence = 0) {
                 if (!el || !text) return false;
                 const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+                const ned = caseSensitive ? text : text.toLowerCase();
+                let seen = 0;
                 let node;
                 while ((node = walker.nextNode())) {
                     const content = node.textContent || '';
                     const hay = caseSensitive ? content : content.toLowerCase();
-                    const ned = caseSensitive ? text : text.toLowerCase();
-                    const idx = hay.indexOf(ned);
-                    if (idx < 0) continue;
-                    try {
-                        const range = document.createRange();
-                        range.setStart(node, idx);
-                        range.setEnd(node, idx + text.length);
-                        const mark = document.createElement('mark');
-                        mark.className = isCurrent ? 'find-hit-current' : 'find-hit';
-                        range.surroundContents(mark);
-                        return true;
-                    } catch (_) {
-                        continue;
+                    let idx = 0;
+                    while ((idx = hay.indexOf(ned, idx)) >= 0) {
+                        if (seen === occurrence) {
+                            try {
+                                const range = document.createRange();
+                                range.setStart(node, idx);
+                                range.setEnd(node, idx + text.length);
+                                const mark = document.createElement('mark');
+                                mark.className = isCurrent ? 'find-hit-current' : 'find-hit';
+                                range.surroundContents(mark);
+                                return true;
+                            } catch (_) {
+                                break;
+                            }
+                        }
+                        seen++;
+                        idx += Math.max(1, ned.length);
                     }
                 }
                 return false;
@@ -4837,28 +5051,19 @@ if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
                 const current = findState.ranges[findState.currentIndex];
                 if (!current) return;
 
+                let currentHighlighted = false;
                 findState.ranges.forEach((range, index) => {
                     const span = findBlockSpanForOffset(spans, range.start);
                     if (!span) return;
-                    const localStart = range.start - span.start;
-                    const slice = span.source.slice(localStart, localStart + (range.end - range.start));
-                    highlightSubstringInElement(
-                        span.el,
-                        slice,
-                        index === findState.currentIndex,
-                        findState.caseSensitive
-                    );
+                    const isCurrent = index === findState.currentIndex;
+                    const highlighted = highlightFindMatchInRenderedSpan(span, range, index, spans, isCurrent);
+                    if (isCurrent) currentHighlighted = highlighted;
                 });
 
                 const currentSpan = findBlockSpanForOffset(spans, current.start);
                 if (!currentSpan) return;
 
-                if (!highlightSubstringInElement(
-                    currentSpan.el,
-                    currentSpan.source.slice(current.start - currentSpan.start, current.start - currentSpan.start + (current.end - current.start)),
-                    true,
-                    findState.caseSensitive
-                )) {
+                if (!currentHighlighted) {
                     currentSpan.el.classList.add('find-flash');
                 }
 
@@ -4878,6 +5083,8 @@ if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
                     currentIndex: -1,
                     caseSensitive: false,
                 };
+                window.ySplitCodeMirror?.clearFindHighlights?.();
+                window.sourceCodeMirror?.clearFindHighlights?.();
                 const overlay = document.getElementById('markdown-find-overlay');
                 if (overlay) {
                     overlay.innerHTML = '';
@@ -4898,6 +5105,25 @@ if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
 
                 const mode = getActiveEditorMode();
 
+                if (mode === 'ysplit' && window.ySplitCodeMirror?.isActive?.()) {
+                    const docText = currentContent ?? textarea?.value ?? '';
+                    window.ySplitCodeMirror.syncText?.(docText);
+                    window.ySplitCodeMirror.setFindHighlights?.(
+                        findState.ranges,
+                        findState.currentIndex
+                    );
+                    requestAnimationFrame(() => {
+                        window.ySplitCodeMirror.scrollToRange?.(current.start, current.end);
+                        navigateFindPreviewCompanion(current);
+                    });
+                    return;
+                }
+
+                if (mode === 'edit' && isCm6SourceActive()) {
+                    scrollSourceToRange(current.start, current.end);
+                    return;
+                }
+
                 if (isSourceFindPaneVisible()) {
                     scrollSourceToRange(current.start, current.end);
                     renderFindSourceOverlay();
@@ -4909,7 +5135,7 @@ if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
                     }
                 }
 
-                if (mode === 'preview' || mode === 'ysplit') {
+                if (mode === 'preview') {
                     const previewRoot = document.getElementById('preview-content');
                     const previewScroll = document.getElementById('preview-pane');
                     navigateFindInRenderedRoot(previewRoot, previewScroll);
@@ -4942,8 +5168,8 @@ if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
                     currentContent = '';
                     if (textarea) textarea.value = '';
                     window.ySplitCodeMirror?.syncText?.('');
-                    if (window.sourceCodeMirror?.syncText) {
-                        window.sourceCodeMirror.syncText('');
+                    if (window.sourceCodeMirror?.getView?.()) {
+                        window.sourceCodeMirror.unmount();
                     }
                     beginDocumentContentLoad();
                 },
@@ -5189,61 +5415,70 @@ if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
                     preserved.forEach((cls) => document.body.classList.add(cls));
                     document.body.classList.add(`mode-${mode}`);
 
-                    if (mode !== 'ysplit') {
-                        leaveYSplitMode();
-                    }
+                    try {
+                        if (mode !== 'ysplit') {
+                            leaveYSplitMode();
+                        }
 
-                    flushPendingEditorUpdates({
-                        skipPreviewIfCached: shouldUseLargeDocPerf() && mode !== 'ysplit',
-                    });
-                    syncTextareaEditorHeight();
-                    renderMarkdownSourceMirror();
-
-                    if (mode === 'edit') {
-                        ensureCm6SourceView({
-                            text: currentContent,
-                            line: anchor.line,
-                            sub: anchor.sub,
+                        flushPendingEditorUpdates({
+                            skipPreviewIfCached: shouldUseLargeDocPerf() && mode !== 'ysplit',
                         });
-                    } else {
-                        teardownCm6SourceView();
-                    }
+                        syncTextareaEditorHeight();
+                        renderMarkdownSourceMirror();
 
-                    if (mode === 'live') {
-                        if (!isLiveRenderCached(currentContent)) {
-                            runDeferredDocumentWork(() => ensureLiveEditor(currentContent), { timeout: 16 });
+                        if (mode === 'edit') {
+                            ensureCm6SourceView({
+                                text: currentContent,
+                                line: anchor.line,
+                                sub: anchor.sub,
+                            });
                         } else {
-                            ensureLiveEditor(currentContent);
+                            teardownCm6SourceView();
                         }
-                        attachLiveCaretTracking();
-                    } else if (mode === 'ysplit') {
-                        enterYSplitMode(anchor);
-                    } else if (mode === 'preview') {
-                        if (!isPreviewRenderCached(currentContent)) {
-                            runDeferredDocumentWork(() => {
-                                ensurePreviewRendered(currentContent, { scrollAnchor: anchor });
-                            }, { timeout: 16 });
+
+                        if (mode === 'live') {
+                            if (!isLiveRenderCached(currentContent)) {
+                                runDeferredDocumentWork(() => ensureLiveEditor(currentContent), { timeout: 16 });
+                            } else {
+                                ensureLiveEditor(currentContent);
+                            }
+                            attachLiveCaretTracking();
+                        } else if (mode === 'ysplit') {
+                            enterYSplitMode(anchor);
+                        } else if (mode === 'preview') {
+                            if (!isPreviewRenderCached(currentContent)) {
+                                runDeferredDocumentWork(() => {
+                                    ensurePreviewRendered(currentContent, { scrollAnchor: anchor });
+                                }, { timeout: 16 });
+                            }
                         }
+                    } catch (error) {
+                        console.error('setViewMode setup failed:', error);
                     }
 
                     requestAnimationFrame(() => {
-                        if (mode !== 'ysplit') {
-                            restoreDocumentScrollAnchor(anchor, { persistent: true });
+                        try {
+                            if (mode !== 'ysplit') {
+                                restoreDocumentScrollAnchor(anchor, { persistent: true });
+                            }
+                            if (findState.active) scheduleFindRefresh.flush();
+                        } catch (error) {
+                            console.error('setViewMode post-setup failed:', error);
+                        } finally {
+                            finishActiveDocumentLoad();
+                            if (isLoadingDocumentContent) {
+                                endDocumentContentLoad();
+                            }
+                            if (window.requestIdleCallback) {
+                                requestIdleCallback(
+                                    () => {
+                                        scheduleMermaidRenderAfterLayout(getActiveMermaidRoots());
+                                    },
+                                    { timeout: 1000 }
+                                );
+                            }
+                            setTimeout(() => unlockScrollAnchor(), 1200);
                         }
-                        if (findState.active) scheduleFindRefresh.flush();
-                        finishActiveDocumentLoad();
-                        if (isLoadingDocumentContent) {
-                            endDocumentContentLoad();
-                        }
-                        if (window.requestIdleCallback) {
-                            requestIdleCallback(
-                                () => {
-                                    scheduleMermaidRenderAfterLayout(getActiveMermaidRoots());
-                                },
-                                { timeout: 1000 }
-                            );
-                        }
-                        setTimeout(() => unlockScrollAnchor(), 1200);
                     });
                 },
 

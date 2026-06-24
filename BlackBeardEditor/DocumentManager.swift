@@ -2035,11 +2035,15 @@ class DocumentManager: ObservableObject {
         }
     }
     
+    @Published var findPanelShowsReplace: Bool = false
+
     func showFindPanel() {
+        findPanelShowsReplace = false
         NotificationCenter.default.post(name: .showFindPanel, object: nil)
     }
-    
+
     func showReplacePanel() {
+        findPanelShowsReplace = true
         NotificationCenter.default.post(name: .showReplacePanel, object: nil)
     }
     

@@ -113,12 +113,12 @@ struct ContentView: View {
                 }
 
                 HStack {
-                    Button(action: {
-                        themeService.toggleDarkMode()
-                    }) {
-                        Image(systemName: themeService.isDarkMode ? "moon.fill" : "sun.max.fill")
-                    }
-                    .help("Toggle Theme")
+//                    Button(action: {
+//                        themeService.toggleDarkMode()
+//                    }) {
+//                        Image(systemName: themeService.isDarkMode ? "moon.fill" : "sun.max.fill")
+//                    }
+//                    .help("Toggle Theme")
                     
                     if let doc = documentManager.currentDocument, doc.url != nil {
                         Button(action: {
@@ -168,6 +168,12 @@ struct ContentView: View {
             withAnimation(PanelLayoutAnimation.slide) {
                 documentManager.applyReadingChromePanelDefaultsIfActive()
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showFindPanel)) { _ in
+            openWindow(id: "find_replace")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showReplacePanel)) { _ in
+            openWindow(id: "find_replace")
         }
     }
 

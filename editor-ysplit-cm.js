@@ -8,6 +8,74 @@
     let view = null;
     let updating = false;
     let hooks = {};
+    let findRanges = [];
+    let findCurrentIndex = -1;
+    let findDirty = false;
+
+    function normalizeFindRanges(ranges) {
+        return (ranges || []).map((range) => {
+            const start = Number(range.start ?? range.location ?? range.from ?? 0);
+            const end = Number(range.end ?? (start + (range.length ?? 0)));
+            if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+            return { start, end };
+        }).filter(Boolean);
+    }
+
+    function buildFindHighlightExtension() {
+        const { ViewPlugin, Decoration } = global.CM;
+        if (!ViewPlugin || !Decoration) return [];
+        const mark = Decoration.mark({ class: 'cm-find-hit' });
+        const markCurrent = Decoration.mark({ class: 'cm-find-hit-current' });
+        return ViewPlugin.fromClass(class {
+            constructor(view) { this.decorations = this.buildDeco(view); }
+            update(update) {
+                if (findRanges.length || findDirty || update.docChanged) {
+                    findDirty = false;
+                    this.decorations = findRanges.length
+                        ? this.buildDeco(update.view)
+                        : Decoration.none;
+                }
+            }
+            buildDeco(view) {
+                if (!findRanges.length) return Decoration.none;
+                const items = findRanges.map((range, index) => {
+                    const from = Math.max(0, Math.min(range.start, view.state.doc.length));
+                    const to = Math.max(from, Math.min(range.end, view.state.doc.length));
+                    if (to <= from) return null;
+                    return (index === findCurrentIndex ? markCurrent : mark).range(from, to);
+                }).filter(Boolean);
+                return Decoration.set(items, true);
+            }
+        }, { decorations: (plugin) => plugin.decorations });
+    }
+
+    function setFindHighlights(ranges, currentIndex) {
+        findRanges = normalizeFindRanges(ranges);
+        findCurrentIndex = Number.isFinite(currentIndex) ? currentIndex : -1;
+        findDirty = true;
+        if (view) view.dispatch({});
+    }
+
+    function clearFindHighlights() {
+        findRanges = [];
+        findCurrentIndex = -1;
+        findDirty = true;
+        if (view) view.dispatch({});
+    }
+
+    function scrollToRange(start, end) {
+        if (!view) return false;
+        const doc = view.state.doc;
+        const safeStart = Math.max(0, Math.min(start, doc.length));
+        const safeEnd = Math.max(safeStart, Math.min(end, doc.length));
+        const line = doc.lineAt(safeStart);
+        const block = view.lineBlockAt(line.from);
+        const viewport = view.scrollDOM.clientHeight || 0;
+        view.scrollDOM.scrollTop = Math.max(0, block.top - Math.max(0, viewport * 0.25));
+        // Keep find decoration colors visible — don't paint a selection over the hit.
+        view.focus();
+        return true;
+    }
 
     function cmAvailable() {
         return !!(global.CM && global.CM.EditorView && global.CM.EditorState);
@@ -63,17 +131,26 @@
         }, { dark: isDark });
     }
 
-    function buildExtensions() {
+    function buildExtensions(includeFindHighlights = true) {
         const { EditorView } = global.CM;
         return [
             EditorView.lineWrapping,
             buildTheme(),
+            ...(includeFindHighlights ? buildFindHighlightExtension() : []),
             EditorView.updateListener.of((update) => {
                 if (update.docChanged && !updating) {
                     hooks.onChange?.(update.state.doc.toString());
                 }
             }),
         ];
+    }
+
+    function createEditorState(text, includeFindHighlights = true) {
+        const { EditorState } = global.CM;
+        return EditorState.create({
+            doc: text,
+            extensions: buildExtensions(includeFindHighlights),
+        });
     }
 
     function mount(options = {}) {
@@ -104,14 +181,24 @@
             return view;
         }
 
-        const { EditorView, EditorState } = global.CM;
-        view = new EditorView({
-            state: EditorState.create({
-                doc: text,
-                extensions: buildExtensions(),
-            }),
-            parent: host,
-        });
+        const { EditorView } = global.CM;
+        let state;
+        try {
+            state = createEditorState(text, true);
+        } catch (error) {
+            console.warn('ySplitCodeMirror: find highlights disabled after mount error', error);
+            state = createEditorState(text, false);
+        }
+        try {
+            view = new EditorView({
+                state,
+                parent: host,
+            });
+        } catch (error) {
+            console.error('ySplitCodeMirror mount failed:', error);
+            applyDomState(false);
+            return null;
+        }
 
         view.scrollDOM.addEventListener('scroll', () => hooks.onScroll?.(), { passive: true });
 
@@ -270,5 +357,8 @@
         getLineBlockHeight,
         focusLineAt,
         refreshTheme,
+        setFindHighlights,
+        clearFindHighlights,
+        scrollToRange,
     };
 })(window);

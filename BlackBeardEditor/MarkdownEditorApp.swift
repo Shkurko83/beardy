@@ -273,6 +273,13 @@ struct MarkdownEditorApp: App {
                 .environmentObject(themeService)
         }
         .windowResizability(.contentSize)
+
+        Window("Find", id: "find_replace") {
+            FindReplaceWindowView()
+                .environmentObject(documentManager)
+        }
+        .windowResizability(.contentSize)
+        .defaultSize(width: 520, height: 200)
     }
 }
 

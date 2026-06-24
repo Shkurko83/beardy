@@ -6,7 +6,6 @@ struct EditorView: View {
     @AppStorage(AppConstants.Keys.outlinePanelWidth) private var outlinePanelWidth: Double = AppConstants.Defaults.outlineWidth
     @AppStorage(AppConstants.Keys.sidebarPanelWidth) private var sidebarPanelWidth: Double = AppConstants.Defaults.sidebarWidth
     @State private var showStatisticsPanel = false
-    @State private var showFindPanel = false
     @Binding var scrollPosition: CGFloat
     let windowWidth: CGFloat
     let resolvedOutlineWidth: CGFloat
@@ -97,7 +96,6 @@ struct MarkdownEditorArea: View {
     @State private var textContent: String = ""
     @State private var selectedRange: NSRange = NSRange(location: 0, length: 0)
     @FocusState private var isEditorFocused: Bool
-    @State private var showFindPanel = false
     @State private var suppressContentSync = false
 
     @AppStorage(AppConstants.Keys.previewSyncScroll) private var previewSyncScroll: Bool = true
@@ -179,17 +177,6 @@ struct MarkdownEditorArea: View {
             if let tabID = documentManager.selectedTabID {
                 EditorWebViewPool.shared.activateTab(tabID, documentManager: documentManager)
             }
-        }
-        .findReplacePanel(
-            isPresented: $showFindPanel,
-            textContent: $textContent,
-            selectedRange: $selectedRange
-        )
-        .onReceive(NotificationCenter.default.publisher(for: .showFindPanel)) { _ in
-            showFindPanel = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showReplacePanel)) { _ in
-            showFindPanel = true
         }
     }
 
