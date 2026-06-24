@@ -24,17 +24,22 @@
     function buildFindHighlightExtension() {
         const { ViewPlugin, Decoration } = global.CM;
         if (!ViewPlugin || !Decoration) return [];
-        const mark = Decoration.mark({ class: 'cm-find-hit' });
-        const markCurrent = Decoration.mark({ class: 'cm-find-hit-current' });
+        const mark = Decoration.mark({
+            class: 'cm-find-hit',
+            attributes: { style: 'background-color: rgba(255, 214, 10, 0.45); border-radius: 2px; color: inherit;' },
+        });
+        const markCurrent = Decoration.mark({
+            class: 'cm-find-hit-current',
+            attributes: { style: 'background-color: rgba(255, 149, 0, 0.72); border-radius: 2px; box-shadow: 0 0 0 1px rgba(255, 149, 0, 0.9); color: inherit;' },
+        });
         return ViewPlugin.fromClass(class {
             constructor(view) { this.decorations = this.buildDeco(view); }
             update(update) {
-                if (findRanges.length || findDirty || update.docChanged) {
-                    findDirty = false;
-                    this.decorations = findRanges.length
-                        ? this.buildDeco(update.view)
-                        : Decoration.none;
-                }
+                if (!(findDirty || update.docChanged || update.selectionSet)) return;
+                findDirty = false;
+                this.decorations = findRanges.length
+                    ? this.buildDeco(update.view)
+                    : Decoration.none;
             }
             buildDeco(view) {
                 if (!findRanges.length) return Decoration.none;
@@ -49,18 +54,22 @@
         }, { decorations: (plugin) => plugin.decorations });
     }
 
+    function refreshFindDecorations() {
+        findDirty = true;
+        if (!view) return;
+        view.dispatch({ selection: view.state.selection });
+    }
+
     function setFindHighlights(ranges, currentIndex) {
         findRanges = normalizeFindRanges(ranges);
         findCurrentIndex = Number.isFinite(currentIndex) ? currentIndex : -1;
-        findDirty = true;
-        if (view) view.dispatch({});
+        refreshFindDecorations();
     }
 
     function clearFindHighlights() {
         findRanges = [];
         findCurrentIndex = -1;
-        findDirty = true;
-        if (view) view.dispatch({});
+        refreshFindDecorations();
     }
 
     function scrollToRange(start, end) {
@@ -72,7 +81,7 @@
         const block = view.lineBlockAt(line.from);
         const viewport = view.scrollDOM.clientHeight || 0;
         view.scrollDOM.scrollTop = Math.max(0, block.top - Math.max(0, viewport * 0.25));
-        // Keep find decoration colors visible — don't paint a selection over the hit.
+        view.dispatch({ selection: { anchor: safeStart, head: safeStart } });
         view.focus();
         return true;
     }

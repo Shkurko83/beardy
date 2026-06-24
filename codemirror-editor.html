@@ -240,10 +240,56 @@
                         height: 100%;
                         min-height: 0;
                     }
-                    body.mode-ysplit #codemirror-split-root,
-                    body.mode-ysplit #markdown-spell-overlay,
-                    body.mode-ysplit #markdown-find-overlay {
+                    body.mode-ysplit #codemirror-split-root {
                         display: none !important;
+                    }
+                    body.mode-ysplit:not(.find-active) #markdown-spell-overlay,
+                    body.mode-ysplit:not(.find-active) #markdown-find-overlay {
+                        display: none !important;
+                    }
+                    body.mode-ysplit.find-active #markdown-find-overlay {
+                        display: block !important;
+                        position: absolute;
+                        inset: 0;
+                        z-index: 5;
+                        pointer-events: none;
+                        overflow: auto;
+                        color: inherit;
+                        box-sizing: border-box;
+                        padding: 40px 60px;
+                        font-family: var(--editor-font-family);
+                        font-size: var(--editor-font-size);
+                        line-height: var(--editor-line-height);
+                        tab-size: var(--editor-tab-size);
+                        white-space: pre-wrap;
+                        word-wrap: break-word;
+                        overflow-wrap: break-word;
+                        background: transparent;
+                    }
+                    body.mode-ysplit.find-active.ysplit-cm-active #ysplit-cm-root .cm-content,
+                    body.mode-ysplit.find-active.ysplit-cm-active #ysplit-cm-root .cm-line {
+                        color: transparent !important;
+                        -webkit-text-fill-color: transparent !important;
+                    }
+                    body.mode-ysplit.find-active #markdown-find-overlay .find-hit,
+                    body.mode-ysplit.find-active #markdown-find-overlay .find-hit-current {
+                        color: inherit;
+                        -webkit-text-fill-color: inherit;
+                    }
+                    body.mode-ysplit.find-active #markdown-find-overlay .find-hit {
+                        background: rgba(255, 214, 10, 0.45);
+                        border-radius: 2px;
+                    }
+                    body.mode-ysplit.find-active #markdown-find-overlay .find-hit-current {
+                        background: rgba(255, 149, 0, 0.72);
+                        border-radius: 2px;
+                        box-shadow: 0 0 0 1px rgba(255, 149, 0, 0.9);
+                    }
+                    body.dark.mode-ysplit.find-active #markdown-find-overlay .find-hit {
+                        background: rgba(255, 214, 10, 0.35);
+                    }
+                    body.dark.mode-ysplit.find-active #markdown-find-overlay .find-hit-current {
+                        background: rgba(255, 159, 10, 0.55);
                     }
                     body.mode-ysplit.ysplit-cm-active #ysplit-cm-root .cm-content {
                         caret-color: #0969da;
@@ -387,8 +433,15 @@
                     body.dark #markdown-spell-overlay .spell-err {
                         border-bottom-color: #ff6961;
                     }
-                    #markdown-find-overlay {
-                        display: none !important;
+                    body.find-active #ysplit-cm-root .cm-selectionBackground,
+                    body.find-active #codemirror-split-root .cm-selectionBackground,
+                    body.find-active #ysplit-cm-root.cm-focused .cm-selectionBackground,
+                    body.find-active #codemirror-split-root.cm-focused .cm-selectionBackground {
+                        background: transparent !important;
+                    }
+                    body.find-active #markdown-textarea.source-mirror-active::selection {
+                        background: transparent;
+                        color: inherit;
                     }
                     #markdown-spell-overlay .find-hit {
                         background: rgba(255, 214, 10, 0.45);
@@ -1411,6 +1464,60 @@
                 el.setAttribute('data-enable-grammarly', 'false');
             }
 
+            let ysplitFindMirrorScrollHandler = null;
+
+            function getYSplitFindOverlay() {
+                return document.getElementById('markdown-find-overlay');
+            }
+
+            function bindYSplitFindMirrorScroll() {
+                unbindYSplitFindMirrorScroll();
+                const scrollEl = window.ySplitCodeMirror?.getScrollElement?.();
+                const mirror = getYSplitFindOverlay();
+                if (!scrollEl || !mirror) return;
+                ysplitFindMirrorScrollHandler = () => {
+                    mirror.scrollTop = scrollEl.scrollTop;
+                    mirror.scrollLeft = scrollEl.scrollLeft;
+                };
+                scrollEl.addEventListener('scroll', ysplitFindMirrorScrollHandler, { passive: true });
+                ysplitFindMirrorScrollHandler();
+            }
+
+            function unbindYSplitFindMirrorScroll() {
+                const scrollEl = window.ySplitCodeMirror?.getScrollElement?.();
+                if (scrollEl && ysplitFindMirrorScrollHandler) {
+                    scrollEl.removeEventListener('scroll', ysplitFindMirrorScrollHandler);
+                }
+                ysplitFindMirrorScrollHandler = null;
+            }
+
+            function syncYSplitFindMirrorGeometry() {
+                const mirror = getYSplitFindOverlay();
+                const cmScroll = window.ySplitCodeMirror?.getScrollElement?.();
+                const cmContent = document.querySelector('#ysplit-cm-root .cm-content');
+                const text = currentContent ?? textarea?.value ?? '';
+                if (!mirror || !cmScroll) return;
+
+                const computed = window.getComputedStyle(cmContent || cmScroll);
+                const scrollComputed = window.getComputedStyle(cmScroll);
+                const lineHeight = parseFloat(computed.lineHeight) || 22.4;
+                const padTop = parseFloat(scrollComputed.paddingTop) || 40;
+                const padBottom = parseFloat(scrollComputed.paddingBottom) || 40;
+                const lineCount = text ? (text.match(/\n/g)?.length ?? 0) + 1 : 1;
+
+                mirror.style.padding = scrollComputed.padding;
+                mirror.style.font = computed.font;
+                mirror.style.letterSpacing = computed.letterSpacing;
+                mirror.style.wordSpacing = computed.wordSpacing;
+                mirror.style.tabSize = computed.tabSize || '';
+                mirror.style.textAlign = computed.textAlign;
+                mirror.style.lineHeight = computed.lineHeight;
+                mirror.style.whiteSpace = computed.whiteSpace || 'pre-wrap';
+                mirror.style.wordBreak = computed.wordBreak;
+                mirror.style.overflowWrap = computed.overflowWrap;
+                mirror.style.minHeight = `${lineCount * lineHeight + padTop + padBottom}px`;
+            }
+
             function escapeSpellOverlayText(text) {
                 return String(text || '')
                     .replace(/&/g, '&amp;')
@@ -1546,17 +1653,50 @@
                 return html;
             }
 
+            function renderYSplitFindOverlay(text) {
+                const overlay = getYSplitFindOverlay();
+                const ta = getMarkdownTextarea();
+                if (!overlay || !ta) return;
+
+                overlay.innerHTML = buildSourceMirrorHtml(text);
+                overlay.style.removeProperty('display');
+                if (window.ySplitCodeMirror?.isActive?.()) {
+                    overlay.style.overflow = 'auto';
+                    overlay.style.removeProperty('top');
+                    overlay.style.removeProperty('left');
+                    overlay.style.removeProperty('width');
+                    syncYSplitFindMirrorGeometry();
+                    bindYSplitFindMirrorScroll();
+                } else {
+                    overlay.style.overflow = 'visible';
+                    ta.classList.add('source-mirror-active');
+                    syncFindOverlayGeometry();
+                }
+            }
+
+            function clearYSplitFindOverlay() {
+                const overlay = getYSplitFindOverlay();
+                const ta = getMarkdownTextarea();
+                unbindYSplitFindMirrorScroll();
+                if (overlay) {
+                    overlay.innerHTML = '';
+                    overlay.style.removeProperty('display');
+                }
+                ta?.classList.remove('source-mirror-active');
+            }
+
             function renderMarkdownSourceMirror() {
                 const mirror = document.getElementById('markdown-spell-overlay');
                 const ta = getMarkdownTextarea();
                 if (!mirror || !ta) return;
 
                 const mode = document.body.className.match(/mode-(\w+)/)?.[1] || 'edit';
-                // Y-Split: plain textarea — no syntax overlay.
                 if (mode === 'ysplit') {
-                    mirror.innerHTML = '';
-                    mirror.style.display = 'none';
-                    ta.classList.remove('source-mirror-active');
+                    if (findState.active && findState.ranges.length) {
+                        renderYSplitFindOverlay(currentContent ?? ta.value ?? '');
+                        return;
+                    }
+                    clearYSplitFindOverlay();
                     return;
                 }
                 if (mode !== 'edit') {
@@ -2509,9 +2649,12 @@
             function prepareYSplitSource(options = {}) {
                 const ta = textarea;
                 if (!ta) return;
-                ta.classList.remove('source-mirror-active');
+                const keepFindMirror = findState.active && findState.ranges.length;
+                if (!keepFindMirror) {
+                    ta.classList.remove('source-mirror-active');
+                }
                 const mirror = document.getElementById('markdown-spell-overlay');
-                if (mirror) {
+                if (mirror && !keepFindMirror) {
                     mirror.innerHTML = '';
                     mirror.style.display = 'none';
                 }
@@ -2525,6 +2668,12 @@
                     onScroll: options.onScroll,
                 });
                 applyYSplitTextareaHeight();
+                if (keepFindMirror) {
+                    requestAnimationFrame(() => {
+                        renderFindSourceOverlay();
+                        bindYSplitFindMirrorScroll();
+                    });
+                }
             }
 
             function applyYSplitTextareaHeight() {
@@ -4830,7 +4979,7 @@ if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
 
                 requestAnimationFrame(() => {
                     ta.focus({ preventScroll: true });
-                    ta.setSelectionRange(start, end);
+                    ta.setSelectionRange(start, start);
                 });
                 return true;
             }
@@ -5076,6 +5225,7 @@ if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
             }
 
             function resetDocumentFindState() {
+                document.body.classList.remove('find-active');
                 findState = {
                     active: false,
                     query: '',
@@ -5083,15 +5233,16 @@ if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
                     currentIndex: -1,
                     caseSensitive: false,
                 };
+                scheduleFindRefresh.cancel();
                 window.ySplitCodeMirror?.clearFindHighlights?.();
                 window.sourceCodeMirror?.clearFindHighlights?.();
-                const overlay = document.getElementById('markdown-find-overlay');
-                if (overlay) {
-                    overlay.innerHTML = '';
-                    overlay.style.display = 'none';
-                }
+                clearYSplitFindOverlay();
                 clearFindHighlightsInRoot(document.getElementById('preview-content'));
                 clearFindHighlightsInRoot(document.getElementById('live-editor'));
+                document.querySelectorAll('.live-block.find-flash').forEach((el) => {
+                    el.classList.remove('find-flash');
+                });
+                renderMarkdownSourceMirror();
             }
 
             function applyFindState() {
@@ -5103,19 +5254,31 @@ if (isYSplitMode() && window.ySplitCodeMirror?.isActive?.()) {
                 const current = findState.ranges[findState.currentIndex];
                 if (!current) return;
 
+                document.body.classList.add('find-active');
                 const mode = getActiveEditorMode();
 
-                if (mode === 'ysplit' && window.ySplitCodeMirror?.isActive?.()) {
-                    const docText = currentContent ?? textarea?.value ?? '';
-                    window.ySplitCodeMirror.syncText?.(docText);
-                    window.ySplitCodeMirror.setFindHighlights?.(
-                        findState.ranges,
-                        findState.currentIndex
-                    );
-                    requestAnimationFrame(() => {
-                        window.ySplitCodeMirror.scrollToRange?.(current.start, current.end);
+                if (mode === 'ysplit') {
+                    if (window.ySplitCodeMirror?.isActive?.()) {
+                        const docText = currentContent ?? textarea?.value ?? '';
+                        window.ySplitCodeMirror.syncText?.(docText);
+                        window.ySplitCodeMirror.setFindHighlights?.(
+                            findState.ranges,
+                            findState.currentIndex
+                        );
+                        renderFindSourceOverlay();
+                        syncYSplitFindMirrorGeometry();
+                        bindYSplitFindMirrorScroll();
+                        requestAnimationFrame(() => {
+                            syncYSplitFindMirrorGeometry();
+                            bindYSplitFindMirrorScroll();
+                            window.ySplitCodeMirror.scrollToRange?.(current.start, current.end);
+                            navigateFindPreviewCompanion(current);
+                        });
+                    } else {
+                        scrollSourceToRange(current.start, current.end);
+                        renderFindSourceOverlay();
                         navigateFindPreviewCompanion(current);
-                    });
+                    }
                     return;
                 }
 

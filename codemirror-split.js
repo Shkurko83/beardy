@@ -27,8 +27,14 @@
     function buildFindHighlightExtension() {
         const { ViewPlugin, Decoration } = global.CM;
         if (!ViewPlugin || !Decoration) return [];
-        const mark = Decoration.mark({ class: 'cm-find-hit' });
-        const markCurrent = Decoration.mark({ class: 'cm-find-hit-current' });
+        const mark = Decoration.mark({
+            class: 'cm-find-hit',
+            attributes: { style: 'background-color: rgba(255, 214, 10, 0.45); border-radius: 2px; color: inherit;' },
+        });
+        const markCurrent = Decoration.mark({
+            class: 'cm-find-hit-current',
+            attributes: { style: 'background-color: rgba(255, 149, 0, 0.72); border-radius: 2px; box-shadow: 0 0 0 1px rgba(255, 149, 0, 0.9); color: inherit;' },
+        });
         return ViewPlugin.fromClass(class {
             constructor(view) { this.decorations = this.buildDeco(view); }
             update(update) {
@@ -352,6 +358,7 @@
         const block = view.lineBlockAt(line.from);
         const viewport = view.scrollDOM.clientHeight || 0;
         view.scrollDOM.scrollTop = Math.max(0, block.top - Math.max(0, viewport * 0.25));
+        view.dispatch({ selection: { anchor: safeStart, head: safeStart } });
         view.focus();
         return true;
     }

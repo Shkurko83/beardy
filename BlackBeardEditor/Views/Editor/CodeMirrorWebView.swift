@@ -628,13 +628,15 @@ struct CodeMirrorWebView: NSViewRepresentable {
         }
 
         @objc func handleFindUpdate(_ notification: Notification) {
-            guard parent.isSelected, pageLoaded, let webView else { return }
+            guard let webView, pageLoaded else { return }
             guard let userInfo = notification.userInfo else { return }
 
             if let active = userInfo["active"] as? Bool, !active {
                 webView.evaluateJavaScript("window.cmEditor?.clearFindState?.();", completionHandler: nil)
                 return
             }
+
+            guard parent.isSelected else { return }
 
             guard let query = userInfo["query"] as? String,
                   let ranges = userInfo["ranges"] as? [[String: Any]],
