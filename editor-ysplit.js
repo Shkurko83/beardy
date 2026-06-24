@@ -23,6 +23,10 @@
     let syncingPreview = false;
     let previewUserNudge = false;
     let previewRefreshing = false;
+    let outlineNavigating = false;
+    let outlineNavTimer = 0;
+    let appearanceRestoring = false;
+    let appearanceRestoreTimer = 0;
 
     let sourceScrollHandler = null;
     let previewScrollHandler = null;
@@ -39,7 +43,7 @@
     function syncScrollers() {
         const sourceEl = hooks.getSourceScrollEl?.();
         const previewEl = hooks.getPreviewScrollEl?.();
-        if (!active || !sourceEl || !previewEl || syncingPreview || previewUserNudge || previewRefreshing) return;
+        if (!active || !sourceEl || !previewEl || syncingPreview || previewUserNudge || previewRefreshing || outlineNavigating || appearanceRestoring) return;
 
         let previewY;
 
@@ -90,9 +94,38 @@
     }
 
     function onSourceScroll() {
-        if (!active || syncingPreview || previewRefreshing) return;
+        if (!active || syncingPreview || previewRefreshing || outlineNavigating || appearanceRestoring) return;
         previewUserNudge = false;
         scheduleSyncScrollers();
+    }
+
+    function beginAppearanceRestore() {
+        appearanceRestoring = true;
+        clearTimeout(appearanceRestoreTimer);
+    }
+
+    function endAppearanceRestore(delayMs = 0) {
+        clearTimeout(appearanceRestoreTimer);
+        appearanceRestoreTimer = setTimeout(() => {
+            appearanceRestoreTimer = 0;
+            appearanceRestoring = false;
+            updateHeaderLocations();
+        }, delayMs);
+    }
+
+    function prepareOutlineNavigation() {
+        outlineNavigating = true;
+        previewUserNudge = true;
+    }
+
+    function finishOutlineNavigation(delayMs = 380) {
+        clearTimeout(outlineNavTimer);
+        outlineNavTimer = setTimeout(() => {
+            outlineNavTimer = 0;
+            outlineNavigating = false;
+            previewUserNudge = false;
+            updateHeaderLocations();
+        }, delayMs);
     }
 
     function beginPreviewRefresh() {
@@ -205,11 +238,26 @@
         };
     }
 
-    function restoreSourceAnchor(anchor) {
+    function restoreSourceAnchor(anchor, options = {}) {
         if (!anchor) return;
+        const appearance = !!options.appearance;
+
+        hooks.setSourceScrollForLine?.(anchor.line ?? 0, anchor.sub ?? 0);
+
+        if (appearance) {
+            previewUserNudge = false;
+            if (hooks.getPreviewYForSourceLine && Number.isFinite(anchor.line)) {
+                const layoutY = hooks.getPreviewYForSourceLine(anchor.line, anchor.sub ?? 0);
+                const previewY = hooks.mapLayoutYToPreviewScroll?.(layoutY) ?? layoutY;
+                hooks.setPreviewScrollTop?.(previewY);
+            } else if (Number.isFinite(anchor.previewScrollTop)) {
+                hooks.setPreviewScrollTop?.(anchor.previewScrollTop);
+            }
+            return;
+        }
+
         const keepPreview = Number.isFinite(anchor.previewScrollTop);
         previewUserNudge = keepPreview;
-        hooks.setSourceScrollForLine?.(anchor.line ?? 0, anchor.sub ?? 0);
         if (keepPreview) {
             hooks.setPreviewScrollTop?.(anchor.previewScrollTop);
             return;
@@ -238,10 +286,10 @@
         });
     }
 
-    function restoreAppearanceScroll(anchor) {
+    function restoreAppearanceScroll(anchor, options = {}) {
         if (!active || !anchor) return;
         if (Number.isFinite(anchor.line)) {
-            restoreSourceAnchor(anchor);
+            restoreSourceAnchor(anchor, options);
             return;
         }
         restoreScrollRatio(anchor);
@@ -375,13 +423,13 @@
 
     function restoreAppearanceScrollPersistent(anchor) {
         if (!active || !anchor) return;
-        restoreAppearanceScroll(anchor);
+        beginAppearanceRestore();
+        const opts = { appearance: true };
+        const apply = () => restoreAppearanceScroll(anchor, opts);
+        apply();
         requestAnimationFrame(() => {
-            restoreAppearanceScroll(anchor);
-            requestAnimationFrame(() => restoreAppearanceScroll(anchor));
-        });
-        [50, 120, 250, 400].forEach((delay) => {
-            setTimeout(() => restoreAppearanceScroll(anchor), delay);
+            apply();
+            endAppearanceRestore(80);
         });
     }
 
@@ -390,7 +438,7 @@
     }
 
     function resyncAfterLayout() {
-        if (!active || previewUserNudge || previewRefreshing) return;
+        if (!active || previewUserNudge || previewRefreshing || outlineNavigating || appearanceRestoring) return;
         syncScrollers();
     }
 
@@ -401,11 +449,16 @@
         flushUpdate,
         restoreScroll,
         restoreAppearanceScrollPersistent,
+        beginAppearanceRestore,
+        endAppearanceRestore,
         resyncAfterLayout,
+        prepareOutlineNavigation,
+        finishOutlineNavigation,
         captureScrollAnchor,
         isActive: () => active,
         isSyncingPreview: () => syncingPreview,
         isPreviewUserNudge: () => previewUserNudge,
         isPreviewRefreshing: () => previewRefreshing,
+        isAppearanceRestoring: () => appearanceRestoring,
     };
 })(window);

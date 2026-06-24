@@ -207,31 +207,8 @@
         return Math.max(1, view.state.doc.lines);
     }
 
-    function refreshTheme(options = {}) {
-        if (!view) return;
-        const scrollTop = view.scrollDOM.scrollTop;
-        const line = getTopSourceLine();
-        const sub = getSubLinePx();
-        const text = view.state.doc.toString();
-        const savedOnChange = hooks.onChange;
-        const savedOnScroll = hooks.onScroll;
-        unmount();
-        mount({
-            initialText: text,
-            onChange: savedOnChange,
-            onScroll: savedOnScroll,
-        });
-        if (options.skipScrollRestore) return;
-        const restore = () => {
-            const target = scrollForLine(line, sub);
-            setScrollTop(target);
-            if (scrollTop > 4 && (view?.scrollDOM?.scrollTop ?? 0) < 4) {
-                setScrollTop(scrollTop);
-            }
-        };
-        requestAnimationFrame(() => {
-            requestAnimationFrame(restore);
-        });
+    function refreshTheme() {
+        // Y-Split CM theme is driven by body.dark + CSS; no remount (avoids scroll flicker).
     }
 
     function getContent() {
@@ -264,6 +241,17 @@
         }
     }
 
+    function focusLineAt(lineNumber) {
+        if (!view || lineNumber < 0) return false;
+        const lineN = Math.min(lineNumber + 1, view.state.doc.lines);
+        const lineObj = view.state.doc.line(lineN);
+        view.dispatch({
+            selection: { anchor: lineObj.from, head: lineObj.from },
+        });
+        view.focus();
+        return true;
+    }
+
     global.ySplitCodeMirror = {
         isActive,
         mount,
@@ -280,6 +268,7 @@
         getContent,
         getVisibleSourceLineRange,
         getLineBlockHeight,
+        focusLineAt,
         refreshTheme,
     };
 })(window);
